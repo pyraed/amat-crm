@@ -463,7 +463,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   }
 
   const updateStatus=async(id:number,status:string,notes?:string)=>{
-    const upd:any={status,updated_at:new Date().toISOString()}
+    const upd: Record<string, string>={status, updated_at:new Date().toISOString()}
     if(notes!==undefined) upd.notes=notes
     await supabase.from('amat_loan_leads').update(upd).eq('id',id)
   }
