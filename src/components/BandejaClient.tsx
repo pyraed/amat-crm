@@ -352,8 +352,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // Realtime mensajes
   useEffect(()=>{
     const ch=supabase.channel('rt-msgs')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},p=>{
-        setMessages(prev=>[...prev,p.new as Message])
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'amat_messages'},p=>{
+        const msg = p.new as Message
+        setMessages(prev=>[...prev,msg])
+        // Si el lead no está en la bandeja, cargarlo
+        setBotLeads(prev=>{
+          if(!prev.find(l=>l.phone_number===msg.phone_number)){
+            supabase.from('amat_loan_leads').select('*').eq('phone_number',msg.phone_number).single()
+              .then(({data})=>{ if(data) setBotLeads(p2=>[data as LoanLead,...p2]) })
+          }
+          return prev
+        })
       }).subscribe()
     return ()=>{ supabase.removeChannel(ch) }
   },[])
@@ -361,7 +370,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // Realtime leads
   useEffect(()=>{
     const ch=supabase.channel('rt-leads')
-      .on('postgres_changes',{event:'*',schema:'public',table:'loan_leads'},p=>{
+      .on('postgres_changes',{event:'*',schema:'public',table:'amat_loan_leads'},p=>{
         const updated = p.new as LoanLead
         if(p.eventType==='UPDATE'){
           setBotLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
@@ -370,6 +379,19 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           setBotLeads(prev=>[updated,...prev])
         }
       }).subscribe()
+    return ()=>{ supabase.removeChannel(ch) }
+  },[])
+
+  // Realtime consultas
+  useEffect(()=>{
+    const ch=supabase.channel('rt-consultas')
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'amat_consultas'},p=>{
+        setConsultas(prev=>[p.new as any,...prev])
+      })
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'amat_consultas'},p=>{
+        setConsultas(prev=>prev.map(c=>c.id===(p.new as any).id?p.new as any:c))
+      })
+      .subscribe()
     return ()=>{ supabase.removeChannel(ch) }
   },[])
 
@@ -438,6 +460,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // Recargar cuando cambian filtros o página (solo si estamos en base)
   useEffect(()=>{ if(tab==='base') loadBase() },[baseSearch,baseRep,baseBanco,baseStatus,baseTel,baseAssigned,basePage]) // eslint-disable-line
+  
+  // Recargar bandeja cuando se cambia a esa pestaña
+  useEffect(()=>{
+    if(tab==='bandeja'){
+      supabase.from('amat_messages').select('*').order('created_at',{ascending:false}).limit(500)
+        .then(({data})=>{
+          if(data) setMessages(data as Message[])
+        })
+    }
+  },[tab]) // eslint-disable-line
 
   // ── AUTH ──────────────────────────────────
   const handleLogin=()=>{
