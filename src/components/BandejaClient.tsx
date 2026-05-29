@@ -405,6 +405,52 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .then(({data})=>{ if(data) setBotLeads(data as LoanLead[]) })
   },[initialMessages])
 
+  // ─────────────────────────────────────────────
+  //  CARGAR CONSULTAS desde amat_consultas
+  // ─────────────────────────────────────────────
+
+  // Refs para siempre leer valores frescos (mismo patrón que loadBase)
+  const cSearchRef = useRef(cSearch)
+  const cFlujoRef  = useRef(cFlujo)
+  const cEstadoRef = useRef(cEstado)
+  const cRepRef    = useRef(cRep)
+
+  useEffect(()=>{ cSearchRef.current = cSearch },[cSearch])
+  useEffect(()=>{ cFlujoRef.current  = cFlujo  },[cFlujo])
+  useEffect(()=>{ cEstadoRef.current = cEstado },[cEstado])
+  useEffect(()=>{ cRepRef.current    = cRep    },[cRep])
+
+  const loadConsultas = async () => {
+    setConsultasLoading(true)
+    const search = cSearchRef.current
+    const flujo  = cFlujoRef.current
+    const estado = cEstadoRef.current
+    const rep    = cRepRef.current
+
+    let q = supabase.from('amat_consultas').select('*').order('created_at', { ascending: false })
+    if (search)          q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
+    if (flujo !== 'all')  q = q.eq('flujo', flujo)
+    if (estado !== 'all') q = q.eq('estado', estado)
+    if (rep !== 'all')    q = q.eq('reparticion_label', rep)
+    const { data, error } = await q
+    if (error) console.error('[CONSULTAS] Error Supabase:', error)
+    setConsultas((data as any[]) || [])
+    setConsultasLoading(false)
+  }
+
+  // Cargar consultas al entrar al tab
+  useEffect(()=>{
+    if(tab==='consultas'){
+      console.log('[CONSULTAS] Ejecutando loadConsultas, tab cambió a consultas')
+      loadConsultas()
+    }
+  },[tab]) // eslint-disable-line
+
+  // Recargar cuando cambian filtros (solo si estamos en consultas)
+  useEffect(()=>{
+    if(tab==='consultas') loadConsultas()
+  },[cSearch, cFlujo, cEstado, cRep]) // eslint-disable-line
+
   // Cargar base paginada — usando refs para siempre tener valores frescos
   const baseSearchRef   = useRef(baseSearch)
   const baseRepRef      = useRef(baseRep)
@@ -1296,7 +1342,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                         <td style={{padding:'10px 14px',color:'#94A3B8',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='new').length}</td>
                         <td style={{padding:'10px 14px',color:'#06B6D4',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='contacted').length}</td>
                         <td style={{padding:'10px 14px',color:'#6B7280',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='not_interested').length}</td>
-                        
                         <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{cerrados}</td>
                         <td style={{padding:'10px 14px',color:'#EF4444',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='rejected').length}</td>
                         <td style={{padding:'10px 14px'}}>
@@ -1317,7 +1362,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     <td style={{padding:'10px 14px',color:'#94A3B8',fontFamily:"'DM Mono',monospace"}}>{bandejaLeads.filter(l=>l.status==='new').length}</td>
                     <td style={{padding:'10px 14px',color:'#06B6D4',fontFamily:"'DM Mono',monospace"}}>{bandejaLeads.filter(l=>l.status==='contacted').length}</td>
                     <td style={{padding:'10px 14px',color:'#F59E0B',fontFamily:"'DM Mono',monospace"}}>{bandejaLeads.filter(l=>l.status==='interested').length}</td>
-                    
                     <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{bandejaLeads.filter(l=>l.status==='closed').length}</td>
                     <td style={{padding:'10px 14px',color:'#EF4444',fontFamily:"'DM Mono',monospace"}}>{bandejaLeads.filter(l=>l.status==='rejected').length}</td>
                     <td style={{padding:'10px 14px'}}>
