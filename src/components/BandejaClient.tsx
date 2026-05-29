@@ -1104,7 +1104,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                         </td>
                         <td style={{fontSize:12,color:'#64748B',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.prestacion||'—'}</td>
                         <td style={{fontSize:12}}>
-                          {c.afiliado ? <span style={{color:'#10B981',fontWeight:600,fontSize:11}}>✓ Sí</span> : <span style={{color:'#94A3B8',fontSize:11}}>No</span>}
+                          {c.afiliado === 'SI' ? <span style={{color:'#10B981',fontWeight:600,fontSize:11}}>✓ Sí</span> : <span style={{color:'#94A3B8',fontSize:11}}>No</span>}
                         </td>
                         <td style={{fontSize:12,color:'#64748B'}}>{c.vendedor||<span style={{color:'#CBD5E1'}}>—</span>}</td>
                         <td style={{fontSize:12,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#64748B'}}>{c.situacion||'—'}</td>
