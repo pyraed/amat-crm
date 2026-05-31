@@ -452,6 +452,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // Cargar leads de la bandeja (solo los que tienen mensajes)
   useEffect(()=>{
+    // Cargar cerrados hoy desde toda la tabla (independiente de bandeja)
+    const hoy = new Date().toISOString().split('T')[0] // YYYY-MM-DD
+    supabase.from('amat_loan_leads')
+      .select('id,status,updated_at')
+      .eq('status','closed')
+      .gte('updated_at', hoy + 'T00:00:00.000Z')
+      .then(({data})=>{ if(data) setCerradosHoyCount(data.length) })
+
     const phones=[...new Set(initialMessages.map(m=>m.phone_number))]
     if(phones.length===0){ setBotLeads([]); return }
     supabase.from('amat_loan_leads')
@@ -460,11 +468,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved")')
       .eq('archived', false)
       .then(({data})=>{
-        if(data){
-          setBotLeads(data as LoanLead[])
-          const hoy = new Date().toDateString()
-          setCerradosHoyCount(data.filter((l:any)=>l.status==='closed'&&new Date(l.updated_at).toDateString()===hoy).length)
-        }
+        if(data) setBotLeads(data as LoanLead[])
       })
     // Cargar flujos de consultas para saber si cada phone es ventas o cobranzas
     supabase.from('amat_consultas')
