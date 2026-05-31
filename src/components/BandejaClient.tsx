@@ -1269,7 +1269,20 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                           {msg.direction==='out'?msg.sender:msg.sender==='bot'?'🤖 Arturito':'Cliente'}
                         </div>
                         <div className={msg.direction==='out'?'mo':msg.sender==='bot'?'mb':'mi'}>
-                          <div style={{fontSize:13,lineHeight:1.55,whiteSpace:'pre-wrap'}}>{msg.body}</div>
+                          {(msg as any).media_url && (msg as any).media_type==='image' && (
+                            <img src={(msg as any).media_url} style={{maxWidth:'100%',borderRadius:8,marginBottom:4,display:'block'}} />
+                          )}
+                          {(msg as any).media_url && (msg as any).media_type==='document' && (
+                            <a href={(msg as any).media_url} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:6,color:'inherit',textDecoration:'none',background:'rgba(255,255,255,0.15)',padding:'8px 12px',borderRadius:8,marginBottom:4}}>
+                              📄 <span style={{fontSize:12}}>{msg.body||'Ver documento'}</span>
+                            </a>
+                          )}
+                          {(msg as any).media_url && (msg as any).media_type==='audio' && (
+                            <audio controls src={(msg as any).media_url} style={{width:'100%',marginBottom:4}}/>
+                          )}
+                          {msg.body && (
+                            <div style={{fontSize:13,lineHeight:1.55,whiteSpace:'pre-wrap'}}>{msg.body}</div>
+                          )}
                           <div style={{fontSize:10,marginTop:4,color:msg.direction==='out'?'rgba(255,255,255,.6)':'#94A3B8'}}>{new Date(msg.created_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</div>
                         </div>
                       </div>
