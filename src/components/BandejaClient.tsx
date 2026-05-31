@@ -724,17 +724,26 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const guardarVenta = async () => {
     if(!currentLead||!me) return
     const venta = {
-      ...ventaForm,
-      status:'closed',
-      updated_at:new Date().toISOString(),
-      notes: `VENTA CERRADA - Entidad:${ventaForm.entidad} Línea:${ventaForm.linea} Repartición:${ventaForm.reparticion} Monto:$${ventaForm.monto} Cuotas:${ventaForm.cuotas} Valor cuota:$${ventaForm.valor_cuota}${ventaForm.notas?' Notas:'+ventaForm.notas:''}`
+      status:          'closed',
+      updated_at:      new Date().toISOString(),
+      entidad:         ventaForm.entidad,
+      linea:           ventaForm.linea,
+      reparticion:     ventaForm.reparticion || currentLead.reparticion,
+      monto_solicitado: parseInt(ventaForm.monto)||0,
+      cant_cuotas:     parseInt(ventaForm.cuotas)||0,
+      valor_cuota:     parseFloat(ventaForm.valor_cuota)||0,
+      notes:           ventaForm.notas || null,
     }
     await supabase.from('amat_loan_leads').update(venta).eq('id',currentLead.id)
     await supabase.from('amat_consultas')
-      .update({estado:'resuelto', situacion:`Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${ventaForm.monto} en ${ventaForm.cuotas} cuotas`, updated_at:new Date().toISOString()})
+      .update({
+        estado:'resuelto',
+        situacion:`Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${parseInt(ventaForm.monto).toLocaleString('es-AR')} en ${ventaForm.cuotas} cuotas · Valor cuota: $${parseFloat(ventaForm.valor_cuota).toLocaleString('es-AR')}`,
+        updated_at:new Date().toISOString()
+      })
       .eq('phone', currentLead.phone_number||'')
-    // Actualizar botLeads en memoria para que currentLead refleje el nuevo status
-    setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, ...venta, status:'closed'} : l))
+    // Actualizar botLeads en memoria
+    setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, ...venta} : l))
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
     // NO cerramos el chat — el operador debe presionar Finalizar explícitamente
@@ -783,45 +792,27 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(!data||data.length===0){ alert('No hay ventas cerradas para exportar'); return }
     const XLSX = await import('xlsx')
     const rows = data.map((l:any)=>{
-      const nota = l.notes||''
-      // Parsear campos del formato "VENTA CERRADA - Entidad:X Línea:Y Repartición:Z Monto:$N Cuotas:N Valor cuota:$N"
-      const getField = (key:string): string => {
-        // Busca "Clave:valor hasta el próximo campo o fin de string"
-        const idx = nota.indexOf(key + ':')
-        if(idx === -1) return ''
-        const start = idx + key.length + 1
-        const rest = nota.slice(start)
-        // Cortar hasta el próximo campo (palabra en mayúsculas seguida de :)
-        const nextField = rest.search(/\s+[A-ZÁÉÍÓÚ][a-záéíóúñ ]+:/)
-        const val = nextField === -1 ? rest : rest.slice(0, nextField)
-        return val.replace(/\$/g,'').trim()
-      }
-      // Intentar leer campos directos del lead primero, luego del campo notes
-      const entidad   = getField('Entidad')
-      const linea     = getField('Línea') || getField('Linea')
-      const monto     = getField('Monto') || (l.amount ? String(l.amount) : '')
-      const cuotas    = getField('Cuotas') || (l.installments ? String(l.installments) : '')
-      const valorCuota = getField('Valor cuota')
+      const fmtNum = (n:any) => n ? Number(n).toLocaleString('es-AR') : ''
       return {
         'DNI':             l.dni||'',
         'Nombre':          l.full_name||'',
         'Teléfono':        l.phone_number||'',
         'Email':           l.email||'',
-        'Repartición':     l.reparticion||getField('Repartición'),
-        'Entidad':         entidad,
-        'Línea':           linea,
-        'Monto ($)':       monto,
-        'Cuotas':          cuotas,
-        'Valor cuota ($)': valorCuota,
+        'Repartición':     l.reparticion||'',
+        'Entidad':         l.entidad||'',
+        'Línea':           l.linea||'',
+        'Monto ($)':       fmtNum(l.monto_solicitado),
+        'Cuotas':          l.cant_cuotas||'',
+        'Valor cuota ($)': fmtNum(l.valor_cuota),
         'Asignado a':      l.assigned_to||'',
         'Fecha cierre':    new Date(l.updated_at).toLocaleDateString('es-AR'),
+        'Observaciones':   l.notes||'',
       }
     })
     const ws = XLSX.utils.json_to_sheet(rows)
-    // Ancho de columnas
     ws['!cols'] = [
       {wch:12},{wch:28},{wch:16},{wch:28},{wch:30},
-      {wch:10},{wch:12},{wch:14},{wch:8},{wch:16},{wch:12},{wch:14}
+      {wch:10},{wch:12},{wch:16},{wch:8},{wch:16},{wch:12},{wch:14},{wch:30}
     ]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb,ws,'Ventas AMAT')
