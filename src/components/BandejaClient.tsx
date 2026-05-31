@@ -262,35 +262,6 @@ const BOT_CONVERSATIONS = [
   },
 ]
 
-// ── Grilla AMAT para calcular valor de cuota ──────────────
-const TABLAS_CUOTA: Record<number, Record<number,number>> = {
-  6:  {100000:20833.58,110000:22916.94,150000:31250.37,200000:41667.16,250000:52083.95,300000:62500.74,350000:72917.53,400000:83334.32,450000:93751.11,500000:104167.9},
-  12: {30000:3654.01,40000:4872.01,50000:6090.01,60000:7308.01,70000:8526.01,80000:9744.02,90000:10962.02,100000:12180.02,110000:13398.02,120000:14616.02,130000:15834.02,140000:17052.02,150000:18270.03,160000:19488.03,170000:20706.03,180000:21924.03,190000:23142.03,200000:24360.04,250000:30450.05,300000:36540.06,350000:42630.07,400000:48720.08,450000:54810.09,500000:60900.1,600000:73080.12,700000:85260.14,800000:97440.16,900000:109620.18,1000000:121800.2,1200000:146160.24,1500000:182700.3},
-  18: {30000:2820.99,50000:4701.65,100000:9403.3,150000:14104.95,200000:18809.3,250000:23511.63,300000:28213.96,350000:32916.28,400000:37618.61,450000:42320.94,500000:47023.26,600000:56427.91,700000:65832.57,800000:75237.22,900000:84641.88,1000000:94046.53,1200000:112855.84,1500000:141069.8},
-  24: {30000:2428.28,50000:4047.14,100000:8094.27,150000:12141.41,200000:16188.54,250000:20235.68,300000:24282.82,350000:28329.95,400000:32377.09,450000:36424.23,500000:40471.36,600000:48565.63,700000:56659.9,800000:64754.18,900000:72848.45,1000000:80942.72,1200000:97131.27,1500000:121414.08},
-}
-
-function calcularCuotaAMAT(entidad: string, linea: string, reparticion: string, monto: number, cuotas: number): number {
-  const vc = TABLAS_CUOTA[cuotas]?.[monto] || 0
-  if(linea === 'Ayuda') {
-    if(reparticion.includes('EDUCACION')) return 28996
-    if(reparticion.includes('SALUD')) return 15464
-    return vc
-  }
-  // Membresía simplificada
-  const memb: Record<string,number> = {
-    'MINISTERIO DE SEGURIDAD': 4300,
-    'SERVICIO PENITENCIARIO BONAERENSE': 4300,
-    'MINISTERIO DE EDUCACION': 9900,
-    'MINISTERIO DE SALUD': 5172,
-  }
-  const cs = memb[reparticion] || 4300
-  const med = monto <= 200000 ? 3850 : monto <= 300000 ? 6150 : monto <= 400000 ? 8150 : monto <= 600000 ? 11850 : 14850
-  return vc + cs + med
-}
-
-const MONTOS_DISP = [50000,100000,150000,200000,250000,300000,350000,400000,450000,500000,600000,700000,800000,900000,1000000,1200000,1500000]
-
 export default function BandejaClient({ initialLeads, initialMessages }: Props) {
   // AUTH
   const [me, setMe]                       = useState<SysUser|null>(null)
@@ -340,7 +311,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [showFinalizarModal, setShowFinalizarModal] = useState(false)
   const [showVentaModal, setShowVentaModal]         = useState(false)
   const [ventaForm, setVentaForm]         = useState<any>({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
-  const [finalizarEstado, setFinalizarEstado] = useState('')
 
   // Filtros base
   const [basePage, setBasePage]           = useState(0)
@@ -607,13 +577,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
-  // Tomar una conversación de la cola
+  // Tomar una conversación de la cola — auto contactado
   const tomarConversacion = async (lead: LoanLead) => {
     if(!me) return
     await supabase.from('amat_loan_leads')
       .update({assigned_to: me.username, status:'contacted', updated_at:new Date().toISOString()})
       .eq('id', lead.id)
-    // Actualizar consulta también
     if(lead.phone_number) {
       await supabase.from('amat_consultas')
         .update({vendedor: me.username, estado:'en_proceso', updated_at:new Date().toISOString()})
@@ -623,21 +592,25 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setVistaMode('mis_chats')
   }
 
-  // Finalizar conversación
-  const finalizarConversacion = async (estadoElegido: string) => {
-    if(!currentLead) return
-    // Mapear estado lead → estado consulta
-    const estadoConsulta: Record<string,string> = {
-      contacted: 'en_proceso', not_interested: 'cerrado',
-      rejected: 'cerrado', closed: 'resuelto', finalizado: 'cerrado', new: 'pendiente'
+  // Al seleccionar un chat en Mis chats → auto contactado si estaba nuevo
+  const abrirChat = async (lead: LoanLead) => {
+    setSelectedPhone(lead.phone_number)
+    if(lead.status === 'new') {
+      await supabase.from('amat_loan_leads')
+        .update({status:'contacted', updated_at:new Date().toISOString()})
+        .eq('id', lead.id)
     }
-    await updateStatus(currentLead.id, estadoElegido)
+  }
+
+  // Finalizar conversación
+  const finalizarConversacion = async () => {
+    if(!currentLead) return
+    await updateStatus(currentLead.id, 'finalizado')
     setSelectedPhone(null)
     setShowFinalizarModal(false)
-    setFinalizarEstado('')
     if(currentLead.phone_number) {
       await supabase.from('amat_consultas')
-        .update({estado: estadoConsulta[estadoElegido]||'cerrado', updated_at:new Date().toISOString()})
+        .update({estado:'cerrado', updated_at:new Date().toISOString()})
         .eq('phone', currentLead.phone_number)
     }
   }
@@ -703,29 +676,33 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(!data||data.length===0){ alert('No hay ventas cerradas para exportar'); return }
     const XLSX = await import('xlsx')
     const rows = data.map((l:any)=>{
-      // Parsear notas de venta
       const nota = l.notes||''
-      const get = (key:string) => { const m=nota.match(new RegExp(`${key}:([^\n]+)`)); return m?m[1].trim():'' }
+      // Parsear campos del formato "VENTA CERRADA - Entidad:X Línea:Y Repartición:Z Monto:$N Cuotas:N Valor cuota:$N"
+      const getField = (key:string) => {
+        const pattern = new RegExp(key + ':([^\s][^A-Z\n]*?)(?=\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+:|$)')
+        const m = nota.match(pattern)
+        return m ? m[1].replace(/\$/g,'').trim() : ''
+      }
       return {
-        'DNI': l.dni||'',
-        'Nombre': l.full_name||'',
-        'Teléfono': l.phone_number||'',
-        'Email': l.email||'',
-        'Repartición': l.reparticion||'',
-        'Entidad': get('Entidad'),
-        'Línea': get('Línea'),
-        'Monto ($)': get('Monto').replace('$',''),
-        'Cuotas': get('Cuotas'),
-        'Valor cuota ($)': get('Valor cuota').replace('$',''),
-        'Notas': get('Notas')||l.notes||'',
-        'Asignado a': l.assigned_to||'',
-        'Fecha cierre': new Date(l.updated_at).toLocaleDateString('es-AR'),
+        'DNI':           l.dni||'',
+        'Nombre':        l.full_name||'',
+        'Teléfono':      l.phone_number||'',
+        'Email':         l.email||'',
+        'Repartición':   l.reparticion||getField('Repartición'),
+        'Entidad':       getField('Entidad'),
+        'Línea':         getField('Línea'),
+        'Monto ($)':     getField('Monto'),
+        'Cuotas':        getField('Cuotas'),
+        'Valor cuota ($)': getField('Valor cuota'),
+        'Asignado a':    l.assigned_to||'',
+        'Fecha cierre':  new Date(l.updated_at).toLocaleDateString('es-AR'),
+        'Notas raw':     nota,
       }
     })
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb,ws,'Ventas')
-    XLSX.writeFile(wb, `AMAT_ventas_${new Date().toISOString().slice(0,10)}.xlsx`)
+    XLSX.writeFile(wb, 'AMAT_ventas_' + new Date().toISOString().slice(0,10) + '.xlsx')
   }
 
   const openTemplate=(lead:LoanLead)=>{
@@ -888,7 +865,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         <div style={{display:'flex',gap:2,background:'#F1F5F9',padding:3,borderRadius:10}}>
           {([['bandeja','💬','Bandeja'],['consultas','📥','Consultas'],['base','👥','Base'],['pipeline','📋','Pipeline'],['reportes','📊','Reportes']] as const).map(([t,i,l])=>(
             <button key={t} className={`tabbtn ${tab===t?'on':''}`} onClick={()=>setTab(t)}>{i} {l}
-              {t==='bandeja'&&stats.sinResp>0&&<span style={{background:'#EF4444',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:2}}>{stats.sinResp}</span>}
+  
             </button>
           ))}
         </div>
@@ -988,7 +965,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   const lastMsg=messages.filter(m=>m.phone_number===lead.phone_number).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
                   const unread=messages.some(m=>m.phone_number===lead.phone_number&&m.direction==='in'&&new Date(m.created_at)>new Date(lead.updated_at))
                   return (
-                    <div key={lead.phone_number??lead.id} className={`ci ${selectedPhone===lead.phone_number?'on':''}`} onClick={()=>setSelectedPhone(lead.phone_number)}>
+                    <div key={lead.phone_number??lead.id} className={`ci ${selectedPhone===lead.phone_number?'on':''}`} onClick={()=>abrirChat(lead)}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:s.bg,color:s.text}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
@@ -1029,15 +1006,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     <button className="btn" onClick={()=>setShowAssignModal(true)}>👤 Asignar</button>
                     <button className="btn" onClick={()=>{setNoteText(currentLead.notes||'');setEditTarget(currentLead);setShowNoteModal(true)}}>📝 Nota</button>
                     <button className="btn" onClick={()=>openEdit(currentLead)}>✏️ Editar</button>
-                    <button className="btn dan" onClick={()=>{setEditTarget(currentLead);setShowRejectModal(true)}}>✕ Rechazar</button>
-                    <button style={{padding:'6px 12px',borderRadius:8,border:'1px solid #BBF7D0',background:'#ECFDF5',color:'#065F46',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,transition:'all .15s',whiteSpace:'nowrap'}} onClick={()=>{setVentaForm({entidad:'',linea:'',reparticion:currentLead.reparticion||'',monto:'',cuotas:'',valor_cuota:'',notas:''});setShowVentaModal(true)}}>
-                      🎉 Venta cerrada
-                    </button>
-                    <button style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E2E8F0',background:'#F8FAFC',color:'#64748B',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,transition:'all .15s',whiteSpace:'nowrap'}} onClick={()=>setShowFinalizarModal(true)}>
+                    <button style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E2E8F0',background:'#F8FAFC',color:'#64748B',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,transition:'all .15s',whiteSpace:'nowrap'}}
+                      onClick={()=>setShowFinalizarModal(true)}>
                       ✓ Finalizar
-                    </button>
-                    <button style={{padding:'6px 12px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#059669,#10B981)',color:'white',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(16,185,129,.3)',transition:'all .15s',whiteSpace:'nowrap'}} onClick={()=>setShowCalculador(true)}>
-                      💰 Oferta
                     </button>
                   </div>
                 </div>
@@ -1150,6 +1121,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             </div>
             <button className="btn pri" onClick={()=>{setBaseSearch(baseSearchInput);setBasePage(0)}}>Buscar</button>
             <button className="btn suc" onClick={()=>setShowImportExport(true)}>📊 Imp/Exp</button>
+            <button className="btn" style={{borderColor:'#BBF7D0',color:'#065F46',background:'#ECFDF5'}} onClick={exportVentas}>🎉 Exportar ventas</button>
             <button style={{padding:'7px 14px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#18181B,#3F3F46)',color:'white',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(24,24,27,0.3)',transition:'all .15s',whiteSpace:'nowrap'}} onClick={()=>setShowCampana(true)}>
               📣 Campaña WhatsApp
             </button>
@@ -1268,7 +1240,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               {REPARTICIONES.map(r=><option key={r} value={r}>{r}</option>)}
             </select>
             <button className="btn" onClick={()=>{setCSearch('');setCSearchInput('');setCFlujo('all');setCEstado('all');setCRep('all')}}>✕ Limpiar</button>
-            <button className="btn" style={{borderColor:'#BBF7D0',color:'#065F46',background:'#ECFDF5',marginLeft:'auto'}} onClick={exportVentas}>🎉 Exportar ventas</button>
             <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',fontFamily:"'DM Mono',monospace"}}>{consultas.length} consultas</span>
           </div>
 
@@ -1672,11 +1643,31 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         <div className="movo" onClick={()=>setShowStatusModal(false)}>
           <div className="mod" onClick={e=>e.stopPropagation()}>
             <h3>Cambiar estado</h3>
-            {Object.entries(LEAD_STATUS).map(([k,v])=>(
-              <div key={k} className="mopt" onClick={()=>{updateStatus(currentLead.id,k);setShowStatusModal(false)}}>
+            {Object.entries(LEAD_STATUS)
+              .filter(([k])=>k!=='finalizado')
+              .map(([k,v])=>(
+              <div key={k} className="mopt"
+                onClick={()=>{
+                  if(k==='rejected'){
+                    setShowStatusModal(false)
+                    setEditTarget(currentLead)
+                    setShowRejectModal(true)
+                  } else if(k==='closed'){
+                    setShowStatusModal(false)
+                    setVentaForm({entidad:'',linea:'',reparticion:currentLead.reparticion||'',monto:'',cuotas:'',valor_cuota:'',notas:''})
+                    setShowVentaModal(true)
+                  } else {
+                    updateStatus(currentLead.id,k)
+                    setShowStatusModal(false)
+                  }
+                }}>
                 <div style={{width:10,height:10,borderRadius:'50%',background:v.color,flexShrink:0}}/>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:500,color:'#1E293B'}}>{v.label}</div>
+                  <div style={{fontSize:13,fontWeight:500,color:'#1E293B'}}>
+                    {v.label}
+                    {k==='rejected'&&<span style={{fontSize:11,color:'#94A3B8',marginLeft:6}}>→ elegí motivo</span>}
+                    {k==='closed'&&<span style={{fontSize:11,color:'#065F46',marginLeft:6}}>→ registrá la venta</span>}
+                  </div>
                   <div style={{fontSize:11,color:'#94A3B8'}}>{v.desc}</div>
                 </div>
                 {currentLead.status===k&&<span style={{color:'#F59E0B',fontSize:16}}>✓</span>}
@@ -1871,165 +1862,93 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
       {/* ══ MODAL: FINALIZAR CONVERSACIÓN ══ */}
       {showFinalizarModal&&currentLead&&(
-        <div className="movo" onClick={()=>{setShowFinalizarModal(false);setFinalizarEstado('')}}>
-          <div className="mod" onClick={e=>e.stopPropagation()} style={{width:440}}>
+        <div className="movo" onClick={()=>setShowFinalizarModal(false)}>
+          <div className="mod" onClick={e=>e.stopPropagation()} style={{width:420}}>
             <h3 style={{fontFamily:"'Playfair Display',serif"}}>✓ Finalizar conversación</h3>
             <p style={{fontSize:13,color:'#64748B',marginBottom:16,lineHeight:1.6}}>
-              La conversación con <strong>{currentLead.full_name||currentLead.phone_number}</strong> saldrá de tu bandeja.
-              Quedará registrada en <strong>Consultas</strong> y <strong>Pipeline</strong>.
+              Al finalizar, la conversación con <strong>{currentLead.full_name||currentLead.phone_number}</strong> se cerrará
+              y saldrá de tu bandeja. Podrás verla en la pestaña <strong>Consultas</strong> y <strong>Pipeline</strong>.
             </p>
-
-            {/* Si el lead ya tiene un estado distinto a "new" o "contacted", lo mostramos */}
-            {currentLead.status!=='new'&&currentLead.status!=='contacted'?(
-              <div style={{background:'#ECFDF5',border:'1px solid #BBF7D0',borderRadius:10,padding:'12px 14px',marginBottom:16}}>
-                <div style={{fontSize:11,color:'#065F46',fontFamily:"'DM Mono',monospace",textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:4}}>Estado actual</div>
-                <div style={{fontSize:14,fontWeight:700,color:'#065F46'}}>{sc(currentLead.status).label}</div>
-                <div style={{fontSize:12,color:'#047857',marginTop:2}}>Se guardará con este estado</div>
-              </div>
-            ):(
-              <div style={{background:'#FFFBEB',border:'1px solid #FDE68A',borderRadius:10,padding:'12px 14px',marginBottom:16}}>
-                <div style={{fontSize:12,color:'#92400E',marginBottom:10,fontWeight:600}}>
-                  ⚠️ Esta conversación no tiene un estado final. Elegí cómo quedó:
-                </div>
-                {Object.entries(LEAD_STATUS).filter(([k])=>k!=='new'&&k!=='contacted').map(([k,v])=>(
-                  <div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:8,cursor:'pointer',marginBottom:4,background:finalizarEstado===k?v.bg:'transparent',border:`1px solid ${finalizarEstado===k?v.color:'transparent'}`}}
-                    onClick={()=>setFinalizarEstado(k)}>
-                    <div style={{width:16,height:16,borderRadius:'50%',border:`2px solid ${finalizarEstado===k?v.color:'#E2E8F0'}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                      {finalizarEstado===k&&<div style={{width:8,height:8,borderRadius:'50%',background:v.color}}/>}
-                    </div>
-                    <div>
-                      <span style={{fontSize:13,fontWeight:600,color:v.text}}>{v.label}</span>
-                      <span style={{fontSize:11,color:'#94A3B8',marginLeft:6}}>{v.desc}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
+            <div style={{background:'#F8FAFC',border:'1px solid #E2E8F0',borderRadius:10,padding:'12px 14px',marginBottom:16}}>
+              <label className="fl">Cambiar estado a</label>
+              <select className="fs" onChange={e=>{}} defaultValue="finalizado">
+                <option value="finalizado">Finalizado</option>
+                <option value="contacted">Contactado</option>
+                <option value="not_interested">No interesado</option>
+              </select>
+            </div>
             <div style={{display:'flex',gap:8}}>
-              <button className="btn pri" style={{flex:1,justifyContent:'center'}}
-                disabled={currentLead.status==='new'||currentLead.status==='contacted'?!finalizarEstado:false}
-                onClick={()=>finalizarConversacion(
-                  currentLead.status!=='new'&&currentLead.status!=='contacted'
-                    ? currentLead.status
-                    : finalizarEstado
-                )}>
+              <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={finalizarConversacion}>
                 ✓ Confirmar y finalizar
               </button>
-              <button className="btn" onClick={()=>{setShowFinalizarModal(false);setFinalizarEstado('')}}>Cancelar</button>
+              <button className="btn" onClick={()=>setShowFinalizarModal(false)}>Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
       {/* ══ MODAL: VENTA CERRADA ══ */}
-      {showVentaModal&&currentLead&&(()=>{
-        // Calcular valor de cuota automáticamente
-        const montoNum = parseInt(ventaForm.monto)||0
-        const cuotasNum = parseInt(ventaForm.cuotas)||0
-        const calcCuota = ventaForm.entidad&&ventaForm.linea&&ventaForm.reparticion&&montoNum&&cuotasNum
-          ? calcularCuotaAMAT(ventaForm.entidad, ventaForm.linea, ventaForm.reparticion, montoNum, cuotasNum)
-          : 0
-        const fmtPesos = (n:number) => n>0 ? '$ '+n.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.') : '—'
-        return (
+      {showVentaModal&&currentLead&&(
         <div className="movo" onClick={()=>setShowVentaModal(false)}>
-          <div className="mod" onClick={e=>e.stopPropagation()} style={{width:540}}>
+          <div className="mod" onClick={e=>e.stopPropagation()} style={{width:520}}>
             <h3 style={{fontFamily:"'Playfair Display',serif"}}>🎉 Registrar venta cerrada</h3>
-            <p style={{fontSize:12,color:'#64748B',marginBottom:16}}>El valor de cuota se calcula automáticamente con la grilla AMAT.</p>
-
+            <p style={{fontSize:12,color:'#64748B',marginBottom:16}}>Completá los datos de la operación para registrar la venta.</p>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
               <div>
                 <label className="fl">Entidad</label>
-                <div style={{display:'flex',gap:6}}>
-                  {['AMAT','DOS DE AGOSTO'].map(e=>(
-                    <button key={e} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.entidad===e?'#B45309':'#E2E8F0',background:ventaForm.entidad===e?'#FFFBEB':'white',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.entidad===e?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm((f:any)=>({...f,entidad:e}))}>
-                      {e}
-                    </button>
-                  ))}
-                </div>
+                <select className="fs" value={ventaForm.entidad} onChange={e=>setVentaForm((f:any)=>({...f,entidad:e.target.value}))}>
+                  <option value="">Seleccioná</option>
+                  <option value="AMAT">AMAT</option>
+                  <option value="DOS DE AGOSTO">DOS DE AGOSTO</option>
+                </select>
               </div>
               <div>
                 <label className="fl">Línea</label>
-                <div style={{display:'flex',gap:5}}>
-                  {['Haberes','Ayuda','BAPRO'].map(l=>(
-                    <button key={l} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.linea===l?'#B45309':'#E2E8F0',background:ventaForm.linea===l?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.linea===l?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm((f:any)=>({...f,linea:l}))}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div style={{gridColumn:'1/-1'}}>
-                <label className="fl">Repartición</label>
-                <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                  {REPARTICIONES.map(r=>(
-                    <button key={r} style={{padding:'6px 10px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.reparticion===r?'#B45309':'#E2E8F0',background:ventaForm.reparticion===r?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.reparticion===r?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm((f:any)=>({...f,reparticion:r}))}>
-                      {r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB')}
-                    </button>
-                  ))}
-                </div>
+                <select className="fs" value={ventaForm.linea} onChange={e=>setVentaForm((f:any)=>({...f,linea:e.target.value}))}>
+                  <option value="">Seleccioná</option>
+                  <option value="Haberes">Haberes</option>
+                  <option value="Ayuda">Ayuda Económica</option>
+                  <option value="BAPRO">BAPRO</option>
+                </select>
               </div>
               <div>
-                <label className="fl">Monto</label>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:4}}>
-                  {MONTOS_DISP.filter(m=>m<=500000||m===600000||m===800000||m===1000000||m===1500000).map(m=>(
-                    <button key={m} style={{padding:'5px 2px',borderRadius:5,borderWidth:1,borderStyle:'solid',borderColor:parseInt(ventaForm.monto)===m?'#B45309':'#E2E8F0',background:parseInt(ventaForm.monto)===m?'#FFFBEB':'white',fontSize:10.5,fontWeight:600,cursor:'pointer',fontFamily:"'DM Mono',monospace",color:parseInt(ventaForm.monto)===m?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm((f:any)=>({...f,monto:String(m)}))}>
-                      ${m>=1000000?(m/1000000).toFixed(1)+'M':(m/1000).toFixed(0)+'k'}
-                    </button>
-                  ))}
-                </div>
+                <label className="fl">Repartición</label>
+                <select className="fs" value={ventaForm.reparticion} onChange={e=>setVentaForm((f:any)=>({...f,reparticion:e.target.value}))}>
+                  <option value="">Seleccioná</option>
+                  {REPARTICIONES.map(r=><option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="fl">Monto ($)</label>
+                <input className="fi" type="number" placeholder="Ej: 300000" value={ventaForm.monto} onChange={e=>setVentaForm((f:any)=>({...f,monto:e.target.value}))}/>
               </div>
               <div>
                 <label className="fl">Cuotas</label>
-                <div style={{display:'flex',gap:5}}>
-                  {[6,12,18,24].map(n=>(
-                    <button key={n} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:parseInt(ventaForm.cuotas)===n?'#F59E0B':'#E2E8F0',background:parseInt(ventaForm.cuotas)===n?'#FFFBEB':'white',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:"'DM Mono',monospace",color:parseInt(ventaForm.cuotas)===n?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm((f:any)=>({...f,cuotas:String(n)}))}>
-                      {n}
-                    </button>
-                  ))}
-                </div>
+                <select className="fs" value={ventaForm.cuotas} onChange={e=>setVentaForm((f:any)=>({...f,cuotas:e.target.value}))}>
+                  <option value="">Seleccioná</option>
+                  {[6,12,18,24].map(n=><option key={n} value={n}>{n} cuotas</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="fl">Valor de cuota ($)</label>
+                <input className="fi" type="number" placeholder="Ej: 28500" value={ventaForm.valor_cuota} onChange={e=>setVentaForm((f:any)=>({...f,valor_cuota:e.target.value}))}/>
               </div>
             </div>
-
-            {/* Resultado calculado */}
-            {calcCuota>0&&(
-              <div style={{background:'#ECFDF5',border:'1px solid #BBF7D0',borderRadius:10,padding:'14px 16px',marginBottom:12}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <div>
-                    <div style={{fontSize:11,color:'#065F46',fontFamily:"'DM Mono',monospace",textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}}>Valor total por cuota</div>
-                    <div style={{fontSize:24,fontWeight:700,color:'#065F46',fontFamily:"'Playfair Display',serif"}}>{fmtPesos(calcCuota)}</div>
-                  </div>
-                  <div style={{textAlign:'right'}}>
-                    <div style={{fontSize:11,color:'#065F46',fontFamily:"'DM Mono',monospace",marginBottom:2}}>Calculado automáticamente</div>
-                    <div style={{fontSize:12,color:'#047857'}}>{ventaForm.entidad} · {ventaForm.linea} · {parseInt(ventaForm.cuotas)} cuotas</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div style={{marginBottom:12}}>
-              <label className="fl">Notas (opcional)</label>
-              <textarea className="ta" style={{minHeight:60}} placeholder="Observaciones de la venta..." value={ventaForm.notas} onChange={e=>setVentaForm((f:any)=>({...f,notas:e.target.value}))}/>
+            <div style={{marginBottom:16}}>
+              <label className="fl">Notas adicionales (opcional)</label>
+              <textarea className="ta" placeholder="Observaciones de la venta..." value={ventaForm.notas} onChange={e=>setVentaForm((f:any)=>({...f,notas:e.target.value}))}/>
             </div>
             <div style={{display:'flex',gap:8}}>
-              <button style={{flex:2,padding:'10px',background:'linear-gradient(135deg,#059669,#10B981)',color:'white',border:'none',borderRadius:9,fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:(!ventaForm.entidad||!ventaForm.linea||!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas)?0.4:1}}
-                onClick={()=>{
-                  setVentaForm((f:any)=>({...f,valor_cuota:String(calcCuota)}))
-                  setTimeout(guardarVenta,50)
-                }}
-                disabled={!ventaForm.entidad||!ventaForm.linea||!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas}>
+              <button className="btn pri" style={{flex:1,justifyContent:'center',background:'linear-gradient(135deg,#059669,#10B981)'}}
+                onClick={guardarVenta}
+                disabled={!ventaForm.entidad||!ventaForm.linea||!ventaForm.monto||!ventaForm.cuotas}>
                 💾 Guardar venta
               </button>
-              <button className="btn" style={{flex:1}} onClick={()=>setShowVentaModal(false)}>Cancelar</button>
+              <button className="btn" onClick={()=>setShowVentaModal(false)}>Cancelar</button>
             </div>
           </div>
         </div>
-        )
-      })()}
+      )}
 
       {/* ══ MODAL: GESTIONAR CONSULTA ══ */}
       {showConsultaModal&&consultaSelected&&(
