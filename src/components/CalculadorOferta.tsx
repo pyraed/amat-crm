@@ -97,20 +97,20 @@ function generarMensaje(params: {
   link: string; nombre?: string
 }): string {
   const { linea, entidad, reparticion, monto, cuotas, total, link, nombre } = params
-  const saludo = nombre ? `Hola ${nombre.split(' ')[0]} 👋\n\n` : ''
+  const saludo = nombre ? `${nombre} tenemos esta oferta para vos. 👋\n\n` : ''
   const docs = DOCS[reparticion] || DOCS['educacion']
   const entLabel = entidad === 'dos_agosto' ? 'DOS DE AGOSTO' : 'AMAT'
   const repLabel = reparticion.charAt(0).toUpperCase() + reparticion.slice(1)
 
   if (linea === 'bapro') {
-    return `${saludo}*OFERTA BAPRO — AMAT*\n\n✅ Ayuda económica pre-aprobada por descuento en haberes:\n\n*Monto:* ${fmt(monto)}\n*Plan:* ${cuotas} cuotas de *${fmt(total)}*\n\n📋 *DOCUMENTACIÓN REQUERIDA:*\n${docs.map(d => `• ${d}`).join('\n')}\n\n🧾 *FORMULARIO ONLINE:*\n${link}`
+    return `${saludo}OFERTA BAPRO — AMAT\n\n✅ Ayuda económica pre-aprobada por descuento en haberes:\n\nMonto: ${fmt(monto)}\nPlan: ${cuotas} cuotas de ${fmt(total)}\n\n📋 DOCUMENTACIÓN REQUERIDA:\n${docs.map(d => `• ${d}`).join('\n')}\n\n🧾 FORMULARIO ONLINE:\n${link}`
   }
 
   if (linea === 'ayuda') {
-    return `${saludo}*OFERTA AYUDA ECONÓMICA — ${entLabel}*\n\n✅ Línea de ayuda económica especial:\n\n*Repartición:* ${repLabel}\n*Monto:* ${fmt(monto)}\n*Plan:* ${cuotas} cuotas de *${fmt(total)}*\n\n📋 *DOCUMENTACIÓN REQUERIDA:*\n${docs.map(d => `• ${d}`).join('\n')}\n\n🧾 *FORMULARIO ONLINE:*\n${link}`
+    return `${saludo}OFERTA AYUDA ECONÓMICA — ${entLabel}\n\n✅ Línea de ayuda económica especial:\n\nRepartición: ${repLabel}\nMonto: ${fmt(monto)}\nPlan: ${cuotas} cuotas de ${fmt(total)}\n\n📋 DOCUMENTACIÓN REQUERIDA:\n${docs.map(d => `• ${d}`).join('\n')}\n\n🧾 FORMULARIO ONLINE:\n${link}`
   }
 
-  return `${saludo}*OFERTA POR DESCUENTO EN HABERES*\n\n✅ Ayuda económica pre-aprobada:\n\n*Entidad:* ${entLabel}\n*Repartición:* ${repLabel}\n💰 *Monto:* ${fmt(monto)}\n📅 *Plan:* ${cuotas} cuotas de *${fmt(total)}*\n\n📋 *DOCUMENTACIÓN REQUERIDA:*\n${docs.map(d => `• ${d}`).join('\n')}\n\n🧾 *FORMULARIO ONLINE:*\n${link}`
+  return `${saludo}OFERTA POR DESCUENTO EN HABERES\n\n✅ Ayuda económica pre-aprobada:\n\nEntidad: ${entLabel}\nRepartición: ${repLabel}\n💰 Monto: ${fmt(monto)}\n📅 Plan: ${cuotas} cuotas de ${fmt(total)}\n\n📋 DOCUMENTACIÓN REQUERIDA:\n${docs.map(d => `• ${d}`).join('\n')}\n\n🧾 FORMULARIO ONLINE:\n${link}`
 }
 
 // ─────────────────────────────────────────────
