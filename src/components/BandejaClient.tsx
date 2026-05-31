@@ -352,6 +352,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [cerradosHoyCount, setCerradosHoyCount]     = useState(0)
   const [reporteLeads, setReporteLeads]             = useState<LoanLead[]>([])
   const [reporteLoading, setReporteLoading]         = useState(false)
+  const [pipelineLeads, setPipelineLeads]           = useState<LoanLead[]>([])
+  const [pipelineFlujoMap, setPipelineFlujoMap]     = useState<Record<string,string>>({})
   const [showVentaModal, setShowVentaModal]         = useState(false)
   const [ventaForm, setVentaForm]         = useState<any>({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
 
@@ -541,12 +543,31 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       loadConsultas()
     }
     if(tab==='reportes') loadReportes()
+    if(tab==='pipeline') loadPipeline()
   },[tab]) // eslint-disable-line
 
   // Recargar cuando cambian filtros (solo si estamos en consultas)
   useEffect(()=>{
     if(tab==='consultas') loadConsultas()
   },[cSearch, cFlujo, cEstado, cRep]) // eslint-disable-line
+
+  // Cargar datos del pipeline — todos los leads incluyendo archivados
+  const loadPipeline = async () => {
+    const { data } = await supabase.from('amat_loan_leads').select('*').order('updated_at', { ascending: false })
+    if(data) {
+      setPipelineLeads(data as LoanLead[])
+      // Cargar flujos para el pipeline
+      const phones = data.map((l:any) => l.phone_number).filter(Boolean)
+      if(phones.length > 0) {
+        const { data: cdata } = await supabase.from('amat_consultas').select('phone,flujo').in('phone', phones.slice(0,500))
+        if(cdata) {
+          const map: Record<string,string> = {}
+          cdata.forEach((r:any) => { if(r.phone) map[r.phone] = r.flujo || 'solicitud' })
+          setPipelineFlujoMap(map)
+        }
+      }
+    }
+  }
 
   // Cargar datos de reportes — todos los leads incluyendo archivados/cerrados
   const loadReportes = async () => {
@@ -1502,9 +1523,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         const colsCob     = Object.entries(COBRANZA_STATUS) as [string, typeof COBRANZA_STATUS[keyof typeof COBRANZA_STATUS]][]
         const cols        = modoActivo==='cobranzas' ? colsCob : colsVentas
 
-        // Leads filtrados por modo
-        const leadsParaPipe = bandejaLeads.filter(l=>{
-          const fl = flujoMap[l.phone_number||'']||'solicitud'
+        // Leads filtrados por modo — usa pipelineLeads (incluye archivados/cerrados)
+        const leadsParaPipe = pipelineLeads.filter(l=>{
+          const fl = pipelineFlujoMap[l.phone_number||'']||flujoMap[l.phone_number||'']||'solicitud'
+          if(me?.role==='Vendedor') return fl!=='cobranzas'
+          if(me?.role==='Cobranza') return fl==='cobranzas'
           return modoActivo==='cobranzas' ? fl==='cobranzas' : fl!=='cobranzas'
         })
 
