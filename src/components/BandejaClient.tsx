@@ -347,6 +347,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [cola, setCola]                   = useState<LoanLead[]>([])
   const [showFinalizarModal, setShowFinalizarModal] = useState(false)
   const [finalizarEstado, setFinalizarEstado]       = useState('')
+  const [finalizarNota, setFinalizarNota]           = useState('')
+  const [pipelineMode, setPipelineMode]             = useState<'ventas'|'cobranzas'>('ventas')
   const [showVentaModal, setShowVentaModal]         = useState(false)
   const [ventaForm, setVentaForm]         = useState<any>({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
 
@@ -651,20 +653,23 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
-  // Finalizar conversación — respeta estado final si ya fue seteado
-  const finalizarConversacion = async () => {
+  // Finalizar conversación — elimina de bandeja + guarda situacion en consultas
+  const finalizarConversacion = async (nota?: string) => {
     if(!currentLead) return
     const estadosFinales = ['not_interested','rejected','closed','resolved','unresolved']
     if(!estadosFinales.includes(currentLead.status||'')) {
       await updateStatus(currentLead.id, 'finalizado')
     }
+    // Eliminar de botLeads para que desaparezca de la bandeja
+    setBotLeads(prev => prev.filter(l => l.id !== currentLead.id))
     setSelectedPhone(null)
     setShowFinalizarModal(false)
     setFinalizarEstado('')
+    setFinalizarNota('')
     if(currentLead.phone_number) {
-      await supabase.from('amat_consultas')
-        .update({estado:'cerrado', updated_at:new Date().toISOString()})
-        .eq('phone', currentLead.phone_number)
+      const upd: any = { estado:'cerrado', updated_at: new Date().toISOString() }
+      if(nota?.trim()) upd.situacion = nota.trim()
+      await supabase.from('amat_consultas').update(upd).eq('phone', currentLead.phone_number)
     }
   }
 
@@ -1424,36 +1429,88 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       )}
 
       {/* ══ PIPELINE ══ */}
-      {tab==='pipeline'&&(
-        <div style={{flex:1,overflowX:'auto',padding:20,background:'#F8FAFC'}}>
-          <div style={{display:'flex',gap:12,minWidth:'max-content'}}>
-            {(Object.entries(LEAD_STATUS) as [string,typeof LEAD_STATUS[keyof typeof LEAD_STATUS]][]).map(([status,s])=>{
-              const col=bandejaLeads.filter(l=>l.status===status)
-              return (
-                <div key={status} style={{background:'#F1F5F9',borderRadius:14,padding:12,width:210,flexShrink:0,minHeight:200}}>
-                  <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:12}}>
-                    <div style={{width:8,height:8,borderRadius:'50%',background:s.color}}/>
-                    <span style={{fontSize:12,fontWeight:600,color:'#374151'}}>{s.label}</span>
-                    <span style={{fontSize:11,color:'#94A3B8',marginLeft:'auto',background:'white',padding:'1px 8px',borderRadius:99,border:'1px solid #E2E8F0'}}>{col.length}</span>
-                  </div>
-                  {col.map(lead=>(
-                    <div key={lead.id} style={{background:'white',border:'1px solid #E2E8F0',borderRadius:10,padding:'12px 14px',marginBottom:8,cursor:'pointer',transition:'all .15s'}}
-                      onClick={()=>{setSelectedPhone(lead.phone_number);setTab('bandeja')}}
-                      onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.boxShadow='0 4px 14px rgba(0,0,0,.08)';(e.currentTarget as HTMLDivElement).style.transform='translateY(-1px)'}}
-                      onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.boxShadow='none';(e.currentTarget as HTMLDivElement).style.transform='none'}}>
-                      <div style={{fontWeight:600,fontSize:13,color:'#0F172A',marginBottom:3}}>{lead.full_name||lead.phone_number||'Sin datos'}</div>
-                      <div style={{fontSize:11,color:'#64748B'}}>{lead.reparticion||'—'}</div>
-                      {lead.amount&&<div style={{fontSize:11,color:'#374151',fontWeight:500,marginTop:4}}>${lead.amount.toLocaleString('es-AR')} · {lead.installments}c</div>}
-                      {lead.assigned_to&&<div style={{fontSize:10,color:'#94A3B8',marginTop:5}}>👤 {lead.assigned_to}</div>}
-                    </div>
+      {tab==='pipeline'&&(()=>{
+        // Determinar modo pipeline según rol
+        const esAdmin = me?.role==='Administrador'
+        const rolPipe = me?.role==='Cobranza' ? 'cobranzas' : 'ventas'
+        // Admin puede togglear — usamos pipelineMode state
+        const modoActivo = esAdmin ? pipelineMode : rolPipe
+
+        // Columnas según modo
+        const colsVentas  = Object.entries(LEAD_STATUS)  as [string, typeof LEAD_STATUS[keyof typeof LEAD_STATUS]][]
+        const colsCob     = Object.entries(COBRANZA_STATUS) as [string, typeof COBRANZA_STATUS[keyof typeof COBRANZA_STATUS]][]
+        const cols        = modoActivo==='cobranzas' ? colsCob : colsVentas
+
+        // Leads filtrados por modo
+        const leadsParaPipe = bandejaLeads.filter(l=>{
+          const fl = flujoMap[l.phone_number||'']||'solicitud'
+          return modoActivo==='cobranzas' ? fl==='cobranzas' : fl!=='cobranzas'
+        })
+
+        return (
+          <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:'#F8FAFC'}}>
+            {/* Header con toggle para Admin */}
+            <div style={{padding:'12px 20px',background:'white',borderBottom:'1px solid #E2E8F0',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+              <span style={{fontWeight:700,fontSize:14,color:'#0F172A',fontFamily:"'Playfair Display',serif"}}>Pipeline</span>
+              {esAdmin && (
+                <div style={{display:'flex',gap:4,background:'#F1F5F9',padding:3,borderRadius:8,marginLeft:8}}>
+                  {(['ventas','cobranzas'] as const).map(m=>(
+                    <button key={m} onClick={()=>setPipelineMode(m)}
+                      style={{padding:'5px 16px',borderRadius:6,border:'none',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',
+                        background:pipelineMode===m?'white':'transparent',
+                        color:pipelineMode===m?'#0F172A':'#64748B',
+                        boxShadow:pipelineMode===m?'0 1px 3px rgba(0,0,0,.1)':'none'}}>
+                      {m==='ventas'?'💼 Ventas':'🔔 Cobranzas'}
+                    </button>
                   ))}
-                  {col.length===0&&<div style={{textAlign:'center',color:'#CBD5E1',fontSize:12,padding:'24px 0'}}>Sin contactos</div>}
                 </div>
-              )
-            })}
+              )}
+              {!esAdmin && (
+                <span style={{fontSize:12,padding:'3px 12px',borderRadius:99,fontWeight:600,
+                  background:modoActivo==='cobranzas'?'#F5F3FF':'#EFF6FF',
+                  color:modoActivo==='cobranzas'?'#6D28D9':'#1D4ED8'}}>
+                  {modoActivo==='cobranzas'?'🔔 Cobranzas':'💼 Ventas'}
+                </span>
+              )}
+              <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',fontFamily:"'DM Mono',monospace"}}>{leadsParaPipe.length} contactos</span>
+            </div>
+
+            {/* Columnas kanban */}
+            <div style={{flex:1,overflowX:'auto',padding:20}}>
+              <div style={{display:'flex',gap:12,minWidth:'max-content',height:'100%'}}>
+                {cols.map(([status,s])=>{
+                  const col = leadsParaPipe.filter(l=>l.status===status)
+                  const isCob = modoActivo==='cobranzas'
+                  return (
+                    <div key={status} style={{background:'#F1F5F9',borderRadius:14,padding:12,width:220,flexShrink:0,minHeight:200,
+                      borderTop:`3px solid ${s.color}`}}>
+                      <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:12}}>
+                        <div style={{width:8,height:8,borderRadius:'50%',background:s.color,flexShrink:0}}/>
+                        <span style={{fontSize:12,fontWeight:700,color:'#374151'}}>{s.label}</span>
+                        <span style={{fontSize:11,color:'#94A3B8',marginLeft:'auto',background:'white',padding:'1px 8px',borderRadius:99,border:'1px solid #E2E8F0',fontWeight:600}}>{col.length}</span>
+                      </div>
+                      {col.map(lead=>(
+                        <div key={lead.id}
+                          style={{background:'white',border:'1px solid #E2E8F0',borderRadius:10,padding:'12px 14px',marginBottom:8,cursor:'pointer',transition:'all .15s',borderLeft:`3px solid ${s.color}`}}
+                          onClick={()=>{setSelectedPhone(lead.phone_number);setTab('bandeja')}}
+                          onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.boxShadow='0 4px 14px rgba(0,0,0,.08)';(e.currentTarget as HTMLDivElement).style.transform='translateY(-1px)'}}
+                          onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.boxShadow='none';(e.currentTarget as HTMLDivElement).style.transform='none'}}>
+                          <div style={{fontWeight:600,fontSize:13,color:'#0F172A',marginBottom:3}}>{lead.full_name||lead.phone_number||'Sin datos'}</div>
+                          <div style={{fontSize:11,color:'#64748B'}}>{lead.reparticion||'—'}</div>
+                          {!isCob && lead.amount&&<div style={{fontSize:11,color:'#374151',fontWeight:500,marginTop:4}}>${lead.amount.toLocaleString('es-AR')} · {lead.installments}c</div>}
+                          {lead.assigned_to&&<div style={{fontSize:10,color:'#94A3B8',marginTop:5}}>👤 {lead.assigned_to}</div>}
+                          <div style={{fontSize:10,color:'#CBD5E1',marginTop:4,fontFamily:"'DM Mono',monospace"}}>{new Date(lead.updated_at).toLocaleDateString('es-AR')}</div>
+                        </div>
+                      ))}
+                      {col.length===0&&<div style={{textAlign:'center',color:'#CBD5E1',fontSize:12,padding:'24px 0'}}>Sin contactos</div>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ══ REPORTES ══ */}
       {tab==='reportes'&&(
@@ -2026,6 +2083,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 </div>
               )}
 
+              <div style={{marginBottom:12}}>
+                <label className="fl">Anotación / Resolución <span style={{color:'#94A3B8',fontWeight:400}}>(opcional)</span></label>
+                <textarea className="ta" style={{minHeight:64}} placeholder="Describí qué se resolvió, qué se acordó, motivo de cierre..." value={finalizarNota} onChange={e=>setFinalizarNota(e.target.value)}/>
+              </div>
               <div style={{display:'flex',gap:8}}>
                 <button
                   className="btn pri"
@@ -2033,11 +2094,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   disabled={!puedeConfirmar}
                   onClick={async()=>{
                     if(!yaFinalizado&&finalizarEstado) await updateStatus(currentLead.id,finalizarEstado)
-                    await finalizarConversacion()
+                    await finalizarConversacion(finalizarNota)
                   }}>
                   ✓ Confirmar y finalizar
                 </button>
-                <button className="btn" onClick={()=>{ setShowFinalizarModal(false); setFinalizarEstado('') }}>Cancelar</button>
+                <button className="btn" onClick={()=>{ setShowFinalizarModal(false); setFinalizarEstado(''); setFinalizarNota('') }}>Cancelar</button>
               </div>
             </div>
           </div>
