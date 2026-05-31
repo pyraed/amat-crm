@@ -967,9 +967,13 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='cola'?'white':'transparent',color:vistaMode==='cola'?'#0F172A':'#64748B',boxShadow:vistaMode==='cola'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
                   onClick={()=>{setVistaMode('cola');setSelectedPhone(null)}}>
                   📥 Cola {(()=>{
-                    const disponibles = bandejaLeads.filter(l=>!l.assigned_to&&l.status!=='finalizado')
-                    const n = me?.role==='Vendedor' ? disponibles.length :
-                              me?.role==='Cobranza' ? disponibles.length : disponibles.length
+                    const disponibles = bandejaLeads.filter(l=>{
+                      if(l.assigned_to||l.status==='finalizado') return false
+                      if(me?.role==='Vendedor') return (flujoMap[l.phone_number||'']||'solicitud')!=='cobranzas'
+                      if(me?.role==='Cobranza') return (flujoMap[l.phone_number||'']||'solicitud')==='cobranzas'
+                      return true
+                    })
+                    const n = disponibles.length
                     return n>0?<span style={{background:'#F59E0B',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:3}}>{n}</span>:null
                   })()}
                 </button>
