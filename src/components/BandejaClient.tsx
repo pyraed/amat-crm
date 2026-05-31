@@ -1270,7 +1270,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                         </div>
                         <div className={msg.direction==='out'?'mo':msg.sender==='bot'?'mb':'mi'}>
                           {(msg as any).media_url && (msg as any).media_type==='image' && (
-                            <img src={(msg as any).media_url} style={{maxWidth:'100%',borderRadius:8,marginBottom:4,display:'block'}} />
+                            <div style={{position:'relative',display:'inline-block',maxWidth:'100%'}}>
+                              <img src={(msg as any).media_url} style={{maxWidth:'100%',borderRadius:8,marginBottom:4,display:'block'}} />
+                              <a
+                                href={(msg as any).media_url}
+                                download
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{position:'absolute',top:6,right:6,background:'rgba(0,0,0,0.55)',borderRadius:6,padding:'4px 8px',color:'white',fontSize:11,textDecoration:'none',display:'flex',alignItems:'center',gap:4,backdropFilter:'blur(4px)'}}>
+                                ⬇️ Descargar
+                              </a>
+                            </div>
                           )}
                           {(msg as any).media_url && (msg as any).media_type==='document' && (
                             <a href={(msg as any).media_url} target="_blank" rel="noreferrer" style={{display:'flex',alignItems:'center',gap:6,color:'inherit',textDecoration:'none',background:'rgba(255,255,255,0.15)',padding:'8px 12px',borderRadius:8,marginBottom:4}}>
