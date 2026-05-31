@@ -702,8 +702,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     // Sincronizar estado en amat_consultas también
     const lead = bandejaLeads.find(l=>l.id===id)||baseLeads.find(l=>l.id===id)
     if(lead?.phone_number) {
+      const estadoConsulta =
+        status==='closed'      ? 'resuelto'   :
+        status==='resolved'    ? 'resuelto'   :
+        status==='unresolved'  ? 'cerrado'    :
+        status==='rejected'    ? 'cerrado'    :
+        status==='finalizado'  ? 'cerrado'    :
+        status==='not_interested' ? 'cerrado' :
+        status==='contacted'   ? 'en_proceso' : 'pendiente'
       await supabase.from('amat_consultas')
-        .update({estado: status==='closed'?'resuelto':status==='rejected'?'cerrado':status==='finalizado'?'cerrado':status==='contacted'?'en_proceso':'pendiente', updated_at:new Date().toISOString()})
+        .update({estado: estadoConsulta, updated_at:new Date().toISOString()})
         .eq('phone', lead.phone_number)
     }
   }
@@ -756,7 +764,13 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setFinalizarEstado('')
     setFinalizarNota('')
     if(currentLead.phone_number) {
-      const upd: any = { estado:'cerrado', updated_at: new Date().toISOString() }
+      const estadoFinal =
+        statusFinal==='closed'     ? 'resuelto' :
+        statusFinal==='resolved'   ? 'resuelto' :
+        statusFinal==='unresolved' ? 'cerrado'  :
+        statusFinal==='rejected'   ? 'cerrado'  :
+        statusFinal==='not_interested' ? 'cerrado' : 'cerrado'
+      const upd: any = { estado: estadoFinal, updated_at: new Date().toISOString() }
       if(nota?.trim()) upd.situacion = nota.trim()
       await supabase.from('amat_consultas').update(upd).eq('phone', currentLead.phone_number)
     }
