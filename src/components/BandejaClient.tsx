@@ -346,6 +346,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [flujoMap, setFlujoMap]           = useState<Record<string,string>>({})
   const [cola, setCola]                   = useState<LoanLead[]>([])
   const [showFinalizarModal, setShowFinalizarModal] = useState(false)
+  const [finalizarEstado, setFinalizarEstado]       = useState('')
   const [showVentaModal, setShowVentaModal]         = useState(false)
   const [ventaForm, setVentaForm]         = useState<any>({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
 
@@ -650,12 +651,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
-  // Finalizar conversación
+  // Finalizar conversación — respeta estado final si ya fue seteado
   const finalizarConversacion = async () => {
     if(!currentLead) return
-    await updateStatus(currentLead.id, 'finalizado')
+    const estadosFinales = ['not_interested','rejected','closed','resolved','unresolved']
+    if(!estadosFinales.includes(currentLead.status||'')) {
+      await updateStatus(currentLead.id, 'finalizado')
+    }
     setSelectedPhone(null)
     setShowFinalizarModal(false)
+    setFinalizarEstado('')
     if(currentLead.phone_number) {
       await supabase.from('amat_consultas')
         .update({estado:'cerrado', updated_at:new Date().toISOString()})
@@ -1977,31 +1982,67 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       )}
 
       {/* ══ MODAL: FINALIZAR CONVERSACIÓN ══ */}
-      {showFinalizarModal&&currentLead&&(
-        <div className="movo" onClick={()=>setShowFinalizarModal(false)}>
-          <div className="mod" onClick={e=>e.stopPropagation()} style={{width:420}}>
-            <h3 style={{fontFamily:"'Playfair Display',serif"}}>✓ Finalizar conversación</h3>
-            <p style={{fontSize:13,color:'#64748B',marginBottom:16,lineHeight:1.6}}>
-              Al finalizar, la conversación con <strong>{currentLead.full_name||currentLead.phone_number}</strong> se cerrará
-              y saldrá de tu bandeja. Podrás verla en la pestaña <strong>Consultas</strong> y <strong>Pipeline</strong>.
-            </p>
-            <div style={{background:'#F8FAFC',border:'1px solid #E2E8F0',borderRadius:10,padding:'12px 14px',marginBottom:16}}>
-              <label className="fl">Cambiar estado a</label>
-              <select className="fs" onChange={e=>{}} defaultValue="finalizado">
-                <option value="finalizado">Finalizado</option>
-                <option value="contacted">Contactado</option>
-                <option value="not_interested">No interesado</option>
-              </select>
-            </div>
-            <div style={{display:'flex',gap:8}}>
-              <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={finalizarConversacion}>
-                ✓ Confirmar y finalizar
-              </button>
-              <button className="btn" onClick={()=>setShowFinalizarModal(false)}>Cancelar</button>
+      {showFinalizarModal&&currentLead&&(()=>{
+        const flujo = flujoMap[currentLead.phone_number||'']||'solicitud'
+        const estadosFinales = flujo==='cobranzas'
+          ? ['resolved','unresolved']
+          : ['not_interested','rejected','closed']
+        const yaFinalizado = estadosFinales.includes(currentLead.status||'')
+        const statusOpts = flujo==='cobranzas'
+          ? Object.entries(COBRANZA_STATUS).filter(([k])=>['resolved','unresolved'].includes(k))
+          : Object.entries(LEAD_STATUS).filter(([k])=>['not_interested','rejected','closed'].includes(k))
+        const puedeConfirmar = yaFinalizado || !!finalizarEstado
+        return (
+          <div className="movo" onClick={()=>{ setShowFinalizarModal(false); setFinalizarEstado('') }}>
+            <div className="mod" onClick={e=>e.stopPropagation()} style={{width:420}}>
+              <h3 style={{fontFamily:"'Playfair Display',serif"}}>✓ Finalizar conversación</h3>
+              <p style={{fontSize:13,color:'#64748B',marginBottom:16,lineHeight:1.6}}>
+                Al finalizar, la conversación con <strong>{currentLead.full_name||currentLead.phone_number}</strong> se cerrará
+                y saldrá de tu bandeja. Podrás verla en la pestaña <strong>Consultas</strong> y <strong>Pipeline</strong>.
+              </p>
+
+              {yaFinalizado ? (
+                <div style={{background:'#F0FDF4',border:'1px solid #BBF7D0',borderRadius:10,padding:'12px 14px',marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontSize:18}}>✅</span>
+                  <div>
+                    <div style={{fontSize:11,color:'#166534',textTransform:'uppercase',letterSpacing:'.07em',fontFamily:"'DM Mono',monospace",marginBottom:2}}>Estado actual</div>
+                    <div style={{fontSize:14,fontWeight:600,color:'#166534'}}>
+                      {(flujo==='cobranzas'?COBRANZA_STATUS:LEAD_STATUS)[currentLead.status||'']?.label||currentLead.status}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{background:'#FFF7ED',border:'1px solid #FED7AA',borderRadius:10,padding:'12px 14px',marginBottom:16}}>
+                  <div style={{fontSize:12,color:'#C2410C',fontWeight:600,marginBottom:8}}>
+                    ⚠️ Debés elegir un estado final antes de cerrar
+                  </div>
+                  <label className="fl">Estado final</label>
+                  <select className="fs" value={finalizarEstado} onChange={e=>setFinalizarEstado(e.target.value)}>
+                    <option value="">— Seleccioná un estado —</option>
+                    {statusOpts.map(([k,v])=>(
+                      <option key={k} value={k}>{v.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div style={{display:'flex',gap:8}}>
+                <button
+                  className="btn pri"
+                  style={{flex:1,justifyContent:'center',opacity:puedeConfirmar?1:0.4}}
+                  disabled={!puedeConfirmar}
+                  onClick={async()=>{
+                    if(!yaFinalizado&&finalizarEstado) await updateStatus(currentLead.id,finalizarEstado)
+                    await finalizarConversacion()
+                  }}>
+                  ✓ Confirmar y finalizar
+                </button>
+                <button className="btn" onClick={()=>{ setShowFinalizarModal(false); setFinalizarEstado('') }}>Cancelar</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ══ MODAL: VENTA CERRADA ══ */}
       {showVentaModal&&currentLead&&(()=>{
