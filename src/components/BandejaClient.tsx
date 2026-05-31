@@ -448,6 +448,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     supabase.from('amat_loan_leads')
       .select('*')
       .in('phone_number', phones.slice(0,500))
+      .not('status', 'in', '("finalizado","closed","rejected","not_interested","resolved","unresolved")')
       .then(({data})=>{ if(data) setBotLeads(data as LoanLead[]) })
     // Cargar flujos de consultas para saber si cada phone es ventas o cobranzas
     supabase.from('amat_consultas')
@@ -786,8 +787,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // Bandeja: solo leads con conversación (mensajes)
   const phonesConMensajes=[...new Set(messages.map(m=>m.phone_number))]
+  const ESTADOS_FINALES_BANDEJA = ['finalizado','closed','rejected','not_interested','resolved','unresolved']
   const bandejaLeads=allLeads.filter(l=>{
     if(!l.phone_number||!phonesConMensajes.includes(l.phone_number)) return false
+    if(ESTADOS_FINALES_BANDEJA.includes(l.status||'')) return false
     const q=bandejaSearch.toLowerCase()
     const m=!q||(l.full_name||'').toLowerCase().includes(q)||(l.phone_number||'').includes(q)||(l.dni||'').includes(q)
     const s=bandejaStatus==='all'||l.status===bandejaStatus
@@ -798,9 +801,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const currentMsgs=messages.filter(m=>m.phone_number===selectedPhone).sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())
 
   const stats={
-    inbound:  phonesConMensajes.length,
-    activos:  allLeads.filter(l=>['interested','contacted','evaluation'].includes(l.status)).length,
-    sinResp:  [...new Set(messages.filter(m=>m.direction==='in').map(m=>m.phone_number))].filter(p=>!messages.find(m=>m.phone_number===p&&m.direction==='out'&&m.sender!=='bot')).length,
+    inbound:  bandejaLeads.length,
+    activos:  bandejaLeads.filter(l=>['contacted','new'].includes(l.status||'')).length,
+    sinResp:  [...new Set(messages.filter(m=>m.direction==='in').map(m=>m.phone_number))]
+      .filter(p=>bandejaLeads.find(l=>l.phone_number===p))
+      .filter(p=>!messages.find(m=>m.phone_number===p&&m.direction==='out'&&m.sender!=='bot')).length,
     cerrados: allLeads.filter(l=>l.status==='closed'&&new Date(l.updated_at).toDateString()===new Date().toDateString()).length,
   }
 
