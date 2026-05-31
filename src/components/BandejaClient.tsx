@@ -14,15 +14,15 @@ import { LoanLead, Message } from '@/lib/types'
 // ─────────────────────────────────────────────
 //  USUARIOS
 // ─────────────────────────────────────────────
-type Role = 'Administrador' | 'Vendedor' | 'Administrativo'
+type Role = 'Administrador' | 'Vendedor' | 'Cobranza'
 type SysUser = { id:string; username:string; password:string; displayName:string; role:Role; initials:string; color:string }
 
 const USERS: SysUser[] = [
-  { id:'1', username:'AMAT1', password:'Amat2024#1', displayName:'Usuario AMAT 1', role:'Administrador',  initials:'A1', color:'#B45309' },
-  { id:'2', username:'AMAT2', password:'Amat2024#2', displayName:'Usuario AMAT 2', role:'Vendedor',       initials:'A2', color:'#D97706' },
-  { id:'3', username:'AMAT3', password:'Amat2024#3', displayName:'Usuario AMAT 3', role:'Vendedor',       initials:'A3', color:'#F59E0B' },
-  { id:'4', username:'AMAT4', password:'Amat2024#4', displayName:'Usuario AMAT 4', role:'Administrativo', initials:'A4', color:'#78716C' },
-  { id:'5', username:'AMAT5', password:'Amat2024#5', displayName:'Usuario AMAT 5', role:'Administrativo', initials:'A5', color:'#44403C' },
+  { id:'1', username:'AMAT1', password:'Amat2024#1', displayName:'Admin AMAT',    role:'Administrador', initials:'AD', color:'#B45309' },
+  { id:'2', username:'AMAT2', password:'Amat2024#2', displayName:'Vendedor 1',    role:'Vendedor',      initials:'V1', color:'#D97706' },
+  { id:'3', username:'AMAT3', password:'Amat2024#3', displayName:'Vendedor 2',    role:'Vendedor',      initials:'V2', color:'#F59E0B' },
+  { id:'4', username:'AMAT4', password:'Amat2024#4', displayName:'Cobranzas 1',   role:'Cobranza',      initials:'C1', color:'#7C3AED' },
+  { id:'5', username:'AMAT5', password:'Amat2024#5', displayName:'Cobranzas 2',   role:'Cobranza',      initials:'C2', color:'#6D28D9' },
 ]
 
 // ─────────────────────────────────────────────
@@ -34,6 +34,7 @@ const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:strin
   not_interested:{ label:'No interesado', color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere ser contactado' },
   rejected:     { label:'Rechazado',      color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No cumple requisitos' },
   closed:       { label:'Cerrado',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
+  finalizado:   { label:'Finalizado',      color:'#6B7280', bg:'#F3F4F6', text:'#374151', desc:'Conversación finalizada' },
 }
 
 // Motivos de rechazo / no interés
@@ -405,6 +406,24 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .then(({data})=>{ if(data) setBotLeads(data as LoanLead[]) })
   },[initialMessages])
 
+  // Cargar cola según rol del usuario logueado
+  const loadCola = (user: typeof me, leads: LoanLead[]) => {
+    if(!user) return
+    // Sin asignar = cola disponible
+    let disponibles = leads.filter(l => !l.assigned_to && l.status !== 'finalizado')
+    // Filtrar por rol
+    if(user.role === 'Vendedor') {
+      // Solo flujo solicitud — filtramos por consultas con flujo=solicitud
+      // Como no tenemos flujo en loan_leads, mostramos todos los sin asignar al Vendedor
+      // Los de cobranzas los filtra el sistema de consultas
+      disponibles = disponibles
+    } else if(user.role === 'Cobranza') {
+      disponibles = disponibles
+    }
+    // Admin ve todo
+    setCola(disponibles)
+  }
+
   // ─────────────────────────────────────────────
   //  CARGAR CONSULTAS desde amat_consultas
   // ─────────────────────────────────────────────
@@ -544,6 +563,60 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const upd:any={status,updated_at:new Date().toISOString()}
     if(notes!==undefined) upd.notes=notes
     await supabase.from('amat_loan_leads').update(upd).eq('id',id)
+    // Sincronizar estado en amat_consultas también
+    const lead = bandejaLeads.find(l=>l.id===id)||baseLeads.find(l=>l.id===id)
+    if(lead?.phone_number) {
+      await supabase.from('amat_consultas')
+        .update({estado: status==='closed'?'resuelto':status==='rejected'?'cerrado':status==='finalizado'?'cerrado':status==='contacted'?'en_proceso':'pendiente', updated_at:new Date().toISOString()})
+        .eq('phone', lead.phone_number)
+    }
+  }
+
+  // Tomar una conversación de la cola
+  const tomarConversacion = async (lead: LoanLead) => {
+    if(!me) return
+    await supabase.from('amat_loan_leads')
+      .update({assigned_to: me.username, status:'contacted', updated_at:new Date().toISOString()})
+      .eq('id', lead.id)
+    // Actualizar consulta también
+    if(lead.phone_number) {
+      await supabase.from('amat_consultas')
+        .update({vendedor: me.username, estado:'en_proceso', updated_at:new Date().toISOString()})
+        .eq('phone', lead.phone_number)
+    }
+    setSelectedPhone(lead.phone_number)
+    setVistaMode('mis_chats')
+  }
+
+  // Finalizar conversación
+  const finalizarConversacion = async () => {
+    if(!currentLead) return
+    await updateStatus(currentLead.id, 'finalizado')
+    setSelectedPhone(null)
+    setShowFinalizarModal(false)
+    if(currentLead.phone_number) {
+      await supabase.from('amat_consultas')
+        .update({estado:'cerrado', updated_at:new Date().toISOString()})
+        .eq('phone', currentLead.phone_number)
+    }
+  }
+
+  // Guardar cierre de venta
+  const guardarVenta = async () => {
+    if(!currentLead||!me) return
+    const venta = {
+      ...ventaForm,
+      status:'closed',
+      updated_at:new Date().toISOString(),
+      notes: `VENTA CERRADA - Entidad:${ventaForm.entidad} Línea:${ventaForm.linea} Repartición:${ventaForm.reparticion} Monto:$${ventaForm.monto} Cuotas:${ventaForm.cuotas} Valor cuota:$${ventaForm.valor_cuota}${ventaForm.notas?' Notas:'+ventaForm.notas:''}`
+    }
+    await supabase.from('amat_loan_leads').update(venta).eq('id',currentLead.id)
+    await supabase.from('amat_consultas')
+      .update({estado:'resuelto', situacion:`Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${ventaForm.monto} en ${ventaForm.cuotas} cuotas`, updated_at:new Date().toISOString()})
+      .eq('phone', currentLead.phone_number||'')
+    setShowVentaModal(false)
+    setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
+    setSelectedPhone(null)
   }
 
   const openEdit=(lead:LoanLead)=>{
@@ -555,7 +628,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const saveEdit=async()=>{
     if(!editTarget) return
     setEditSaving(true)
-    await supabase.from('amat_loan_leads').update({...editForm,updated_at:new Date().toISOString()}).eq('id',editTarget.id)
+    const upd = {
+      ...editForm,
+      full_name:    editForm.full_name?.toUpperCase()||editForm.full_name,
+      reparticion:  editForm.reparticion?.toUpperCase()||editForm.reparticion,
+      bank:         editForm.bank?.toUpperCase()||editForm.bank,
+      updated_at:   new Date().toISOString()
+    }
+    await supabase.from('amat_loan_leads').update(upd).eq('id',editTarget.id)
     setEditSaving(false); setShowEditModal(false); setEditTarget(null)
     if(tab==='base') loadBase()
   }
@@ -573,6 +653,38 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const note=`Rechazado: ${rejectReason}`
     await updateStatus(lead.id,'rejected',lead.notes?lead.notes+'\n'+note:note)
     setShowRejectModal(false); setRejectReason('')
+  }
+
+  // Exportar ventas cerradas con todos los datos
+  const exportVentas = async () => {
+    const {data} = await supabase.from('amat_loan_leads')
+      .select('*').eq('status','closed').order('updated_at',{ascending:false})
+    if(!data||data.length===0){ alert('No hay ventas cerradas para exportar'); return }
+    const XLSX = await import('xlsx')
+    const rows = data.map((l:any)=>{
+      // Parsear notas de venta
+      const nota = l.notes||''
+      const get = (key:string) => { const m=nota.match(new RegExp(`${key}:([^\n]+)`)); return m?m[1].trim():'' }
+      return {
+        'DNI': l.dni||'',
+        'Nombre': l.full_name||'',
+        'Teléfono': l.phone_number||'',
+        'Email': l.email||'',
+        'Repartición': l.reparticion||'',
+        'Entidad': get('Entidad'),
+        'Línea': get('Línea'),
+        'Monto ($)': get('Monto').replace('$',''),
+        'Cuotas': get('Cuotas'),
+        'Valor cuota ($)': get('Valor cuota').replace('$',''),
+        'Notas': get('Notas')||l.notes||'',
+        'Asignado a': l.assigned_to||'',
+        'Fecha cierre': new Date(l.updated_at).toLocaleDateString('es-AR'),
+      }
+    })
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb,ws,'Ventas')
+    XLSX.writeFile(wb, `AMAT_ventas_${new Date().toISOString().slice(0,10)}.xlsx`)
   }
 
   const openTemplate=(lead:LoanLead)=>{
@@ -751,7 +863,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           <div style={{width:32,height:32,borderRadius:'50%',background:me.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:11,fontWeight:700}}>{me.initials}</div>
           <div style={{lineHeight:1.3}}>
             <div style={{fontSize:12,fontWeight:600,color:'#1E293B'}}>{me.username}</div>
-            <span style={{fontSize:10,padding:'2px 7px',borderRadius:99,fontWeight:600,background:me.role==='Administrador'?'#EFF6FF':me.role==='Vendedor'?'#F0FDF4':'#FFFBEB',color:me.role==='Administrador'?'#1D4ED8':me.role==='Vendedor'?'#15803D':'#92400E'}}>{me.role}</span>
+            <span style={{fontSize:10,padding:'2px 7px',borderRadius:99,fontWeight:600,background:me.role==='Administrador'?'#EFF6FF':me.role==='Vendedor'?'#F0FDF4':'#F5F3FF',color:me.role==='Administrador'?'#1D4ED8':me.role==='Vendedor'?'#15803D':'#6D28D9'}}>{me.role}</span>
           </div>
           <button onClick={()=>setMe(null)} style={{padding:'5px 12px',border:'1px solid #E2E8F0',borderRadius:8,background:'white',fontSize:12,cursor:'pointer',color:'#64748B',fontFamily:'inherit',fontWeight:500}}>Salir</button>
         </div>
@@ -761,46 +873,96 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       {tab==='bandeja'&&(
         <div style={{display:'flex',flex:1,overflow:'hidden'}}>
           {/* Sidebar */}
-          <div style={{width:276,borderRight:'1px solid #E2E8F0',background:'white',display:'flex',flexDirection:'column',flexShrink:0}}>
+          <div style={{width:292,borderRight:'1px solid #E2E8F0',background:'white',display:'flex',flexDirection:'column',flexShrink:0}}>
+            {/* Toggle Cola / Mis Chats */}
             <div style={{padding:'10px 12px',borderBottom:'1px solid #F1F5F9',display:'flex',flexDirection:'column',gap:8}}>
+              <div style={{display:'flex',gap:4,background:'#F1F5F9',padding:3,borderRadius:8}}>
+                <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='cola'?'white':'transparent',color:vistaMode==='cola'?'#0F172A':'#64748B',boxShadow:vistaMode==='cola'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
+                  onClick={()=>{setVistaMode('cola');setSelectedPhone(null)}}>
+                  📥 Cola {(()=>{
+                    const disponibles = bandejaLeads.filter(l=>!l.assigned_to&&l.status!=='finalizado')
+                    const n = me?.role==='Vendedor' ? disponibles.length :
+                              me?.role==='Cobranza' ? disponibles.length : disponibles.length
+                    return n>0?<span style={{background:'#F59E0B',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:3}}>{n}</span>:null
+                  })()}
+                </button>
+                <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='mis_chats'?'white':'transparent',color:vistaMode==='mis_chats'?'#0F172A':'#64748B',boxShadow:vistaMode==='mis_chats'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
+                  onClick={()=>setVistaMode('mis_chats')}>
+                  💬 Mis chats {(()=>{
+                    const n = bandejaLeads.filter(l=>l.assigned_to===me?.username&&l.status!=='finalizado').length
+                    return n>0?<span style={{background:'#3B82F6',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:3}}>{n}</span>:null
+                  })()}
+                </button>
+              </div>
               <div style={{position:'relative'}}>
                 <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'#94A3B8',fontSize:13,pointerEvents:'none'}}>🔍</span>
                 <input className="si" placeholder="Buscar..." value={bandejaSearch} onChange={e=>setBandejaSearch(e.target.value)}/>
               </div>
-              <select className="fsel" style={{width:'100%'}} value={bandejaStatus} onChange={e=>setBandejaStatus(e.target.value)}>
-                <option value="all">Todos los estados</option>
-                {Object.entries(LEAD_STATUS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-              </select>
-              <div style={{fontSize:11,color:'#94A3B8'}}>{bandejaLeads.length} conversación{bandejaLeads.length!==1?'es':''} activas</div>
             </div>
+
+            {/* Lista */}
             <div style={{flex:1,overflowY:'auto'}}>
-              {bandejaLeads.length===0&&(
-                <div style={{padding:32,textAlign:'center',color:'#94A3B8',fontSize:13}}>
-                  <div style={{fontSize:32,marginBottom:8}}>💬</div>
-                  Las conversaciones del bot aparecerán acá
-                </div>
-              )}
-              {bandejaLeads.map(lead=>{
-                const s=sc(lead.status)
-                const lastMsg=messages.filter(m=>m.phone_number===lead.phone_number).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
-                const unread=messages.some(m=>m.phone_number===lead.phone_number&&m.direction==='in'&&m.sender!=='bot')
-                return (
-                  <div key={lead.phone_number??lead.id} className={`ci ${selectedPhone===lead.phone_number?'on':''}`} onClick={()=>setSelectedPhone(lead.phone_number)}>
-                    <div className="av" style={{width:38,height:38,fontSize:12,background:s.bg,color:s.text}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
-                        <span style={{fontWeight:unread?700:500,fontSize:13,color:'#0F172A',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.full_name||lead.phone_number||'Sin datos'}</span>
-                        {unread&&<span style={{width:7,height:7,borderRadius:'50%',background:'#F59E0B',flexShrink:0}}/>}
-                      </div>
-                      <div style={{fontSize:11,color:'#94A3B8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lastMsg?(lastMsg.direction==='out'?'✓ ':'')+lastMsg.body:lead.reparticion||'Sin mensajes'}</div>
-                      <div style={{marginTop:4,display:'flex',alignItems:'center',gap:5}}>
-                        <span className="pill" style={{background:s.bg,color:s.text}}>{s.label}</span>
-                        {lead.assigned_to&&<span style={{fontSize:10,color:'#94A3B8'}}>· {lead.assigned_to}</span>}
-                      </div>
-                    </div>
+              {vistaMode==='cola'&&(()=>{
+                // Cola: leads sin asignar, filtrados por rol
+                let leads = bandejaLeads.filter(l=>!l.assigned_to&&l.status!=='finalizado')
+                if(bandejaSearch) leads=leads.filter(l=>(l.full_name||'').toLowerCase().includes(bandejaSearch.toLowerCase())||(l.phone_number||'').includes(bandejaSearch)||(l.dni||'').includes(bandejaSearch))
+                if(leads.length===0) return (
+                  <div style={{padding:32,textAlign:'center',color:'#94A3B8',fontSize:13}}>
+                    <div style={{fontSize:36,marginBottom:8}}>✅</div>
+                    <div style={{fontWeight:600,marginBottom:4}}>Cola vacía</div>
+                    No hay conversaciones nuevas pendientes
                   </div>
                 )
-              })}
+                return leads.map(lead=>{
+                  const lastMsg=messages.filter(m=>m.phone_number===lead.phone_number).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
+                  return (
+                    <div key={lead.phone_number??lead.id} style={{display:'flex',gap:10,padding:'12px 14px',borderBottom:'1px solid #F1F5F9',cursor:'pointer',alignItems:'flex-start',background:'#FFFBEB',borderLeft:'3px solid #F59E0B'}}
+                      onClick={()=>tomarConversacion(lead)}>
+                      <div className="av" style={{width:38,height:38,fontSize:12,background:'#FFFBEB',color:'#B45309'}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
+                          <span style={{fontWeight:600,fontSize:13,color:'#0F172A',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.full_name||lead.phone_number||'Sin datos'}</span>
+                          <span style={{fontSize:9,padding:'2px 6px',borderRadius:99,background:'#F59E0B',color:'white',fontWeight:700,flexShrink:0}}>NUEVO</span>
+                        </div>
+                        <div style={{fontSize:11,color:'#94A3B8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lastMsg?lastMsg.body:lead.reparticion||'Sin mensajes'}</div>
+                        <div style={{marginTop:4,fontSize:10.5,color:'#B45309',fontWeight:600}}>👆 Click para tomar</div>
+                      </div>
+                    </div>
+                  )
+                })
+              })()}
+
+              {vistaMode==='mis_chats'&&(()=>{
+                let leads = bandejaLeads.filter(l=>l.assigned_to===me?.username&&l.status!=='finalizado')
+                if(bandejaSearch) leads=leads.filter(l=>(l.full_name||'').toLowerCase().includes(bandejaSearch.toLowerCase())||(l.phone_number||'').includes(bandejaSearch)||(l.dni||'').includes(bandejaSearch))
+                if(leads.length===0) return (
+                  <div style={{padding:32,textAlign:'center',color:'#94A3B8',fontSize:13}}>
+                    <div style={{fontSize:36,marginBottom:8}}>💬</div>
+                    <div style={{fontWeight:600,marginBottom:4}}>Sin chats activos</div>
+                    Tomá conversaciones de la cola
+                  </div>
+                )
+                return leads.map(lead=>{
+                  const s=sc(lead.status)
+                  const lastMsg=messages.filter(m=>m.phone_number===lead.phone_number).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
+                  const unread=messages.some(m=>m.phone_number===lead.phone_number&&m.direction==='in'&&new Date(m.created_at)>new Date(lead.updated_at))
+                  return (
+                    <div key={lead.phone_number??lead.id} className={`ci ${selectedPhone===lead.phone_number?'on':''}`} onClick={()=>setSelectedPhone(lead.phone_number)}>
+                      <div className="av" style={{width:38,height:38,fontSize:12,background:s.bg,color:s.text}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
+                          <span style={{fontWeight:unread?700:500,fontSize:13,color:'#0F172A',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.full_name||lead.phone_number||'Sin datos'}</span>
+                          {unread&&<span style={{width:7,height:7,borderRadius:'50%',background:'#F59E0B',flexShrink:0}}/>}
+                        </div>
+                        <div style={{fontSize:11,color:'#94A3B8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lastMsg?(lastMsg.direction==='out'?'✓ ':'')+lastMsg.body:lead.reparticion||'Sin mensajes'}</div>
+                        <div style={{marginTop:4,display:'flex',alignItems:'center',gap:5}}>
+                          <span className="pill" style={{background:s.bg,color:s.text}}>{s.label}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              })()}
             </div>
           </div>
 
@@ -827,6 +989,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     <button className="btn" onClick={()=>{setNoteText(currentLead.notes||'');setEditTarget(currentLead);setShowNoteModal(true)}}>📝 Nota</button>
                     <button className="btn" onClick={()=>openEdit(currentLead)}>✏️ Editar</button>
                     <button className="btn dan" onClick={()=>{setEditTarget(currentLead);setShowRejectModal(true)}}>✕ Rechazar</button>
+                    <button style={{padding:'6px 12px',borderRadius:8,border:'1px solid #BBF7D0',background:'#ECFDF5',color:'#065F46',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,transition:'all .15s',whiteSpace:'nowrap'}} onClick={()=>{setVentaForm({entidad:'',linea:'',reparticion:currentLead.reparticion||'',monto:'',cuotas:'',valor_cuota:'',notas:''});setShowVentaModal(true)}}>
+                      🎉 Venta cerrada
+                    </button>
+                    <button style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E2E8F0',background:'#F8FAFC',color:'#64748B',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,transition:'all .15s',whiteSpace:'nowrap'}} onClick={()=>setShowFinalizarModal(true)}>
+                      ✓ Finalizar
+                    </button>
                     <button style={{padding:'6px 12px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#059669,#10B981)',color:'white',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(16,185,129,.3)',transition:'all .15s',whiteSpace:'nowrap'}} onClick={()=>setShowCalculador(true)}>
                       💰 Oferta
                     </button>
@@ -941,6 +1109,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             </div>
             <button className="btn pri" onClick={()=>{setBaseSearch(baseSearchInput);setBasePage(0)}}>Buscar</button>
             <button className="btn suc" onClick={()=>setShowImportExport(true)}>📊 Imp/Exp</button>
+            <button className="btn" style={{borderColor:'#BBF7D0',color:'#065F46',background:'#ECFDF5'}} onClick={exportVentas}>🎉 Exportar ventas</button>
             <button style={{padding:'7px 14px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#18181B,#3F3F46)',color:'white',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(24,24,27,0.3)',transition:'all .15s',whiteSpace:'nowrap'}} onClick={()=>setShowCampana(true)}>
               📣 Campaña WhatsApp
             </button>
@@ -1655,6 +1824,96 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: FINALIZAR CONVERSACIÓN ══ */}
+      {showFinalizarModal&&currentLead&&(
+        <div className="movo" onClick={()=>setShowFinalizarModal(false)}>
+          <div className="mod" onClick={e=>e.stopPropagation()} style={{width:420}}>
+            <h3 style={{fontFamily:"'Playfair Display',serif"}}>✓ Finalizar conversación</h3>
+            <p style={{fontSize:13,color:'#64748B',marginBottom:16,lineHeight:1.6}}>
+              Al finalizar, la conversación con <strong>{currentLead.full_name||currentLead.phone_number}</strong> se cerrará
+              y saldrá de tu bandeja. Podrás verla en la pestaña <strong>Consultas</strong> y <strong>Pipeline</strong>.
+            </p>
+            <div style={{background:'#F8FAFC',border:'1px solid #E2E8F0',borderRadius:10,padding:'12px 14px',marginBottom:16}}>
+              <label className="fl">Cambiar estado a</label>
+              <select className="fs" onChange={e=>{}} defaultValue="finalizado">
+                <option value="finalizado">Finalizado</option>
+                <option value="contacted">Contactado</option>
+                <option value="not_interested">No interesado</option>
+              </select>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={finalizarConversacion}>
+                ✓ Confirmar y finalizar
+              </button>
+              <button className="btn" onClick={()=>setShowFinalizarModal(false)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: VENTA CERRADA ══ */}
+      {showVentaModal&&currentLead&&(
+        <div className="movo" onClick={()=>setShowVentaModal(false)}>
+          <div className="mod" onClick={e=>e.stopPropagation()} style={{width:520}}>
+            <h3 style={{fontFamily:"'Playfair Display',serif"}}>🎉 Registrar venta cerrada</h3>
+            <p style={{fontSize:12,color:'#64748B',marginBottom:16}}>Completá los datos de la operación para registrar la venta.</p>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+              <div>
+                <label className="fl">Entidad</label>
+                <select className="fs" value={ventaForm.entidad} onChange={e=>setVentaForm((f:any)=>({...f,entidad:e.target.value}))}>
+                  <option value="">Seleccioná</option>
+                  <option value="AMAT">AMAT</option>
+                  <option value="DOS DE AGOSTO">DOS DE AGOSTO</option>
+                </select>
+              </div>
+              <div>
+                <label className="fl">Línea</label>
+                <select className="fs" value={ventaForm.linea} onChange={e=>setVentaForm((f:any)=>({...f,linea:e.target.value}))}>
+                  <option value="">Seleccioná</option>
+                  <option value="Haberes">Haberes</option>
+                  <option value="Ayuda">Ayuda Económica</option>
+                  <option value="BAPRO">BAPRO</option>
+                </select>
+              </div>
+              <div>
+                <label className="fl">Repartición</label>
+                <select className="fs" value={ventaForm.reparticion} onChange={e=>setVentaForm((f:any)=>({...f,reparticion:e.target.value}))}>
+                  <option value="">Seleccioná</option>
+                  {REPARTICIONES.map(r=><option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="fl">Monto ($)</label>
+                <input className="fi" type="number" placeholder="Ej: 300000" value={ventaForm.monto} onChange={e=>setVentaForm((f:any)=>({...f,monto:e.target.value}))}/>
+              </div>
+              <div>
+                <label className="fl">Cuotas</label>
+                <select className="fs" value={ventaForm.cuotas} onChange={e=>setVentaForm((f:any)=>({...f,cuotas:e.target.value}))}>
+                  <option value="">Seleccioná</option>
+                  {[6,12,18,24].map(n=><option key={n} value={n}>{n} cuotas</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="fl">Valor de cuota ($)</label>
+                <input className="fi" type="number" placeholder="Ej: 28500" value={ventaForm.valor_cuota} onChange={e=>setVentaForm((f:any)=>({...f,valor_cuota:e.target.value}))}/>
+              </div>
+            </div>
+            <div style={{marginBottom:16}}>
+              <label className="fl">Notas adicionales (opcional)</label>
+              <textarea className="ta" placeholder="Observaciones de la venta..." value={ventaForm.notas} onChange={e=>setVentaForm((f:any)=>({...f,notas:e.target.value}))}/>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button className="btn pri" style={{flex:1,justifyContent:'center',background:'linear-gradient(135deg,#059669,#10B981)'}}
+                onClick={guardarVenta}
+                disabled={!ventaForm.entidad||!ventaForm.linea||!ventaForm.monto||!ventaForm.cuotas}>
+                💾 Guardar venta
+              </button>
+              <button className="btn" onClick={()=>setShowVentaModal(false)}>Cancelar</button>
+            </div>
           </div>
         </div>
       )}
