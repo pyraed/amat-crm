@@ -786,11 +786,15 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       const nota = l.notes||''
       // Parsear campos del formato "VENTA CERRADA - Entidad:X Línea:Y Repartición:Z Monto:$N Cuotas:N Valor cuota:$N"
       const getField = (key:string): string => {
-        // Busca "key:valor" hasta el próximo campo en mayúscula o fin de string
-        const escaped = key.replace(/[.*+?^${}()|[\]\]/g, '\$&')
-        const pattern = new RegExp(escaped + ':([\s\S]*?)(?=\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+:|$)')
-        const m = nota.match(pattern)
-        return m ? m[1].replace(/\$/g,'').trim() : ''
+        // Busca "Clave:valor hasta el próximo campo o fin de string"
+        const idx = nota.indexOf(key + ':')
+        if(idx === -1) return ''
+        const start = idx + key.length + 1
+        const rest = nota.slice(start)
+        // Cortar hasta el próximo campo (palabra en mayúsculas seguida de :)
+        const nextField = rest.search(/\s+[A-ZÁÉÍÓÚ][a-záéíóúñ ]+:/)
+        const val = nextField === -1 ? rest : rest.slice(0, nextField)
+        return val.replace(/\$/g,'').trim()
       }
       // Intentar leer campos directos del lead primero, luego del campo notes
       const entidad   = getField('Entidad')
