@@ -687,21 +687,23 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
-  // Finalizar conversación — archived=true preserva el status real (closed, etc.)
+  // Finalizar conversación — guarda el status final real + archived=true
   const finalizarConversacion = async (nota?: string) => {
     if(!currentLead) return
-    // Marcar archived=true — preserva el status real para reportes
+    // Determinar el status final real a guardar en BD
+    // Si el operador eligió un estado en el modal, usarlo. Si ya tenía uno (closed, etc.), respetarlo.
+    const estadosFinales = ['not_interested','rejected','closed','resolved','unresolved']
+    const statusFinal = estadosFinales.includes(currentLead.status||'')
+      ? currentLead.status  // respetar el status real (ej: closed de una venta)
+      : (finalizarEstado || 'finalizado')
     await supabase.from('amat_loan_leads')
-      .update({ archived: true, updated_at: new Date().toISOString() })
+      .update({ status: statusFinal, archived: true, updated_at: new Date().toISOString() })
       .eq('id', currentLead.id)
     // Eliminar de botLeads inmediatamente
     setBotLeads(prev => prev.filter(l => l.id !== currentLead.id))
-    // Actualizar cerradosHoy si el lead era closed
-    if(currentLead.status === 'closed') {
-      const hoy = new Date().toDateString()
-      if(new Date(currentLead.updated_at).toDateString() === hoy || true) {
-        setCerradosHoyCount(c => c + 1)
-      }
+    // Actualizar cerradosHoy si el status final es closed
+    if(statusFinal === 'closed') {
+      setCerradosHoyCount(c => c + 1)
     }
     setSelectedPhone(null)
     setShowFinalizarModal(false)
