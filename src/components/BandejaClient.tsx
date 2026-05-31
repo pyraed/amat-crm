@@ -1272,14 +1272,21 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                           {(msg as any).media_url && (msg as any).media_type==='image' && (
                             <div style={{position:'relative',display:'inline-block',maxWidth:'100%'}}>
                               <img src={(msg as any).media_url} style={{width:'100%',height:'auto',borderRadius:8,marginBottom:4,display:'block'}} />
-                              <a
-                                href={(msg as any).media_url}
-                                download
-                                target="_blank"
-                                rel="noreferrer"
-                                style={{position:'absolute',top:6,right:6,background:'rgba(0,0,0,0.55)',borderRadius:6,padding:'4px 8px',color:'white',fontSize:11,textDecoration:'none',display:'flex',alignItems:'center',gap:4,backdropFilter:'blur(4px)'}}>
+                              <button
+                                onClick={async()=>{
+                                  const url = (msg as any).media_url
+                                  const res = await fetch(url)
+                                  const blob = await res.blob()
+                                  const a = document.createElement('a')
+                                  a.href = URL.createObjectURL(blob)
+                                  const ext = url.split('.').pop()?.split('?')[0] || 'jpg'
+                                  a.download = `recibo_${msg.phone_number}.${ext}`
+                                  a.click()
+                                  URL.revokeObjectURL(a.href)
+                                }}
+                                style={{position:'absolute',top:6,right:6,background:'rgba(0,0,0,0.55)',borderRadius:6,padding:'4px 8px',color:'white',fontSize:11,border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:4,backdropFilter:'blur(4px)'}}>
                                 ⬇️ Descargar
-                              </a>
+                              </button>
                             </div>
                           )}
                           {(msg as any).media_url && (msg as any).media_type==='document' && (
