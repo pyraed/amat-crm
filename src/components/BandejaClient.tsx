@@ -1271,7 +1271,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                         <div className={msg.direction==='out'?'mo':msg.sender==='bot'?'mb':'mi'}>
                           {(msg as any).media_url && (msg as any).media_type==='image' && (
                             <div style={{position:'relative',display:'inline-block',maxWidth:'100%'}}>
-                              <img src={(msg as any).media_url} style={{maxWidth:'100%',borderRadius:8,marginBottom:4,display:'block'}} />
+                              <img src={(msg as any).media_url} style={{width:'100%',height:'auto',borderRadius:8,marginBottom:4,display:'block'}} />
                               <a
                                 href={(msg as any).media_url}
                                 download
