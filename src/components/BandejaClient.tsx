@@ -668,14 +668,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
-  // Finalizar conversación — elimina de bandeja + guarda situacion en consultas
+  // Finalizar conversación — SIEMPRE escribe finalizado en BD y elimina de bandeja
   const finalizarConversacion = async (nota?: string) => {
     if(!currentLead) return
-    const estadosFinales = ['not_interested','rejected','closed','resolved','unresolved']
-    if(!estadosFinales.includes(currentLead.status||'')) {
-      await updateStatus(currentLead.id, 'finalizado')
-    }
-    // Eliminar de botLeads para que desaparezca de la bandeja
+    // Siempre marcar como finalizado en Supabase para que no vuelva al recargar
+    await supabase.from('amat_loan_leads')
+      .update({ status:'finalizado', updated_at: new Date().toISOString() })
+      .eq('id', currentLead.id)
+    // Eliminar de botLeads inmediatamente
     setBotLeads(prev => prev.filter(l => l.id !== currentLead.id))
     setSelectedPhone(null)
     setShowFinalizarModal(false)
