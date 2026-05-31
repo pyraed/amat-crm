@@ -421,15 +421,15 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         const updated = p.new as LoanLead
         const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved']
         if(p.eventType==='UPDATE'){
-          if(EXCLUIDOS.includes(updated.status||'')){
-            // Si pasó a estado final, sacarlo de botLeads
+          if(EXCLUIDOS.includes(updated.status||'') || (updated as any).archived){
+            // Si pasó a estado final o fue archivado, sacarlo de botLeads
             setBotLeads(prev=>prev.filter(l=>l.id!==updated.id))
           } else {
             setBotLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
           }
           setBaseLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
         } else if(p.eventType==='INSERT'){
-          if(!EXCLUIDOS.includes(updated.status||'')) setBotLeads(prev=>[updated,...prev])
+          if(!EXCLUIDOS.includes(updated.status||'') && !(updated as any).archived) setBotLeads(prev=>[updated,...prev])
         }
       }).subscribe()
     return ()=>{ supabase.removeChannel(ch) }
@@ -456,10 +456,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .select('*')
       .in('phone_number', phones.slice(0,500))
       .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved")')
+      .eq('archived', false)
       .then(({data})=>{
         if(data){
           setBotLeads(data as LoanLead[])
-          // Inicializar contador cerrados hoy
           const hoy = new Date().toDateString()
           setCerradosHoyCount(data.filter((l:any)=>l.status==='closed'&&new Date(l.updated_at).toDateString()===hoy).length)
         }
@@ -668,15 +668,22 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
-  // Finalizar conversación — SIEMPRE escribe finalizado en BD y elimina de bandeja
+  // Finalizar conversación — archived=true preserva el status real (closed, etc.)
   const finalizarConversacion = async (nota?: string) => {
     if(!currentLead) return
-    // Siempre marcar como finalizado en Supabase para que no vuelva al recargar
+    // Marcar archived=true — preserva el status real para reportes
     await supabase.from('amat_loan_leads')
-      .update({ status:'finalizado', updated_at: new Date().toISOString() })
+      .update({ archived: true, updated_at: new Date().toISOString() })
       .eq('id', currentLead.id)
     // Eliminar de botLeads inmediatamente
     setBotLeads(prev => prev.filter(l => l.id !== currentLead.id))
+    // Actualizar cerradosHoy si el lead era closed
+    if(currentLead.status === 'closed') {
+      const hoy = new Date().toDateString()
+      if(new Date(currentLead.updated_at).toDateString() === hoy || true) {
+        setCerradosHoyCount(c => c + 1)
+      }
+    }
     setSelectedPhone(null)
     setShowFinalizarModal(false)
     setFinalizarEstado('')
@@ -703,7 +710,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .eq('phone', currentLead.phone_number||'')
     // Actualizar botLeads en memoria para que currentLead refleje el nuevo status
     setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, ...venta, status:'closed'} : l))
-    setCerradosHoyCount(c => c + 1)
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
     // NO cerramos el chat — el operador debe presionar Finalizar explícitamente

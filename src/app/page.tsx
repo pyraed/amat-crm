@@ -4,18 +4,15 @@ import BandejaClient from '@/components/BandejaClient'
 
 export const dynamic = 'force-dynamic'
 
-// Estados que ya no deben aparecer en la bandeja
 const ESTADOS_EXCLUIDOS = ['finalizado', 'rejected', 'not_interested', 'resolved', 'unresolved']
 
 export default async function Home() {
-  // Solo cargamos mensajes para la bandeja inbound
   const { data: messages } = await supabaseAdmin
     .from('amat_messages')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(500)
 
-  // Solo los leads que tienen mensajes (bandeja)
   const phones = [...new Set((messages || []).map((m: any) => m.phone_number).filter(Boolean))]
 
   let leads: LoanLead[] = []
@@ -25,6 +22,7 @@ export default async function Home() {
       .select('*')
       .in('phone_number', phones.slice(0, 500))
       .not('status', 'in', `(${ESTADOS_EXCLUIDOS.map(s => `"${s}"`).join(',')})`)
+      .eq('archived', false)   // ← excluye conversaciones finalizadas
     leads = (data as LoanLead[]) || []
   }
 
