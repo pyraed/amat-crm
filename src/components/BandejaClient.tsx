@@ -785,30 +785,42 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const rows = data.map((l:any)=>{
       const nota = l.notes||''
       // Parsear campos del formato "VENTA CERRADA - Entidad:X Línea:Y Repartición:Z Monto:$N Cuotas:N Valor cuota:$N"
-      const getField = (key:string) => {
-        const pattern = new RegExp(key + ':([^\s][^A-Z\n]*?)(?=\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+:|$)')
+      const getField = (key:string): string => {
+        // Busca "key:valor" hasta el próximo campo en mayúscula o fin de string
+        const escaped = key.replace(/[.*+?^${}()|[\]\]/g, '\$&')
+        const pattern = new RegExp(escaped + ':([\s\S]*?)(?=\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+:|$)')
         const m = nota.match(pattern)
         return m ? m[1].replace(/\$/g,'').trim() : ''
       }
+      // Intentar leer campos directos del lead primero, luego del campo notes
+      const entidad   = getField('Entidad')
+      const linea     = getField('Línea') || getField('Linea')
+      const monto     = getField('Monto') || (l.amount ? String(l.amount) : '')
+      const cuotas    = getField('Cuotas') || (l.installments ? String(l.installments) : '')
+      const valorCuota = getField('Valor cuota')
       return {
-        'DNI':           l.dni||'',
-        'Nombre':        l.full_name||'',
-        'Teléfono':      l.phone_number||'',
-        'Email':         l.email||'',
-        'Repartición':   l.reparticion||getField('Repartición'),
-        'Entidad':       getField('Entidad'),
-        'Línea':         getField('Línea'),
-        'Monto ($)':     getField('Monto'),
-        'Cuotas':        getField('Cuotas'),
-        'Valor cuota ($)': getField('Valor cuota'),
-        'Asignado a':    l.assigned_to||'',
-        'Fecha cierre':  new Date(l.updated_at).toLocaleDateString('es-AR'),
-        'Notas raw':     nota,
+        'DNI':             l.dni||'',
+        'Nombre':          l.full_name||'',
+        'Teléfono':        l.phone_number||'',
+        'Email':           l.email||'',
+        'Repartición':     l.reparticion||getField('Repartición'),
+        'Entidad':         entidad,
+        'Línea':           linea,
+        'Monto ($)':       monto,
+        'Cuotas':          cuotas,
+        'Valor cuota ($)': valorCuota,
+        'Asignado a':      l.assigned_to||'',
+        'Fecha cierre':    new Date(l.updated_at).toLocaleDateString('es-AR'),
       }
     })
     const ws = XLSX.utils.json_to_sheet(rows)
+    // Ancho de columnas
+    ws['!cols'] = [
+      {wch:12},{wch:28},{wch:16},{wch:28},{wch:30},
+      {wch:10},{wch:12},{wch:14},{wch:8},{wch:16},{wch:12},{wch:14}
+    ]
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb,ws,'Ventas')
+    XLSX.utils.book_append_sheet(wb,ws,'Ventas AMAT')
     XLSX.writeFile(wb, 'AMAT_ventas_' + new Date().toISOString().slice(0,10) + '.xlsx')
   }
 
@@ -1293,7 +1305,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             </div>
             <button className="btn pri" onClick={()=>{setBaseSearch(baseSearchInput);setBasePage(0)}}>Buscar</button>
             <button className="btn suc" onClick={()=>setShowImportExport(true)}>📊 Imp/Exp</button>
-            <button className="btn" style={{borderColor:'#BBF7D0',color:'#065F46',background:'#ECFDF5'}} onClick={exportVentas}>🎉 Exportar ventas</button>
+
             <button style={{padding:'7px 14px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#18181B,#3F3F46)',color:'white',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(24,24,27,0.3)',transition:'all .15s',whiteSpace:'nowrap'}} onClick={()=>setShowCampana(true)}>
               📣 Campaña WhatsApp
             </button>
@@ -1412,6 +1424,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               {REPARTICIONES.map(r=><option key={r} value={r}>{r}</option>)}
             </select>
             <button className="btn" onClick={()=>{setCSearch('');setCSearchInput('');setCFlujo('all');setCEstado('all');setCRep('all')}}>✕ Limpiar</button>
+            <button className="btn" style={{borderColor:'#BBF7D0',color:'#065F46',background:'#ECFDF5'}} onClick={exportVentas}>🎉 Exportar ventas</button>
             <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',fontFamily:"'DM Mono',monospace"}}>{consultas.length} consultas</span>
           </div>
 
