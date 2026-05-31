@@ -686,9 +686,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     await supabase.from('amat_consultas')
       .update({estado:'resuelto', situacion:`Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${ventaForm.monto} en ${ventaForm.cuotas} cuotas`, updated_at:new Date().toISOString()})
       .eq('phone', currentLead.phone_number||'')
+    // Actualizar botLeads en memoria para que currentLead refleje el nuevo status
+    setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, status:'closed', ...venta} : l))
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
-    setSelectedPhone(null)
   }
 
   const openEdit=(lead:LoanLead)=>{
@@ -2049,6 +2050,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           ? Object.entries(COBRANZA_STATUS).filter(([k])=>['resolved','unresolved'].includes(k))
           : Object.entries(LEAD_STATUS).filter(([k])=>['not_interested','rejected','closed'].includes(k))
         const puedeConfirmar = yaFinalizado || !!finalizarEstado
+        const estadoLabel = (flujo==='cobranzas'?COBRANZA_STATUS:LEAD_STATUS)[currentLead.status||'']?.label || currentLead.status
         return (
           <div className="movo" onClick={()=>{ setShowFinalizarModal(false); setFinalizarEstado('') }}>
             <div className="mod" onClick={e=>e.stopPropagation()} style={{width:420}}>
@@ -2062,10 +2064,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 <div style={{background:'#F0FDF4',border:'1px solid #BBF7D0',borderRadius:10,padding:'12px 14px',marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
                   <span style={{fontSize:18}}>✅</span>
                   <div>
-                    <div style={{fontSize:11,color:'#166534',textTransform:'uppercase',letterSpacing:'.07em',fontFamily:"'DM Mono',monospace",marginBottom:2}}>Estado actual</div>
-                    <div style={{fontSize:14,fontWeight:600,color:'#166534'}}>
-                      {(flujo==='cobranzas'?COBRANZA_STATUS:LEAD_STATUS)[currentLead.status||'']?.label||currentLead.status}
-                    </div>
+                    <div style={{fontSize:11,color:'#166534',textTransform:'uppercase',letterSpacing:'.07em',fontFamily:"'DM Mono',monospace",marginBottom:2}}>Estado registrado</div>
+                    <div style={{fontSize:14,fontWeight:600,color:'#166534'}}>{estadoLabel}</div>
+                    <div style={{fontSize:12,color:'#166534',opacity:.7,marginTop:2}}>La conversación se cerrará y quedará guardada en Consultas.</div>
                   </div>
                 </div>
               ) : (
@@ -2083,10 +2084,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 </div>
               )}
 
-              <div style={{marginBottom:12}}>
-                <label className="fl">Anotación / Resolución <span style={{color:'#94A3B8',fontWeight:400}}>(opcional)</span></label>
-                <textarea className="ta" style={{minHeight:64}} placeholder="Describí qué se resolvió, qué se acordó, motivo de cierre..." value={finalizarNota} onChange={e=>setFinalizarNota(e.target.value)}/>
-              </div>
+              {!yaFinalizado && (
+                <div style={{marginBottom:12}}>
+                  <label className="fl">Anotación / Resolución <span style={{color:'#94A3B8',fontWeight:400}}>(opcional)</span></label>
+                  <textarea className="ta" style={{minHeight:64}} placeholder="Describí qué se resolvió, qué se acordó, motivo de cierre..." value={finalizarNota} onChange={e=>setFinalizarNota(e.target.value)}/>
+                </div>
+              )}
               <div style={{display:'flex',gap:8}}>
                 <button
                   className="btn pri"
@@ -2094,9 +2097,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   disabled={!puedeConfirmar}
                   onClick={async()=>{
                     if(!yaFinalizado&&finalizarEstado) await updateStatus(currentLead.id,finalizarEstado)
-                    await finalizarConversacion(finalizarNota)
+                    await finalizarConversacion(yaFinalizado?undefined:finalizarNota)
                   }}>
-                  ✓ Confirmar y finalizar
+                  ✓ {yaFinalizado ? 'Sí, cerrar conversación' : 'Confirmar y finalizar'}
                 </button>
                 <button className="btn" onClick={()=>{ setShowFinalizarModal(false); setFinalizarEstado(''); setFinalizarNota('') }}>Cancelar</button>
               </div>
