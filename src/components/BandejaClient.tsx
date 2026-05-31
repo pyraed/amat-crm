@@ -400,7 +400,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const ch=supabase.channel('rt-msgs')
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'amat_messages'},p=>{
         const msg = p.new as Message
-        setMessages(prev=>[...prev,msg])
+        setMessages(prev=>prev.find(m=>m.id===msg.id)?prev:[...prev,msg])
         // Si el lead no está en la bandeja, cargarlo
         setBotLeads(prev=>{
           if(!prev.find(l=>l.phone_number===msg.phone_number)){
@@ -448,7 +448,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     supabase.from('amat_loan_leads')
       .select('*')
       .in('phone_number', phones.slice(0,500))
-      .not('status', 'in', '("finalizado","closed","rejected","not_interested","resolved","unresolved")')
+      .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved")')
       .then(({data})=>{ if(data) setBotLeads(data as LoanLead[]) })
     // Cargar flujos de consultas para saber si cada phone es ventas o cobranzas
     supabase.from('amat_consultas')
@@ -688,9 +688,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .update({estado:'resuelto', situacion:`Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${ventaForm.monto} en ${ventaForm.cuotas} cuotas`, updated_at:new Date().toISOString()})
       .eq('phone', currentLead.phone_number||'')
     // Actualizar botLeads en memoria para que currentLead refleje el nuevo status
-    setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, status:'closed', ...venta} : l))
+    setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, ...venta, status:'closed'} : l))
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
+    // NO cerramos el chat — el operador debe presionar Finalizar explícitamente
   }
 
   const openEdit=(lead:LoanLead)=>{
@@ -787,7 +788,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // Bandeja: solo leads con conversación (mensajes)
   const phonesConMensajes=[...new Set(messages.map(m=>m.phone_number))]
-  const ESTADOS_FINALES_BANDEJA = ['finalizado','closed','rejected','not_interested','resolved','unresolved']
+  const ESTADOS_FINALES_BANDEJA = ['finalizado','rejected','not_interested','resolved','unresolved']
   const bandejaLeads=allLeads.filter(l=>{
     if(!l.phone_number||!phonesConMensajes.includes(l.phone_number)) return false
     if(ESTADOS_FINALES_BANDEJA.includes(l.status||'')) return false
@@ -806,7 +807,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     sinResp:  [...new Set(messages.filter(m=>m.direction==='in').map(m=>m.phone_number))]
       .filter(p=>bandejaLeads.find(l=>l.phone_number===p))
       .filter(p=>!messages.find(m=>m.phone_number===p&&m.direction==='out'&&m.sender!=='bot')).length,
-    cerrados: allLeads.filter(l=>l.status==='closed'&&new Date(l.updated_at).toDateString()===new Date().toDateString()).length,
+    cerrados: botLeads.filter(l=>l.status==='closed'&&new Date(l.updated_at).toDateString()===new Date().toDateString()).length,
   }
 
   if(!mounted) return null
