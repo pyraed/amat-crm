@@ -306,6 +306,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // Filtros bandeja
   const [bandejaSearch, setBandejaSearch] = useState('')
   const [bandejaStatus, setBandejaStatus] = useState('all')
+  const [vistaMode, setVistaMode]         = useState<'cola'|'mis_chats'>('cola')
+  const [cola, setCola]                   = useState<LoanLead[]>([])
+  const [showFinalizarModal, setShowFinalizarModal] = useState(false)
+  const [showVentaModal, setShowVentaModal]         = useState(false)
+  const [ventaForm, setVentaForm]         = useState<any>({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
 
   // Filtros base
   const [basePage, setBasePage]           = useState(0)
