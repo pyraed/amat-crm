@@ -18,11 +18,14 @@ type Role = 'Administrador' | 'Vendedor' | 'Cobranza'
 type SysUser = { id:string; username:string; password:string; displayName:string; role:Role; initials:string; color:string }
 
 const USERS: SysUser[] = [
-  { id:'1', username:'AMAT1', password:'Amat2024#1', displayName:'Admin AMAT',    role:'Administrador', initials:'AD', color:'#B45309' },
-  { id:'2', username:'AMAT2', password:'Amat2024#2', displayName:'Vendedor 1',    role:'Vendedor',      initials:'V1', color:'#D97706' },
-  { id:'3', username:'AMAT3', password:'Amat2024#3', displayName:'Vendedor 2',    role:'Vendedor',      initials:'V2', color:'#F59E0B' },
-  { id:'4', username:'AMAT4', password:'Amat2024#4', displayName:'Cobranzas 1',   role:'Cobranza',      initials:'C1', color:'#7C3AED' },
-  { id:'5', username:'AMAT5', password:'Amat2024#5', displayName:'Cobranzas 2',   role:'Cobranza',      initials:'C2', color:'#6D28D9' },
+  { id:'1',  username:'Walter',   password:'Walter#2026',  displayName:'Walter',   role:'Administrador', initials:'WA', color:'#B45309' },
+  { id:'2',  username:'Muse',     password:'Muse#2026',    displayName:'Muse',     role:'Administrador', initials:'MU', color:'#92400E' },
+  { id:'3',  username:'Valentin', password:'Mutual2026',   displayName:'Valentin', role:'Vendedor',      initials:'VA', color:'#D97706' },
+  { id:'4',  username:'Juan',     password:'Mutual2026',   displayName:'Juan',     role:'Vendedor',      initials:'JU', color:'#F59E0B' },
+  { id:'5',  username:'Eliseo',   password:'Mutual2026',   displayName:'Eliseo',   role:'Vendedor',      initials:'EL', color:'#10B981' },
+  { id:'6',  username:'Mauro',    password:'Mutual2026',   displayName:'Mauro',    role:'Vendedor',      initials:'MA', color:'#3B82F6' },
+  { id:'7',  username:'Facundo',  password:'Mutual2026',   displayName:'Facundo',  role:'Vendedor',      initials:'FA', color:'#8B5CF6' },
+  { id:'8',  username:'Emanuel',  password:'Mutual2026',   displayName:'Emanuel',  role:'Cobranza',      initials:'EM', color:'#7C3AED' },
 ]
 
 // ─────────────────────────────────────────────
@@ -308,6 +311,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [locked, setLocked]               = useState(false)
   const [countdown, setCountdown]         = useState(0)
   const [showCreds, setShowCreds]         = useState(false)
+  const [rememberMe, setRememberMe]       = useState(false)
 
   // DATA — consultas (llegadas del bot)
   const [consultas, setConsultas]           = useState<any[]>([])
@@ -390,7 +394,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const userRef    = useRef<HTMLInputElement>(null)
   const [mounted, setMounted] = useState(false)
 
-  useEffect(()=>{ setMounted(true) },[])
+  useEffect(()=>{
+    setMounted(true)
+    // Cargar credenciales guardadas si existen
+    const savedUser = localStorage.getItem('amat_remember_user')
+    const savedPass = localStorage.getItem('amat_remember_pass')
+    if(savedUser && savedPass) {
+      setLoginUser(savedUser)
+      setLoginPass(savedPass)
+      setRememberMe(true)
+    }
+  },[])
   useEffect(()=>{ msgEndRef.current?.scrollIntoView({behavior:'smooth'}) },[messages,selectedPhone])
   useEffect(()=>{ if(!me) setTimeout(()=>userRef.current?.focus(),100) },[me])
 
@@ -675,8 +689,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // ── AUTH ──────────────────────────────────
   const handleLogin=()=>{
     if(locked) return
-    const u=USERS.find(u=>u.username===loginUser.trim().toUpperCase()&&u.password===loginPass)
-    if(u){ setMe(u); setLoginErr(''); setAttempts(0) }
+    const u=USERS.find(u=>u.username.toUpperCase()===loginUser.trim().toUpperCase()&&u.password===loginPass)
+    if(u){
+      setMe(u); setLoginErr(''); setAttempts(0)
+      if(rememberMe){ localStorage.setItem('amat_remember_user',loginUser.trim().toUpperCase()); localStorage.setItem('amat_remember_pass',loginPass) }
+      else { localStorage.removeItem('amat_remember_user'); localStorage.removeItem('amat_remember_pass') }
+    }
     else{
       const a=attempts+1; setAttempts(a)
       if(a>=5){ setLocked(true); setCountdown(30); setLoginErr('Demasiados intentos. Bloqueado 30s.') }
@@ -958,7 +976,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         </div>
         <div style={{marginBottom:16}}>
           <label style={{display:'block',fontSize:11,fontWeight:500,color:'#64748B',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:8}}>Usuario</label>
-          <input ref={userRef} className="li mono" placeholder="AMAT1" value={loginUser} onChange={e=>setLoginUser(e.target.value.toUpperCase())} onKeyDown={e=>e.key==='Enter'&&handleLogin()} disabled={locked}/>
+          <input ref={userRef} className="li mono" placeholder="Usuario" value={loginUser} onChange={e=>setLoginUser(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleLogin()} disabled={locked}/>
         </div>
         <div style={{marginBottom:16}}>
           <label style={{display:'block',fontSize:11,fontWeight:500,color:'#64748B',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:8}}>Contraseña</label>
@@ -969,25 +987,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         </div>
         {loginErr&&<div style={{background:'rgba(239,68,68,.1)',border:'1px solid rgba(239,68,68,.2)',borderRadius:10,padding:'10px 14px',marginBottom:16,fontSize:13,color:'#FCA5A5'}}>⚠️ {loginErr}</div>}
         {locked&&<div style={{background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.2)',borderRadius:10,padding:'10px 14px',marginBottom:16,fontSize:13,color:'#FCD34D',textAlign:'center'}}>🔒 {countdown}s...</div>}
+        {/* Recordar usuario */}
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+          <input type="checkbox" id="rememberMe" checked={rememberMe} onChange={e=>{
+            setRememberMe(e.target.checked)
+            if(!e.target.checked){ localStorage.removeItem('amat_remember_user'); localStorage.removeItem('amat_remember_pass') }
+          }} style={{width:15,height:15,accentColor:'#F59E0B',cursor:'pointer'}}/>
+          <label htmlFor="rememberMe" style={{fontSize:12,color:'#475569',cursor:'pointer',userSelect:'none'}}>Recordar usuario</label>
+        </div>
         <button onClick={handleLogin} disabled={locked} style={{width:'100%',background:'linear-gradient(135deg,#B45309,#F59E0B)',border:'none',borderRadius:12,padding:14,color:'white',fontSize:14,fontWeight:600,cursor:locked?'not-allowed':'pointer',fontFamily:'inherit',opacity:locked?.5:1}}>
           {locked?'🔒 Bloqueado':'Iniciar sesión'}
         </button>
-        <div style={{marginTop:22,paddingTop:18,borderTop:'1px solid rgba(255,255,255,.06)'}}>
-          <button onClick={()=>setShowCreds(p=>!p)} style={{display:'block',width:'100%',background:'none',border:'none',cursor:'pointer',color:'#334155',fontSize:11,fontFamily:'inherit',textTransform:'uppercase',letterSpacing:'.07em',textAlign:'center'}}>
-            {showCreds?'▲ Ocultar':'▼ Ver credenciales'}
-          </button>
-          {showCreds&&(
-            <div style={{marginTop:12}}>
-              {USERS.map(u=>(
-                <div key={u.id} onClick={()=>{setLoginUser(u.username);setLoginPass(u.password)}} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,padding:'8px 10px',borderRadius:8,cursor:'pointer',marginBottom:4,border:'1px solid transparent'}} onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,.04)')} onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
-                  <span className="mono" style={{fontSize:12,color:'#93C5FD',fontWeight:500}}>{u.username}</span>
-                  <span className="mono" style={{fontSize:12,color:'#6EE7B7'}}>{u.password}</span>
-                  <span style={{fontSize:11,color:'#94A3B8'}}>{u.role}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   )
