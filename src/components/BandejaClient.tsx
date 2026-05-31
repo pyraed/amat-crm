@@ -406,11 +406,25 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'amat_messages'},p=>{
         const msg = p.new as Message
         setMessages(prev=>prev.find(m=>m.id===msg.id)?prev:[...prev,msg])
-        // Si el lead no está en la bandeja, cargarlo
+        // Si el lead no está en la bandeja, cargarlo + cargar su flujo
         setBotLeads(prev=>{
           if(!prev.find(l=>l.phone_number===msg.phone_number)){
             supabase.from('amat_loan_leads').select('*').eq('phone_number',msg.phone_number).single()
-              .then(({data})=>{ if(data) setBotLeads(p2=>[data as LoanLead,...p2]) })
+              .then(({data})=>{
+                if(data) {
+                  setBotLeads(p2=>[data as LoanLead,...p2])
+                  // Cargar el flujo de este phone y actualizar flujoMap
+                  supabase.from('amat_consultas')
+                    .select('phone,flujo')
+                    .eq('phone', msg.phone_number)
+                    .single()
+                    .then(({data:cdata})=>{
+                      if(cdata?.phone) {
+                        setFlujoMap(prev=>({...prev,[cdata.phone]:cdata.flujo||'solicitud'}))
+                      }
+                    })
+                }
+              })
           }
           return prev
         })
@@ -444,9 +458,15 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const ch=supabase.channel('rt-consultas')
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'amat_consultas'},p=>{
         setConsultas(prev=>[p.new as any,...prev])
+        // Actualizar flujoMap con el flujo de la consulta nueva
+        const c = p.new as any
+        if(c.phone) setFlujoMap(prev=>({...prev,[c.phone]:c.flujo||'solicitud'}))
       })
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'amat_consultas'},p=>{
         setConsultas(prev=>prev.map(c=>c.id===(p.new as any).id?p.new as any:c))
+        // Actualizar flujoMap si cambió el flujo
+        const c = p.new as any
+        if(c.phone) setFlujoMap(prev=>({...prev,[c.phone]:c.flujo||'solicitud'}))
       })
       .subscribe()
     return ()=>{ supabase.removeChannel(ch) }
