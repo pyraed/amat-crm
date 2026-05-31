@@ -349,6 +349,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [finalizarEstado, setFinalizarEstado]       = useState('')
   const [finalizarNota, setFinalizarNota]           = useState('')
   const [pipelineMode, setPipelineMode]             = useState<'ventas'|'cobranzas'>('ventas')
+  const [cerradosHoyCount, setCerradosHoyCount]     = useState(0)
   const [showVentaModal, setShowVentaModal]         = useState(false)
   const [ventaForm, setVentaForm]         = useState<any>({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
 
@@ -418,11 +419,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const ch=supabase.channel('rt-leads')
       .on('postgres_changes',{event:'*',schema:'public',table:'amat_loan_leads'},p=>{
         const updated = p.new as LoanLead
+        const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved']
         if(p.eventType==='UPDATE'){
-          setBotLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
+          if(EXCLUIDOS.includes(updated.status||'')){
+            // Si pasó a estado final, sacarlo de botLeads
+            setBotLeads(prev=>prev.filter(l=>l.id!==updated.id))
+          } else {
+            setBotLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
+          }
           setBaseLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
         } else if(p.eventType==='INSERT'){
-          setBotLeads(prev=>[updated,...prev])
+          if(!EXCLUIDOS.includes(updated.status||'')) setBotLeads(prev=>[updated,...prev])
         }
       }).subscribe()
     return ()=>{ supabase.removeChannel(ch) }
@@ -449,7 +456,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .select('*')
       .in('phone_number', phones.slice(0,500))
       .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved")')
-      .then(({data})=>{ if(data) setBotLeads(data as LoanLead[]) })
+      .then(({data})=>{
+        if(data){
+          setBotLeads(data as LoanLead[])
+          // Inicializar contador cerrados hoy
+          const hoy = new Date().toDateString()
+          setCerradosHoyCount(data.filter((l:any)=>l.status==='closed'&&new Date(l.updated_at).toDateString()===hoy).length)
+        }
+      })
     // Cargar flujos de consultas para saber si cada phone es ventas o cobranzas
     supabase.from('amat_consultas')
       .select('phone,flujo')
@@ -689,6 +703,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .eq('phone', currentLead.phone_number||'')
     // Actualizar botLeads en memoria para que currentLead refleje el nuevo status
     setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, ...venta, status:'closed'} : l))
+    setCerradosHoyCount(c => c + 1)
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
     // NO cerramos el chat — el operador debe presionar Finalizar explícitamente
@@ -807,7 +822,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     sinResp:  [...new Set(messages.filter(m=>m.direction==='in').map(m=>m.phone_number))]
       .filter(p=>bandejaLeads.find(l=>l.phone_number===p))
       .filter(p=>!messages.find(m=>m.phone_number===p&&m.direction==='out'&&m.sender!=='bot')).length,
-    cerrados: botLeads.filter(l=>l.status==='closed'&&new Date(l.updated_at).toDateString()===new Date().toDateString()).length,
+    cerrados: cerradosHoyCount,
   }
 
   if(!mounted) return null
