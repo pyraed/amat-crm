@@ -354,6 +354,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [reporteLoading, setReporteLoading]         = useState(false)
   const [pipelineLeads, setPipelineLeads]           = useState<LoanLead[]>([])
   const [pipelineFlujoMap, setPipelineFlujoMap]     = useState<Record<string,string>>({})
+  const [reporteMode, setReporteMode]               = useState<'ventas'|'cobranzas'>('ventas')
   const [showVentaModal, setShowVentaModal]         = useState(false)
   const [ventaForm, setVentaForm]         = useState<any>({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
 
@@ -1617,18 +1618,59 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       })()}
 
       {/* ══ REPORTES ══ */}
-      {tab==='reportes'&&(
+      {tab==='reportes'&&(()=>{
+        // Separar leads por flujo usando pipelineFlujoMap + flujoMap
+        const getFlujo = (phone:string|null) => pipelineFlujoMap[phone||''] || flujoMap[phone||''] || 'solicitud'
+        const rLeadsVentas = reporteLeads.filter(l=>getFlujo(l.phone_number)!=='cobranzas')
+        const rLeadsCob    = reporteLeads.filter(l=>getFlujo(l.phone_number)==='cobranzas')
+        const rLeads       = reporteMode==='cobranzas' ? rLeadsCob : rLeadsVentas
+        const esAdminR     = me?.role==='Administrador'
+        const modoR        = esAdminR ? reporteMode : (me?.role==='Cobranza' ? 'cobranzas' : 'ventas')
+        const rLeadsFinal  = modoR==='cobranzas' ? rLeadsCob : rLeadsVentas
+
+        return (
         <div style={{flex:1,overflow:'auto',padding:'20px 24px',background:'#F8FAFC'}}>
+
+          {/* Header con toggle */}
+          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+            <span style={{fontWeight:700,fontSize:16,color:'#0F172A',fontFamily:"'Playfair Display',serif"}}>Reportes</span>
+            {esAdminR && (
+              <div style={{display:'flex',gap:4,background:'#F1F5F9',padding:3,borderRadius:8}}>
+                {(['ventas','cobranzas'] as const).map(m=>(
+                  <button key={m} onClick={()=>setReporteMode(m)}
+                    style={{padding:'5px 16px',borderRadius:6,border:'none',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',
+                      background:reporteMode===m?'white':'transparent',
+                      color:reporteMode===m?'#0F172A':'#64748B',
+                      boxShadow:reporteMode===m?'0 1px 3px rgba(0,0,0,.1)':'none'}}>
+                    {m==='ventas'?'💼 Ventas':'🔔 Cobranzas'}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!esAdminR && (
+              <span style={{fontSize:12,padding:'3px 12px',borderRadius:99,fontWeight:600,
+                background:modoR==='cobranzas'?'#F5F3FF':'#EFF6FF',
+                color:modoR==='cobranzas'?'#6D28D9':'#1D4ED8'}}>
+                {modoR==='cobranzas'?'🔔 Cobranzas':'💼 Ventas'}
+              </span>
+            )}
+          </div>
 
           {/* KPI cards */}
           <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:12,marginBottom:20}}>
-            {[
-              {label:'Total leads',val:reporteLeads.length,color:'#F59E0B',icon:'◈',sub:'Histórico total'},
-              {label:'Cerrados',val:reporteLeads.filter(l=>l.status==='closed').length,color:'#10B981',icon:'✓',sub:'Operaciones concretadas'},
-              {label:'Contactados',val:reporteLeads.filter(l=>l.status==='contacted').length,color:'#06B6D4',icon:'◉',sub:'Conversaciones iniciadas'},
-              {label:'Sin contactar',val:reporteLeads.filter(l=>l.status==='new').length,color:'#F59E0B',icon:'·',sub:'Estado nuevo'},
-              {label:'Tasa conversión',val:reporteLeads.length>0?Math.round(reporteLeads.filter(l=>l.status==='closed').length/reporteLeads.length*100)+'%':'0%',color:'#EC4899',icon:'%',sub:'Cerrados vs total'},
-            ].map(k=>(
+            {(modoR==='cobranzas' ? [
+              {label:'Total casos',val:rLeadsFinal.length,color:'#7C3AED',icon:'◈',sub:'Histórico total'},
+              {label:'Resueltos',val:rLeadsFinal.filter(l=>l.status==='resolved').length,color:'#10B981',icon:'✓',sub:'Casos resueltos'},
+              {label:'No resueltos',val:rLeadsFinal.filter(l=>l.status==='unresolved').length,color:'#EF4444',icon:'✗',sub:'Sin resolución'},
+              {label:'Contactados',val:rLeadsFinal.filter(l=>l.status==='contacted').length,color:'#06B6D4',icon:'◉',sub:'Conversaciones iniciadas'},
+              {label:'Tasa resolución',val:rLeadsFinal.length>0?Math.round(rLeadsFinal.filter(l=>l.status==='resolved').length/rLeadsFinal.length*100)+'%':'0%',color:'#EC4899',icon:'%',sub:'Resueltos vs total'},
+            ] : [
+              {label:'Total leads',val:rLeadsFinal.length,color:'#F59E0B',icon:'◈',sub:'Histórico total'},
+              {label:'Cerrados',val:rLeadsFinal.filter(l=>l.status==='closed').length,color:'#10B981',icon:'✓',sub:'Operaciones concretadas'},
+              {label:'Contactados',val:rLeadsFinal.filter(l=>l.status==='contacted').length,color:'#06B6D4',icon:'◉',sub:'Conversaciones iniciadas'},
+              {label:'Sin contactar',val:rLeadsFinal.filter(l=>l.status==='new').length,color:'#F59E0B',icon:'·',sub:'Estado nuevo'},
+              {label:'Tasa conversión',val:rLeadsFinal.length>0?Math.round(rLeadsFinal.filter(l=>l.status==='closed').length/rLeadsFinal.length*100)+'%':'0%',color:'#EC4899',icon:'%',sub:'Cerrados vs total'},
+            ]).map(k=>(
               <div key={k.label} style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'16px 18px',borderTop:`3px solid ${k.color}`,boxShadow:'0 1px 3px rgba(0,0,0,0.05)'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
                   <span style={{fontSize:11,fontWeight:600,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'0.07em',fontFamily:"'DM Mono',monospace"}}>{k.label}</span>
@@ -1651,7 +1693,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               </div>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart
-                  data={Object.entries(LEAD_STATUS).map(([k,v])=>({name:v.label,value:reporteLeads.filter(l=>l.status===k).length,color:v.color}))}
+                  data={(modoR==='cobranzas'?Object.entries(COBRANZA_STATUS):Object.entries(LEAD_STATUS)).map(([k,v])=>({name:v.label,value:rLeadsFinal.filter(l=>l.status===k).length,color:v.color}))}
                   margin={{top:0,right:10,left:-10,bottom:40}}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
@@ -1680,7 +1722,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie
-                    data={REPARTICIONES.map(r=>({name:r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB'),value:reporteLeads.filter(l=>l.reparticion===r).length})).filter(d=>d.value>0)}
+                    data={REPARTICIONES.map(r=>({name:r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB'),value:rLeadsFinal.filter(l=>l.reparticion===r).length})).filter(d=>d.value>0)}
                     cx="50%" cy="50%" innerRadius={55} outerRadius={90}
                     paddingAngle={2} dataKey="value"
                   >
@@ -1709,12 +1751,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               </div>
               <ResponsiveContainer width="100%" height={200}>
                 <AreaChart
-                  data={[
-                    {etapa:'Nuevos',leads:reporteLeads.filter(l=>l.status==='new').length},
-                    {etapa:'Contactados',leads:reporteLeads.filter(l=>l.status==='contacted').length},
-                    {etapa:'No interesados',leads:reporteLeads.filter(l=>l.status==='not_interested').length},
-                    {etapa:'Rechazados',leads:reporteLeads.filter(l=>l.status==='rejected').length},
-                    {etapa:'Cerrados',leads:reporteLeads.filter(l=>l.status==='closed').length},
+                  data={modoR==='cobranzas' ? [
+                    {etapa:'Nuevos',leads:rLeadsFinal.filter(l=>l.status==='new').length},
+                    {etapa:'Contactados',leads:rLeadsFinal.filter(l=>l.status==='contacted').length},
+                    {etapa:'Resueltos',leads:rLeadsFinal.filter(l=>l.status==='resolved').length},
+                    {etapa:'No resueltos',leads:rLeadsFinal.filter(l=>l.status==='unresolved').length},
+                  ] : [
+                    {etapa:'Nuevos',leads:rLeadsFinal.filter(l=>l.status==='new').length},
+                    {etapa:'Contactados',leads:rLeadsFinal.filter(l=>l.status==='contacted').length},
+                    {etapa:'No interesados',leads:rLeadsFinal.filter(l=>l.status==='not_interested').length},
+                    {etapa:'Rechazados',leads:rLeadsFinal.filter(l=>l.status==='rejected').length},
+                    {etapa:'Cerrados',leads:rLeadsFinal.filter(l=>l.status==='closed').length},
                   ]}
                   margin={{top:5,right:20,left:-10,bottom:5}}
                 >
@@ -1747,8 +1794,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   layout="vertical"
                   data={USERS.map(u=>({
                     name:u.username,
-                    asignados:reporteLeads.filter(l=>l.assigned_to===u.username).length,
-                    cerrados:reporteLeads.filter(l=>l.assigned_to===u.username&&l.status==='closed').length,
+                    asignados:rLeadsFinal.filter(l=>l.assigned_to===u.username).length,
+                    cerrados:modoR==='cobranzas'
+                      ? rLeadsFinal.filter(l=>l.assigned_to===u.username&&l.status==='resolved').length
+                      : rLeadsFinal.filter(l=>l.assigned_to===u.username&&l.status==='closed').length,
                     color:u.color,
                   }))}
                   margin={{top:0,right:20,left:10,bottom:0}}
@@ -1779,27 +1828,35 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5}}>
                 <thead>
                   <tr style={{background:'#F8FAFC'}}>
-                    {['Repartición','Total','Nuevos','Contactados','No interesados','Cerrados','Rechazados','% Cierre'].map(h=>(
+                    {(modoR==='cobranzas'
+                      ? ['Repartición','Total','Nuevos','Contactados','Resueltos','No resueltos','% Resolución']
+                      : ['Repartición','Total','Nuevos','Contactados','No interesados','Cerrados','Rechazados','% Cierre']
+                    ).map(h=>(
                       <th key={h} style={{textAlign:'left',padding:'10px 14px',fontSize:10.5,fontWeight:600,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.07em',borderBottom:'1px solid #E2E8F0',fontFamily:"'DM Mono',monospace",whiteSpace:'nowrap'}}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {REPARTICIONES.map(r=>{
-                    const leads_r=reporteLeads.filter(l=>l.reparticion===r)
+                    const leads_r=rLeadsFinal.filter(l=>l.reparticion===r)
                     if(leads_r.length===0) return null
                     const total=leads_r.length
-                    const cerrados=leads_r.filter(l=>l.status==='closed').length
-                    const pctCierre=total>0?Math.round(cerrados/total*100):0
+                    const exito=modoR==='cobranzas'?leads_r.filter(l=>l.status==='resolved').length:leads_r.filter(l=>l.status==='closed').length
+                    const pctCierre=total>0?Math.round(exito/total*100):0
                     return (
                       <tr key={r} style={{borderBottom:'1px solid #F8FAFC'}} onMouseEnter={e=>(e.currentTarget.style.background='#F8FAFC')} onMouseLeave={e=>(e.currentTarget.style.background='white')}>
                         <td style={{padding:'10px 14px',fontWeight:600,color:'#0F172A',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB')}</td>
-                        <td style={{padding:'10px 14px',fontWeight:700,color:'#F59E0B',fontFamily:"'DM Mono',monospace"}}>{total}</td>
+                        <td style={{padding:'10px 14px',fontWeight:700,color:modoR==='cobranzas'?'#7C3AED':'#F59E0B',fontFamily:"'DM Mono',monospace"}}>{total}</td>
                         <td style={{padding:'10px 14px',color:'#94A3B8',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='new').length}</td>
                         <td style={{padding:'10px 14px',color:'#06B6D4',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='contacted').length}</td>
-                        <td style={{padding:'10px 14px',color:'#6B7280',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='not_interested').length}</td>
-                        <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{cerrados}</td>
-                        <td style={{padding:'10px 14px',color:'#EF4444',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='rejected').length}</td>
+                        {modoR==='cobranzas' ? <>
+                          <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='resolved').length}</td>
+                          <td style={{padding:'10px 14px',color:'#EF4444',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='unresolved').length}</td>
+                        </> : <>
+                          <td style={{padding:'10px 14px',color:'#6B7280',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='not_interested').length}</td>
+                          <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{exito}</td>
+                          <td style={{padding:'10px 14px',color:'#EF4444',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='rejected').length}</td>
+                        </>}
                         <td style={{padding:'10px 14px'}}>
                           <div style={{display:'flex',alignItems:'center',gap:8}}>
                             <div style={{flex:1,height:4,background:'#F1F5F9',borderRadius:99,overflow:'hidden',minWidth:40}}>
@@ -1814,15 +1871,20 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   {/* Fila total */}
                   <tr style={{background:'#F8FAFC',borderTop:'2px solid #E2E8F0'}}>
                     <td style={{padding:'10px 14px',fontWeight:700,color:'#0F172A',fontFamily:"'DM Mono',monospace",fontSize:11,textTransform:'uppercase',letterSpacing:'0.05em'}}>TOTAL</td>
-                    <td style={{padding:'10px 14px',fontWeight:700,color:'#F59E0B',fontFamily:"'DM Mono',monospace"}}>{reporteLeads.length}</td>
-                    <td style={{padding:'10px 14px',color:'#94A3B8',fontFamily:"'DM Mono',monospace"}}>{reporteLeads.filter(l=>l.status==='new').length}</td>
-                    <td style={{padding:'10px 14px',color:'#06B6D4',fontFamily:"'DM Mono',monospace"}}>{reporteLeads.filter(l=>l.status==='contacted').length}</td>
-                    <td style={{padding:'10px 14px',color:'#F59E0B',fontFamily:"'DM Mono',monospace"}}>{reporteLeads.filter(l=>l.status==='interested').length}</td>
-                    <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{reporteLeads.filter(l=>l.status==='closed').length}</td>
-                    <td style={{padding:'10px 14px',color:'#EF4444',fontFamily:"'DM Mono',monospace"}}>{reporteLeads.filter(l=>l.status==='rejected').length}</td>
+                    <td style={{padding:'10px 14px',fontWeight:700,color:modoR==='cobranzas'?'#7C3AED':'#F59E0B',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.length}</td>
+                    <td style={{padding:'10px 14px',color:'#94A3B8',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='new').length}</td>
+                    <td style={{padding:'10px 14px',color:'#06B6D4',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='contacted').length}</td>
+                    {modoR==='cobranzas' ? <>
+                      <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='resolved').length}</td>
+                      <td style={{padding:'10px 14px',color:'#EF4444',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='unresolved').length}</td>
+                    </> : <>
+                      <td style={{padding:'10px 14px',color:'#6B7280',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='not_interested').length}</td>
+                      <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='closed').length}</td>
+                      <td style={{padding:'10px 14px',color:'#EF4444',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='rejected').length}</td>
+                    </>}
                     <td style={{padding:'10px 14px'}}>
                       <span style={{fontSize:11,fontWeight:700,color:'#10B981',fontFamily:"'DM Mono',monospace"}}>
-                        {reporteLeads.length>0?Math.round(reporteLeads.filter(l=>l.status==='closed').length/reporteLeads.length*100):0}%
+                        {rLeadsFinal.length>0?Math.round((modoR==='cobranzas'?rLeadsFinal.filter(l=>l.status==='resolved').length:rLeadsFinal.filter(l=>l.status==='closed').length)/rLeadsFinal.length*100):0}%
                       </span>
                     </td>
                   </tr>
@@ -1843,11 +1905,15 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               <ResponsiveContainer width="100%" height={200}>
                 <RadialBarChart
                   innerRadius="25%" outerRadius="90%"
-                  data={[
-                    {name:'Cerrados',value:reporteLeads.filter(l=>l.status==='closed').length,fill:'#10B981'},
-                    {name:'Contactados',value:reporteLeads.filter(l=>l.status==='contacted').length,fill:'#06B6D4'},
-                    {name:'No interesados',value:reporteLeads.filter(l=>l.status==='not_interested').length,fill:'#6B7280'},
-                    {name:'Rechazados',value:reporteLeads.filter(l=>l.status==='rejected').length,fill:'#EF4444'},
+                  data={modoR==='cobranzas' ? [
+                    {name:'Resueltos',value:rLeadsFinal.filter(l=>l.status==='resolved').length,fill:'#10B981'},
+                    {name:'Contactados',value:rLeadsFinal.filter(l=>l.status==='contacted').length,fill:'#06B6D4'},
+                    {name:'No resueltos',value:rLeadsFinal.filter(l=>l.status==='unresolved').length,fill:'#EF4444'},
+                  ] : [
+                    {name:'Cerrados',value:rLeadsFinal.filter(l=>l.status==='closed').length,fill:'#10B981'},
+                    {name:'Contactados',value:rLeadsFinal.filter(l=>l.status==='contacted').length,fill:'#06B6D4'},
+                    {name:'No interesados',value:rLeadsFinal.filter(l=>l.status==='not_interested').length,fill:'#6B7280'},
+                    {name:'Rechazados',value:rLeadsFinal.filter(l=>l.status==='rejected').length,fill:'#EF4444'},
                   ]}
                   startAngle={90} endAngle={-270}
                 >
@@ -1876,9 +1942,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 </thead>
                 <tbody>
                   {USERS.map(u=>{
-                    const asignados=reporteLeads.filter(l=>l.assigned_to===u.username).length
-                    const contactados=reporteLeads.filter(l=>l.assigned_to===u.username&&['contacted','closed'].includes(l.status)).length
-                    const cerrados=reporteLeads.filter(l=>l.assigned_to===u.username&&l.status==='closed').length
+                    const asignados=rLeadsFinal.filter(l=>l.assigned_to===u.username).length
+                    const exitoStatus=modoR==='cobranzas'?'resolved':'closed'
+                    const contactados=rLeadsFinal.filter(l=>l.assigned_to===u.username&&['contacted',exitoStatus].includes(l.status)).length
+                    const cerrados=rLeadsFinal.filter(l=>l.assigned_to===u.username&&l.status===exitoStatus).length
                     const pct=asignados>0?Math.round(cerrados/asignados*100):0
                     return (
                       <tr key={u.id} style={{borderBottom:'1px solid #F8FAFC'}} onMouseEnter={e=>(e.currentTarget.style.background='#F8FAFC')} onMouseLeave={e=>(e.currentTarget.style.background='white')}>
@@ -1911,7 +1978,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           </div>
 
         </div>
-      )}
+        )
+      })()}
 
       {/* ══ MODAL: CAMBIAR ESTADO ══ */}
       {showStatusModal&&currentLead&&(
