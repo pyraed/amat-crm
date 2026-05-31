@@ -29,12 +29,21 @@ const USERS: SysUser[] = [
 //  CONFIGURACIÓN DE ESTADOS Y ETIQUETAS
 // ─────────────────────────────────────────────
 const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:string;desc:string}> = {
-  new:          { label:'Nuevo',          color:'#94A3B8', bg:'#F8FAFC', text:'#475569', desc:'Sin contactar' },
-  contacted:    { label:'Contactado',     color:'#06B6D4', bg:'#ECFEFF', text:'#164E63', desc:'Conversación iniciada' },
-  not_interested:{ label:'No interesado', color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere ser contactado' },
-  rejected:     { label:'Rechazado',      color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No cumple requisitos' },
-  closed:       { label:'Cerrado',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
-  finalizado:   { label:'Finalizado',      color:'#6B7280', bg:'#F3F4F6', text:'#374151', desc:'Conversación finalizada' },
+  new:           { label:'Nuevo',          color:'#94A3B8', bg:'#F8FAFC', text:'#475569', desc:'Sin contactar' },
+  contacted:     { label:'Contactado',     color:'#06B6D4', bg:'#ECFEFF', text:'#164E63', desc:'Conversación iniciada' },
+  not_interested:{ label:'No interesado',  color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere ser contactado' },
+  rejected:      { label:'Rechazado',      color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No cumple requisitos' },
+  closed:        { label:'Cerrado',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
+  finalizado:    { label:'Finalizado',     color:'#6B7280', bg:'#F3F4F6', text:'#374151', desc:'Conversación finalizada' },
+}
+
+// Estados exclusivos para flujo COBRANZA
+const COBRANZA_STATUS: Record<string,{label:string;color:string;bg:string;text:string;desc:string}> = {
+  new:       { label:'Nuevo',       color:'#94A3B8', bg:'#F8FAFC', text:'#475569', desc:'Sin contactar' },
+  contacted: { label:'Contactado',  color:'#06B6D4', bg:'#ECFEFF', text:'#164E63', desc:'Conversación iniciada' },
+  resolved:  { label:'Resuelto',    color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Caso resuelto exitosamente' },
+  unresolved:{ label:'No resuelto', color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No se pudo resolver' },
+  finalizado:{ label:'Finalizado',  color:'#6B7280', bg:'#F3F4F6', text:'#374151', desc:'Conversación finalizada' },
 }
 
 // Motivos de rechazo / no interés
@@ -333,6 +342,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [bandejaSearch, setBandejaSearch] = useState('')
   const [bandejaStatus, setBandejaStatus] = useState('all')
   const [vistaMode, setVistaMode]         = useState<'cola'|'mis_chats'>('cola')
+  // Mapa phone → flujo (solicitud|cobranzas) cargado de amat_consultas
+  const [flujoMap, setFlujoMap]           = useState<Record<string,string>>({})
   const [cola, setCola]                   = useState<LoanLead[]>([])
   const [showFinalizarModal, setShowFinalizarModal] = useState(false)
   const [showVentaModal, setShowVentaModal]         = useState(false)
@@ -435,6 +446,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .select('*')
       .in('phone_number', phones.slice(0,500))
       .then(({data})=>{ if(data) setBotLeads(data as LoanLead[]) })
+    // Cargar flujos de consultas para saber si cada phone es ventas o cobranzas
+    supabase.from('amat_consultas')
+      .select('phone,flujo')
+      .in('phone', phones.slice(0,500))
+      .then(({data})=>{
+        if(data){
+          const map: Record<string,string> = {}
+          data.forEach((r:any)=>{ if(r.phone) map[r.phone]=r.flujo||'solicitud' })
+          setFlujoMap(map)
+        }
+      })
   },[initialMessages])
 
   // Cargar cola según rol del usuario logueado
@@ -774,6 +796,27 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   if(!mounted) return null
 
   const sc=(status:string)=>LEAD_STATUS[status]||LEAD_STATUS.new
+  const scCob=(status:string)=>COBRANZA_STATUS[status]||COBRANZA_STATUS.new
+  // Obtener el status display según el flujo del lead actual
+  const scFor=(status:string,phone:string|null)=>{
+    const flujo = phone ? flujoMap[phone] : 'solicitud'
+    return flujo==='cobranzas' ? scCob(status) : sc(status)
+  }
+  // Estados disponibles según flujo
+  const getEstadosFor=(phone:string|null)=>{
+    const flujo = phone ? flujoMap[phone] : 'solicitud'
+    return flujo==='cobranzas' ? COBRANZA_STATUS : LEAD_STATUS
+  }
+  // Estados finales (que permiten finalizar) según flujo
+  const getEstadosFinalesFor=(phone:string|null)=>{
+    const flujo = phone ? flujoMap[phone] : 'solicitud'
+    return flujo==='cobranzas'
+      ? ['resolved','unresolved']
+      : ['not_interested','rejected','closed']
+  }
+  // Label de flujo
+  const getFlujoLabel=(phone:string|null)=>
+    phone && flujoMap[phone]==='cobranzas' ? 'Cobranzas' : 'Ventas'
 
   // ══════════════════════════════════════════
   //  PANTALLA DE LOGIN
@@ -967,6 +1010,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
                           <span style={{fontWeight:600,fontSize:13,color:'#0F172A',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.full_name||lead.phone_number||'Sin datos'}</span>
                           <span style={{fontSize:9,padding:'2px 6px',borderRadius:99,background:'#F59E0B',color:'white',fontWeight:700,flexShrink:0}}>NUEVO</span>
+                          {flujoMap[lead.phone_number||'']&&(
+                            <span style={{fontSize:9,padding:'2px 6px',borderRadius:99,background:flujoMap[lead.phone_number||'']==='cobranzas'?'#7C3AED':'#2563EB',color:'white',fontWeight:700,flexShrink:0}}>
+                              {flujoMap[lead.phone_number||'']==='cobranzas'?'COB':'VTA'}
+                            </span>
+                          )}
                         </div>
                         <div style={{fontSize:11,color:'#94A3B8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lastMsg?lastMsg.body:lead.reparticion||'Sin mensajes'}</div>
                         <div style={{marginTop:4,fontSize:10.5,color:'#B45309',fontWeight:600}}>👆 Click para tomar</div>
@@ -1022,12 +1070,15 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     <div style={{fontSize:12,color:'#64748B',display:'flex',gap:8,flexWrap:'wrap'}}>
                       <span className="mono">📱 {selectedPhone}</span>
                       {currentLead.reparticion&&<span>· {currentLead.reparticion}</span>}
+                      <span style={{fontSize:10,padding:'1px 7px',borderRadius:99,fontWeight:700,background:flujoMap[currentLead.phone_number||'']==='cobranzas'?'#F5F3FF':'#EFF6FF',color:flujoMap[currentLead.phone_number||'']==='cobranzas'?'#6D28D9':'#1D4ED8'}}>
+                        {getFlujoLabel(currentLead.phone_number)}
+                      </span>
                       {currentLead.assigned_to&&<span>· 👤 {currentLead.assigned_to}</span>}
                     </div>
                   </div>
                   <div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap'}}>
                     <button className="btn" onClick={()=>setShowStatusModal(true)}>
-                      <span className="pill" style={{background:sc(currentLead.status).bg,color:sc(currentLead.status).text}}>{sc(currentLead.status).label}</span>▾
+                      <span className="pill" style={{background:scFor(currentLead.status,currentLead.phone_number).bg,color:scFor(currentLead.status,currentLead.phone_number).text}}>{scFor(currentLead.status,currentLead.phone_number).label}</span>▾
                     </button>
                     <button className="btn" onClick={()=>setShowAssignModal(true)}>👤 Asignar</button>
                     <button className="btn" onClick={()=>{setNoteText(currentLead.notes||'');setEditTarget(currentLead);setShowNoteModal(true)}}>📝 Nota</button>
@@ -1089,9 +1140,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               ):(
                 <div style={{overflowY:'auto',flex:1,padding:'14px 16px'}}>
                   <div style={{fontSize:10,fontWeight:700,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:10,fontFamily:"'DM Mono',monospace"}}>Ficha del contacto</div>
-                  <div style={{padding:'8px 10px',borderRadius:8,background:sc(currentLead.status).bg,marginBottom:12}}>
-                    <div style={{fontSize:12,fontWeight:600,color:sc(currentLead.status).text}}>{sc(currentLead.status).label}</div>
-                    <div style={{fontSize:11,color:sc(currentLead.status).text,opacity:.7,marginTop:2}}>{sc(currentLead.status).desc}</div>
+                  <div style={{padding:'8px 10px',borderRadius:8,background:scFor(currentLead.status,currentLead.phone_number).bg,marginBottom:12}}>
+                    <div style={{fontSize:12,fontWeight:600,color:scFor(currentLead.status,currentLead.phone_number).text}}>{scFor(currentLead.status,currentLead.phone_number).label}</div>
+                    <div style={{fontSize:11,color:scFor(currentLead.status,currentLead.phone_number).text,opacity:.7,marginTop:2}}>{scFor(currentLead.status,currentLead.phone_number).desc}</div>
                   </div>
                   {[
                     {l:'Nombre',v:currentLead.full_name},
@@ -1669,36 +1720,38 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         <div className="movo" onClick={()=>setShowStatusModal(false)}>
           <div className="mod" onClick={e=>e.stopPropagation()}>
             <h3>Cambiar estado</h3>
-            {Object.entries(LEAD_STATUS)
+            {Object.entries(getEstadosFor(currentLead.phone_number))
               .filter(([k])=>k!=='finalizado')
-              .map(([k,v])=>(
-              <div key={k} className="mopt"
-                onClick={()=>{
-                  if(k==='rejected'){
-                    setShowStatusModal(false)
-                    setEditTarget(currentLead)
-                    setShowRejectModal(true)
-                  } else if(k==='closed'){
-                    setShowStatusModal(false)
-                    setVentaForm({entidad:'',linea:'',reparticion:currentLead.reparticion||'',monto:'',cuotas:'',valor_cuota:'',notas:''})
-                    setShowVentaModal(true)
-                  } else {
-                    updateStatus(currentLead.id,k)
-                    setShowStatusModal(false)
-                  }
-                }}>
-                <div style={{width:10,height:10,borderRadius:'50%',background:v.color,flexShrink:0}}/>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:500,color:'#1E293B'}}>
-                    {v.label}
-                    {k==='rejected'&&<span style={{fontSize:11,color:'#94A3B8',marginLeft:6}}>→ elegí motivo</span>}
-                    {k==='closed'&&<span style={{fontSize:11,color:'#065F46',marginLeft:6}}>→ registrá la venta</span>}
+              .map(([k,v])=>{
+                const esCobranza = flujoMap[currentLead.phone_number||'']==='cobranzas'
+                return (
+                <div key={k} className="mopt"
+                  onClick={()=>{
+                    if(!esCobranza&&k==='rejected'){
+                      setShowStatusModal(false)
+                      setEditTarget(currentLead)
+                      setShowRejectModal(true)
+                    } else if(!esCobranza&&k==='closed'){
+                      setShowStatusModal(false)
+                      setVentaForm({entidad:'',linea:'',reparticion:currentLead.reparticion||'',monto:'',cuotas:'',valor_cuota:'',notas:''})
+                      setShowVentaModal(true)
+                    } else {
+                      updateStatus(currentLead.id,k)
+                      setShowStatusModal(false)
+                    }
+                  }}>
+                  <div style={{width:10,height:10,borderRadius:'50%',background:v.color,flexShrink:0}}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:500,color:'#1E293B'}}>
+                      {v.label}
+                      {!esCobranza&&k==='rejected'&&<span style={{fontSize:11,color:'#94A3B8',marginLeft:6}}>→ elegí motivo</span>}
+                      {!esCobranza&&k==='closed'&&<span style={{fontSize:11,color:'#065F46',marginLeft:6}}>→ registrá la venta</span>}
+                    </div>
+                    <div style={{fontSize:11,color:'#94A3B8'}}>{v.desc}</div>
                   </div>
-                  <div style={{fontSize:11,color:'#94A3B8'}}>{v.desc}</div>
+                  {currentLead.status===k&&<span style={{color:'#F59E0B',fontSize:16}}>✓</span>}
                 </div>
-                {currentLead.status===k&&<span style={{color:'#F59E0B',fontSize:16}}>✓</span>}
-              </div>
-            ))}
+              )})}
             <button className="btn" style={{width:'100%',justifyContent:'center',marginTop:14}} onClick={()=>setShowStatusModal(false)}>Cancelar</button>
           </div>
         </div>
@@ -1710,7 +1763,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           <div className="mod" onClick={e=>e.stopPropagation()}>
             <h3>Asignar a un asesor</h3>
             {USERS.map(u=>(
-              <div key={u.id} className="mopt" onClick={async()=>{await supabase.from('amat_loan_leads').update({assigned_to:u.username,updated_at:new Date().toISOString()}).eq('id',currentLead.id);setShowAssignModal(false)}}>
+              <div key={u.id} className="mopt" onClick={async()=>{
+                await supabase.from('amat_loan_leads').update({assigned_to:u.username,updated_at:new Date().toISOString()}).eq('id',currentLead.id)
+                // Si cambia de rol (ventas↔cobranzas), actualizar consulta
+                await supabase.from('amat_consultas').update({vendedor:u.username,updated_at:new Date().toISOString()}).eq('phone',currentLead.phone_number||'')
+                setShowAssignModal(false)
+              }}>
                 <div className="av" style={{width:34,height:34,fontSize:11,background:u.color,color:'white'}}>{u.initials}</div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,fontWeight:600,color:'#1E293B'}}>{u.username}</div>
