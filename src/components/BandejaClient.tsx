@@ -20,6 +20,7 @@ type SysUser = { id:string; username:string; password:string; displayName:string
 const USERS: SysUser[] = [
   { id:'1',  username:'Walter',   password:'Walter#2026',  displayName:'Walter',   role:'Administrador', initials:'WA', color:'#B45309' },
   { id:'2',  username:'Muse',     password:'Muse#2026',    displayName:'Muse',     role:'Administrador', initials:'MU', color:'#92400E' },
+  { id:'9',  username:'Nicolas',  password:'Nicolas2026',  displayName:'Nicolas',  role:'Administrador', initials:'NI', color:'#1D4ED8' },
   { id:'3',  username:'Valentin', password:'Mutual2026',   displayName:'Valentin', role:'Vendedor',      initials:'VA', color:'#D97706' },
   { id:'4',  username:'Juan',     password:'Mutual2026',   displayName:'Juan',     role:'Vendedor',      initials:'JU', color:'#F59E0B' },
   { id:'5',  username:'Eliseo',   password:'Mutual2026',   displayName:'Eliseo',   role:'Vendedor',      initials:'EL', color:'#10B981' },
