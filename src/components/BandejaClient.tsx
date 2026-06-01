@@ -352,35 +352,45 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
     const phones=[...new Set(initialMessages.map(m=>m.phone_number))]
     if(phones.length===0){ setBotLeads([]); return }
-    supabase.from('amat_loan_leads')
-      .select('*')
-      .in('phone_number', phones)
-      .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved")')
-      .eq('archived', false)
-      .then(({data})=>{
-        if(data) {
-          // FIX 2: deduplicar por phone_number al cargar la bandeja inicial
-          const seen = new Set<string>()
-          const unique = (data as LoanLead[]).filter(l => {
-            const key = l.phone_number || String(l.id)
-            if(seen.has(key)) return false
-            seen.add(key)
-            return true
-          })
-          setBotLeads(unique)
-        }
+
+    // Supabase tiene límite de ~1000 en .in() — hacemos lotes de 200
+    const BATCH = 200
+    const chunks = (arr: string[]) => Array.from({length: Math.ceil(arr.length/BATCH)}, (_,i) => arr.slice(i*BATCH,(i+1)*BATCH))
+
+    // Cargar leads en lotes
+    Promise.all(chunks(phones).map(chunk =>
+      supabase.from('amat_loan_leads')
+        .select('*')
+        .in('phone_number', chunk)
+        .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved")')
+        .eq('archived', false)
+        .then(({data}) => data || [])
+    )).then(results => {
+      const all = results.flat() as LoanLead[]
+      const seen = new Set<string>()
+      const unique = all.filter(l => {
+        const key = l.phone_number || String(l.id)
+        if(seen.has(key)) return false
+        seen.add(key)
+        return true
       })
-    // Cargar flujos de consultas
-    supabase.from('amat_consultas')
-      .select('phone,flujo')
-      .in('phone', phones)
-      .then(({data})=>{
-        if(data){
-          const map: Record<string,string> = {}
-          data.forEach((r:any)=>{ if(r.phone) map[r.phone]=r.flujo||'solicitud' })
-          setFlujoMap(map)
-        }
-      })
+      setBotLeads(unique)
+    })
+
+    // Cargar flujos en lotes
+    Promise.all(chunks(phones).map(chunk =>
+      supabase.from('amat_consultas')
+        .select('phone,flujo')
+        .in('phone', chunk)
+        .then(({data}) => data || [])
+    )).then(results => {
+      const all = results.flat()
+      if(all.length){
+        const map: Record<string,string> = {}
+        all.forEach((r:any)=>{ if(r.phone) map[r.phone]=r.flujo||'solicitud' })
+        setFlujoMap(map)
+      }
+    })
   },[initialMessages])
 
   // Cargar cola según rol del usuario logueado
