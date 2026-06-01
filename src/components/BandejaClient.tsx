@@ -560,6 +560,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setReplyText(''); setSending(false)
   }
 
+  const sendTemplate=async(template:'recontacto'|'primer_contacto_esp')=>{
+    if(!selectedPhone||!me) return
+    setSending(true)
+    await fetch('/api/send-message',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({phone:selectedPhone,template,senderName:me.username})
+    })
+    setSending(false)
+  }
+
   const updateStatus=async(id:number,status:string,notes?:string)=>{
     const upd:any={status,updated_at:new Date().toISOString()}
     if(notes!==undefined) upd.notes=notes
@@ -1137,6 +1147,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 </div>
 
                 <div style={{padding:'12px 18px',background:'white',borderTop:'1px solid #E2E8F0',display:'flex',gap:8,alignItems:'flex-end',flexShrink:0}}>
+                  {/* Botones de plantillas Meta */}
+                  <div style={{display:'flex',gap:6,marginBottom:6}}>
+                    <button onClick={()=>sendTemplate('primer_contacto_esp')} disabled={sending}
+                      style={{flex:1,padding:'6px 8px',border:'1px solid #DDD6FE',borderRadius:7,background:'#F5F3FF',color:'#6D28D9',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+                      👋 Primer contacto
+                    </button>
+                    <button onClick={()=>sendTemplate('recontacto')} disabled={sending}
+                      style={{flex:1,padding:'6px 8px',border:'1px solid #FDE68A',borderRadius:7,background:'#FFFBEB',color:'#B45309',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+                      🔄 Recontacto
+                    </button>
+                  </div>
                   <textarea value={replyText} onChange={e=>setReplyText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendReply()}}}
                     placeholder={`Respondé como ${me.username}... (Enter envía, Shift+Enter nueva línea)`}
                     style={{flex:1,border:'1px solid #E2E8F0',borderRadius:10,padding:'10px 14px',fontSize:13,resize:'none',fontFamily:'inherit',color:'#1E293B',background:'#F8FAFC'}} rows={2}/>
