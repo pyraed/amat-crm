@@ -1847,7 +1847,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart
                   layout="vertical"
-                  data={USERS.map(u=>({
+                  data={USERS.filter(u=>u.username!=='Nicolas').map(u=>({
                     name:u.username,
                     asignados:rLeadsFinal.filter(l=>l.assigned_to===u.username).length,
                     cerrados:modoR==='cobranzas'
@@ -1996,7 +1996,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   </tr>
                 </thead>
                 <tbody>
-                  {USERS.map(u=>{
+                  {USERS.filter(u=>u.username!=='Nicolas').map(u=>{
                     const asignados=rLeadsFinal.filter(l=>l.assigned_to===u.username).length
                     const exitoStatus=modoR==='cobranzas'?'resolved':'closed'
                     const contactados=rLeadsFinal.filter(l=>l.assigned_to===u.username&&['contacted',exitoStatus].includes(l.status)).length
