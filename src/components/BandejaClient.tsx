@@ -354,7 +354,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(phones.length===0){ setBotLeads([]); return }
     supabase.from('amat_loan_leads')
       .select('*')
-      .in('phone_number', phones.slice(0,500))
+      .in('phone_number', phones.slice(0,50000000))
       .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved")')
       .eq('archived', false)
       .then(({data})=>{
@@ -373,7 +373,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     // Cargar flujos de consultas
     supabase.from('amat_consultas')
       .select('phone,flujo')
-      .in('phone', phones.slice(0,500))
+      .in('phone', phones.slice(0,50000000))
       .then(({data})=>{
         if(data){
           const map: Record<string,string> = {}
