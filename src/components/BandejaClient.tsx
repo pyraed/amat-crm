@@ -2269,12 +2269,42 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             </div>
             <div style={{display:'flex',gap:8,paddingTop:14,borderTop:'1px solid #F1F5F9'}}>
               <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={async()=>{
+                // Guardar en amat_consultas
                 await supabase.from('amat_consultas').update({
                   vendedor:  consultaEdit.vendedor,
                   situacion: consultaEdit.situacion,
                   estado:    consultaEdit.estado,
                   updated_at:new Date().toISOString()
                 }).eq('id',consultaSelected.id)
+
+                // Solo si está pendiente y tiene vendedor asignado → llevar a bandeja
+                if(consultaEdit.vendedor && consultaSelected.phone && consultaSelected.estado==='pendiente') {
+                  const {data: existingLead} = await supabase
+                    .from('amat_loan_leads')
+                    .select('id,archived,assigned_to')
+                    .eq('phone_number', consultaSelected.phone)
+                    .single()
+
+                  if(existingLead) {
+                    // Actualizar lead existente — desarchivarlo y asignarlo
+                    await supabase.from('amat_loan_leads').update({
+                      assigned_to: consultaEdit.vendedor,
+                      archived:    false,
+                      status:      'contacted',
+                      updated_at:  new Date().toISOString()
+                    }).eq('id', existingLead.id)
+                    // Actualizar en memoria para que aparezca en bandeja
+                    setBotLeads(prev => {
+                      const exists = prev.find(l=>l.id===existingLead.id)
+                      if(exists) return prev.map(l=>l.id===existingLead.id?{...l,assigned_to:consultaEdit.vendedor,archived:false,status:'contacted' as any}:l)
+                      // Si no estaba en bandeja, recargarlo
+                      supabase.from('amat_loan_leads').select('*').eq('id',existingLead.id).single()
+                        .then(({data})=>{ if(data) setBotLeads(p=>[data as any,...p]) })
+                      return prev
+                    })
+                  }
+                }
+
                 setShowConsultaModal(false)
                 loadConsultas()
               }}>💾 Guardar</button>
