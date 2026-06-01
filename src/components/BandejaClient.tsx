@@ -1305,7 +1305,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                         <td>
                           <div style={{display:'flex',gap:4}}>
                             <button className="btn" style={{padding:'4px 9px',fontSize:11}} onClick={()=>openEdit(lead)}>✏️</button>
-                            <button className="btn suc" style={{padding:'4px 9px',fontSize:11}} onClick={()=>updateStatus(lead.id,'contacted')}>📞</button>
                             <button className="btn war" style={{padding:'4px 9px',fontSize:11}} onClick={()=>openTemplate(lead)}>💬 Plantilla</button>
                           </div>
                         </td>
@@ -2251,10 +2250,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               <div>
                 <label className="fl">Estado</label>
                 <select className="fs" value={consultaEdit.estado} onChange={e=>setConsultaEdit((f:any)=>({...f,estado:e.target.value}))}>
-                  <option value="pendiente">Pendiente</option>
-                  <option value="en_proceso">En proceso</option>
-                  <option value="resuelto">Resuelto</option>
-                  <option value="cerrado">Cerrado</option>
+                  <option value="pendiente">Nuevo</option>
+                  <option value="en_proceso">Contactado</option>
+                  {consultaSelected.flujo==='cobranzas' ? (<>
+                    <option value="resuelto">Resuelto</option>
+                    <option value="cerrado">No resuelto</option>
+                  </>) : (<>
+                    <option value="resuelto">Cerrado</option>
+                    <option value="cerrado_rechazado">Rechazado</option>
+                    <option value="cerrado_no_interesado">No interesado</option>
+                  </>)}
                 </select>
               </div>
             </div>
