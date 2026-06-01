@@ -9,8 +9,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'phone y text o template son requeridos' }, { status: 400 })
     }
 
-    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
-    const accessToken   = process.env.WHATSAPP_ACCESS_TOKEN
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID
+    const accessToken   = process.env.WHATSAPP_ACCESS_TOKEN || process.env.META_TOKEN
 
     if (phoneNumberId && accessToken) {
       // Armar body según si es plantilla o texto libre
