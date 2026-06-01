@@ -1149,7 +1149,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 <div style={{padding:'12px 18px',background:'white',borderTop:'1px solid #E2E8F0',display:'flex',gap:8,alignItems:'flex-end',flexShrink:0}}>
                   {/* Botones de plantillas Meta */}
                   <div style={{display:'flex',gap:6,marginBottom:6}}>
-                    <button onClick={()=>sendTemplate('primer_contacto_esp')} disabled={sending}
+                    <button onClick={()=>sendTemplate('ayuda_economica')} disabled={sending}
                       style={{flex:1,padding:'6px 8px',border:'1px solid #DDD6FE',borderRadius:7,background:'#F5F3FF',color:'#6D28D9',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
                       👋 Primer contacto
                     </button>
@@ -2002,7 +2002,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             {!selectedTemplate?(
               <>
                 <p style={{fontSize:13,color:'#64748B',marginBottom:14}}>Seleccioná una plantilla para contactar a <strong>{editTarget.full_name}</strong>:</p>
-                {TEMPLATES.filter(t=>['recontacto','primer_contacto_esp'].includes(t.id)).map(tpl=>(
+                {TEMPLATES.filter(t=>['ayuda_economica','recontacto'].includes(t.id)).map(tpl=>(
                   <div key={tpl.id} className="tcard" onClick={()=>applyTemplate(tpl,editTarget)}>
                     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
                       <span style={{fontSize:12,fontWeight:600,color:'#1E293B'}}>{tpl.name}</span>

@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
             to: phone,
             type: 'template',
             template: {
-              name: template,       // 'recontacto' o 'primer_contacto_esp'
+              // Mapear IDs internos a nombres aprobados por Meta
+              name: template === 'ayuda_economica' ? 'primer_contacto_esp' : template,
               language: { code: 'es_AR' },
             },
           }
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
     // Texto a guardar en Supabase (para plantillas guardamos el contenido real)
     const TEMPLATES: Record<string, string> = {
       recontacto: 'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
+      ayuda_economica: 'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
       primer_contacto_esp: 'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
     }
 
