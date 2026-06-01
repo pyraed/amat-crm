@@ -1414,9 +1414,24 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                           </span>
                         </td>
                         <td>
-                          <button className="btn" style={{padding:'4px 9px',fontSize:11}} onClick={e=>{e.stopPropagation();setConsultaSelected(c);setConsultaEdit({vendedor:c.vendedor||'',situacion:c.situacion||'',estado:c.estado||'pendiente'});setShowConsultaModal(true)}}>
-                            ✏️ Gestionar
-                          </button>
+                          <div style={{display:'flex',gap:4}}>
+                            <button className="btn" style={{padding:'4px 9px',fontSize:11}} onClick={e=>{e.stopPropagation();setConsultaSelected(c);setConsultaEdit({vendedor:c.vendedor||'',situacion:c.situacion||'',estado:c.estado||'pendiente'});setShowConsultaModal(true)}}>
+                              ✏️ Gestionar
+                            </button>
+                            <button className="btn war" style={{padding:'4px 9px',fontSize:11}} onClick={e=>{
+                              e.stopPropagation()
+                              // Buscar el lead correspondiente a esta consulta
+                              const lead = baseLeads.find(l=>l.phone_number===c.phone)||allLeads.find(l=>l.phone_number===c.phone)
+                              if(lead) openTemplate(lead)
+                              else {
+                                // Si no está en baseLeads, crear un lead mínimo para el modal
+                                setEditTarget({id:0,phone_number:c.phone,full_name:c.nombre_apellido||c.phone,reparticion:c.reparticion||'',status:'new',archived:false} as any)
+                                setSelectedTemplate(null); setTemplateVars({}); setShowTemplateModal(true)
+                              }
+                            }}>
+                              💬 Plantilla
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -1984,13 +1999,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         <div className="movo" onClick={()=>setShowTemplateModal(false)}>
           <div className="mod" onClick={e=>e.stopPropagation()}>
             <h3>💬 Plantillas de mensaje</h3>
-            <div style={{background:'#FFFBEB',border:'1px solid #FDE68A',borderRadius:10,padding:'10px 14px',marginBottom:16,fontSize:12,color:'#92400E'}}>
-              ⚠️ <strong>Próximamente:</strong> Estas plantillas se enviarán directamente desde el CRM como mensajes de WhatsApp una vez que el número esté verificado en Meta Business.
-            </div>
             {!selectedTemplate?(
               <>
                 <p style={{fontSize:13,color:'#64748B',marginBottom:14}}>Seleccioná una plantilla para contactar a <strong>{editTarget.full_name}</strong>:</p>
-                {TEMPLATES.map(tpl=>(
+                {TEMPLATES.filter(t=>['recontacto','primer_contacto_esp'].includes(t.id)).map(tpl=>(
                   <div key={tpl.id} className="tcard" onClick={()=>applyTemplate(tpl,editTarget)}>
                     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
                       <span style={{fontSize:12,fontWeight:600,color:'#1E293B'}}>{tpl.name}</span>
@@ -2017,8 +2029,22 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   </div>
                 </div>
                 <div style={{display:'flex',gap:8}}>
-                  <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={()=>{updateStatus(editTarget.id,'attempted');setShowTemplateModal(false)}}>
-                    ✓ Marcar como intentado
+                  <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={async()=>{
+                    if(!editTarget?.phone_number||!me) return
+                    // Enviar plantilla real por WhatsApp
+                    await fetch('/api/send-message',{
+                      method:'POST',headers:{'Content-Type':'application/json'},
+                      body:JSON.stringify({
+                        phone: editTarget.phone_number,
+                        template: selectedTemplate.id,
+                        senderName: me.username
+                      })
+                    })
+                    await updateStatus(editTarget.id,'contacted')
+                    setShowTemplateModal(false)
+                    alert(`✅ Plantilla enviada a ${editTarget.full_name}`)
+                  }}>
+                    ✈️ Enviar plantilla
                   </button>
                   <button className="btn" style={{flex:1,justifyContent:'center'}} onClick={()=>setShowTemplateModal(false)}>Cerrar</button>
                 </div>
