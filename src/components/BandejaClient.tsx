@@ -126,153 +126,6 @@ const BOT_CONVERSATIONS = [
       {dir:'out',body:'Solicitud registrada exitosamente! En breve un asesor se pondra en contacto con vos. Muchas gracias!',sender:'bot',time:-77},
     ]
   },
-  {
-    phone:'5492214001002', name:'LOPEZ ANA MARIA', dni:'32115778',
-    reparticion:'MINISTERIO DE SALUD', bank:'BANCO NACION',
-    status:'evaluation' as const,
-    msgs:[
-      {dir:'in',body:'Buenas quiero info',time:-200},
-      {dir:'out',body:'Hola! Soy Arturito el Asistente Virtual de AMAT...\n\n1- Solicitar una Ayuda Economica\n2- Informacion sobre descuentos',sender:'bot',time:-199},
-      {dir:'in',body:'1',time:-198},
-      {dir:'out',body:'Perfecto. ¿En qué repartición trabajás?',sender:'bot',time:-197},
-      {dir:'in',body:'2',time:-196},
-      {dir:'out',body:'Perfecto. Ahora decime tu DNI.',sender:'bot',time:-195},
-      {dir:'in',body:'32115778',time:-194},
-      {dir:'out',body:'Gracias. Tu APELLIDO Y NOMBRE completo.',sender:'bot',time:-193},
-      {dir:'in',body:'Lopez Ana Maria',time:-192},
-      {dir:'out',body:'Perfecto. Tu CORREO ELECTRONICO.',sender:'bot',time:-191},
-      {dir:'in',body:'ana.lopez@hotmail.com',time:-190},
-      {dir:'out',body:'Solicitud registrada! En breve un asesor te contactará. ¡Gracias!',sender:'bot',time:-189},
-      {dir:'out',body:'Hola Ana, soy AMAT2. Vi tu solicitud. ¿Podemos hablar para avanzar con tu ayuda económica?',sender:'AMAT2',time:-60},
-      {dir:'in',body:'Sí, disponible hoy a las 16hs',time:-58},
-      {dir:'out',body:'Perfecto Ana, te llamo a las 16hs. Gracias!',sender:'AMAT2',time:-57},
-    ]
-  },
-  {
-    phone:'5492214001003', name:'FERNANDEZ MIGUEL', dni:'25882341',
-    reparticion:'SERVICIO PENITENCIARIO BONAERENSE', bank:'BANCO GALICIA',
-    status:'contacted' as const,
-    msgs:[
-      {dir:'in',body:'quiero sacar un prestamo',time:-300},
-      {dir:'out',body:'Hola! Soy Arturito de AMAT. ¿En qué podemos ayudarte?\n\n1- Solicitar una Ayuda Economica\n2- Consultas sobre descuentos',sender:'bot',time:-299},
-      {dir:'in',body:'1',time:-298},
-      {dir:'out',body:'¿En qué repartición trabajás?',sender:'bot',time:-297},
-      {dir:'in',body:'4',time:-296},
-      {dir:'out',body:'Tu DNI sin puntos.',sender:'bot',time:-295},
-      {dir:'in',body:'25882341',time:-294},
-      {dir:'out',body:'Tu nombre completo.',sender:'bot',time:-293},
-      {dir:'in',body:'Fernandez Miguel',time:-292},
-      {dir:'out',body:'Tu email.',sender:'bot',time:-291},
-      {dir:'in',body:'mfernandez@yahoo.com',time:-290},
-      {dir:'out',body:'Solicitud registrada! En breve te contactamos.',sender:'bot',time:-289},
-    ]
-  },
-  {
-    phone:'5492214001004', name:'GARCIA SOFIA', dni:'35220145',
-    reparticion:'IPS', bank:'BANCO PROVINCIA',
-    status:'new' as const,
-    msgs:[
-      {dir:'in',body:'Buen día, quiero consultar sobre ayuda económica',time:-15},
-      {dir:'out',body:'Hola! Soy Arturito de AMAT. ¿En qué podemos ayudarte?\n\n1- Solicitar una Ayuda Economica\n2- Consultas sobre descuentos',sender:'bot',time:-14},
-      {dir:'in',body:'1',time:-13},
-      {dir:'out',body:'¿En qué repartición trabajás?',sender:'bot',time:-12},
-      {dir:'in',body:'5',time:-11},
-    ]
-  },
-  {
-    phone:'5492214001005', name:'GOMEZ PATRICIA', dni:'31098765',
-    reparticion:'MINISTERIO DE EDUCACION', bank:'BANCO PROVINCIA',
-    status:'contacted' as const,
-    msgs:[
-      {dir:'in',body:'Hola buen dia',time:-480},
-      {dir:'out',body:'Hola! Soy Arturito de AMAT...',sender:'bot',time:-479},
-      {dir:'in',body:'2',time:-478},
-      {dir:'out',body:'Entendido. ¿En qué repartición trabajás?',sender:'bot',time:-477},
-      {dir:'in',body:'3',time:-476},
-      {dir:'out',body:'Tu DNI.',sender:'bot',time:-475},
-      {dir:'in',body:'31098765',time:-474},
-      {dir:'out',body:'Tu nombre.',sender:'bot',time:-473},
-      {dir:'in',body:'Gomez Patricia',time:-472},
-      {dir:'out',body:'Tu email.',sender:'bot',time:-471},
-      {dir:'in',body:'pgomez@gmail.com',time:-470},
-      {dir:'out',body:'Consulta: Descuentos / Estado de cuenta\nReparticion: Ministerio de Educacion\n...\n¿Los datos son correctos?\n1- Confirmar\n2- Cancelar',sender:'bot',time:-469},
-      {dir:'in',body:'1',time:-468},
-      {dir:'out',body:'Tu consulta fue registrada! En breve un asesor te contactará.',sender:'bot',time:-467},
-    ]
-  },
-  {
-    phone:'5492214001006', name:'SOSA ROBERTO', dni:'27330991',
-    reparticion:'MINISTERIO DE SEGURIDAD', bank:'BANCO NACION',
-    status:'interested' as const,
-    msgs:[
-      {dir:'in',body:'buenos dias',time:-720},
-      {dir:'out',body:'Hola! Soy Arturito de AMAT...',sender:'bot',time:-719},
-      {dir:'in',body:'1',time:-718},
-      {dir:'out',body:'¿Repartición?',sender:'bot',time:-717},
-      {dir:'in',body:'1',time:-716},
-      {dir:'out',body:'Tu DNI.',sender:'bot',time:-715},
-      {dir:'in',body:'27330991',time:-714},
-      {dir:'out',body:'Tu nombre.',sender:'bot',time:-713},
-      {dir:'in',body:'Sosa Roberto',time:-712},
-      {dir:'out',body:'Tu email.',sender:'bot',time:-711},
-      {dir:'in',body:'rsosa@gmail.com',time:-710},
-      {dir:'out',body:'Solicitud registrada! En breve te contactamos.',sender:'bot',time:-709},
-      {dir:'out',body:'Hola Roberto! Soy AMAT3. Recibí tu solicitud. ¿Cuánto necesitás y en cuántas cuotas pensabas pagarlo?',sender:'AMAT3',time:-300},
-      {dir:'in',body:'Necesito unos 200 mil, en 24 cuotas si se puede',time:-295},
-      {dir:'out',body:'Perfecto Roberto, lo proceso y te confirmo en breve.',sender:'AMAT3',time:-290},
-    ]
-  },
-  {
-    phone:'5492214001007', name:'TORRES LAURA', dni:'30441220',
-    reparticion:'MINISTERIO DE EDUCACION', bank:'BANCO PROVINCIA',
-    status:'closed' as const,
-    msgs:[
-      {dir:'in',body:'Hola, quiero la ayuda económica',time:-2880},
-      {dir:'out',body:'Hola! Soy Arturito de AMAT...',sender:'bot',time:-2879},
-      {dir:'in',body:'1',time:-2878},
-      {dir:'out',body:'Solicitud registrada!',sender:'bot',time:-2800},
-      {dir:'out',body:'Hola Laura, te llamo para confirmar los datos de tu ayuda económica.',sender:'AMAT2',time:-1440},
-      {dir:'in',body:'Perfecto, ya firmé todo. Gracias!',time:-1438},
-      {dir:'out',body:'Excelente Laura! Ya fue procesada. En 48hs tenés el dinero en tu cuenta. Cualquier consulta estamos acá 😊',sender:'AMAT2',time:-1436},
-    ]
-  },
-  {
-    phone:'5492214001008', name:'DIAZ FERNANDO', dni:'28765432',
-    reparticion:'MINISTERIO DE SEGURIDAD', bank:'BANCO PROVINCIA',
-    status:'no_answer' as const,
-    msgs:[
-      {dir:'in',body:'info prestamos',time:-4320},
-      {dir:'out',body:'Hola! Soy Arturito de AMAT...',sender:'bot',time:-4319},
-      {dir:'in',body:'1',time:-4318},
-      {dir:'out',body:'Solicitud registrada!',sender:'bot',time:-4200},
-      {dir:'out',body:'Hola Fernando, te contacto de AMAT por tu solicitud.',sender:'AMAT2',time:-2880},
-      {dir:'out',body:'Fernando, te llamo nuevamente. Avisame cuando puedas hablar.',sender:'AMAT2',time:-1440},
-      {dir:'out',body:'Fernando, último intento de contacto. Si necesitás la ayuda económica escribinos.',sender:'AMAT2',time:-720},
-    ]
-  },
-  {
-    phone:'5492214001009', name:'HERRERA MARCELO', dni:'26543210',
-    reparticion:'IPS', bank:'BANCO NACION',
-    status:'new' as const,
-    msgs:[
-      {dir:'in',body:'Necesito info de préstamos',time:-5},
-      {dir:'out',body:'Hola! Soy Arturito de AMAT. ¿En qué podemos ayudarte?',sender:'bot',time:-4},
-    ]
-  },
-  {
-    phone:'5492214001010', name:'ROMERO CLAUDIA', dni:'34321098',
-    reparticion:'MINISTERIO DE SALUD', bank:'BANCO NACION',
-    status:'evaluation' as const,
-    msgs:[
-      {dir:'in',body:'buenos dias quiero el prestamo',time:-1440},
-      {dir:'out',body:'Solicitud registrada!',sender:'bot',time:-1430},
-      {dir:'out',body:'Hola Claudia! Estoy revisando tu solicitud. ¿Podés mandarme una foto de tu último recibo de sueldo?',sender:'AMAT3',time:-720},
-      {dir:'in',body:'Sí ahora te mando',time:-718},
-      {dir:'out',body:'Perfecto, lo reviso y te confirmo en el día.',sender:'AMAT3',time:-717},
-      {dir:'in',body:'Ya lo mandé por acá, lo recibiste?',time:-360},
-      {dir:'out',body:'Sí Claudia, lo recibí. Estamos procesando tu solicitud.',sender:'AMAT3',time:-358},
-    ]
-  },
 ]
 
 // ── Grilla AMAT para calcular valor de cuota ──────────────
@@ -397,7 +250,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   useEffect(()=>{
     setMounted(true)
-    // Cargar credenciales guardadas si existen
     const savedUser = localStorage.getItem('amat_remember_user')
     const savedPass = localStorage.getItem('amat_remember_pass')
     if(savedUser && savedPass) {
@@ -422,13 +274,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'amat_messages'},p=>{
         const msg = p.new as Message
         setMessages(prev=>prev.find(m=>m.id===msg.id)?prev:[...prev,msg])
-        // Si el lead no está en la bandeja, cargarlo + cargar su flujo
+        // FIX 1: doble check con estado fresco antes de insertar el lead
         setBotLeads(prev=>{
           if(!prev.find(l=>l.phone_number===msg.phone_number)){
             supabase.from('amat_loan_leads').select('*').eq('phone_number',msg.phone_number).single()
               .then(({data})=>{
                 if(data) {
-                  setBotLeads(p2=>[data as LoanLead,...p2])
+                  setBotLeads(p2 => {
+                    // Verificar de nuevo con el estado más fresco para evitar duplicados
+                    if(p2.find(l => l.phone_number === (data as LoanLead).phone_number)) return p2
+                    return [data as LoanLead, ...p2]
+                  })
                   // Cargar el flujo de este phone y actualizar flujoMap
                   supabase.from('amat_consultas')
                     .select('phone,flujo')
@@ -456,7 +312,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved']
         if(p.eventType==='UPDATE'){
           if(EXCLUIDOS.includes(updated.status||'') || (updated as any).archived){
-            // Si pasó a estado final o fue archivado, sacarlo de botLeads
             setBotLeads(prev=>prev.filter(l=>l.id!==updated.id))
           } else {
             setBotLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
@@ -474,13 +329,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const ch=supabase.channel('rt-consultas')
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'amat_consultas'},p=>{
         setConsultas(prev=>[p.new as any,...prev])
-        // Actualizar flujoMap con el flujo de la consulta nueva
         const c = p.new as any
         if(c.phone) setFlujoMap(prev=>({...prev,[c.phone]:c.flujo||'solicitud'}))
       })
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'amat_consultas'},p=>{
         setConsultas(prev=>prev.map(c=>c.id===(p.new as any).id?p.new as any:c))
-        // Actualizar flujoMap si cambió el flujo
         const c = p.new as any
         if(c.phone) setFlujoMap(prev=>({...prev,[c.phone]:c.flujo||'solicitud'}))
       })
@@ -490,8 +343,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // Cargar leads de la bandeja (solo los que tienen mensajes)
   useEffect(()=>{
-    // Cargar cerrados hoy desde toda la tabla (independiente de bandeja)
-    const hoy = new Date().toISOString().split('T')[0] // YYYY-MM-DD
+    const hoy = new Date().toISOString().split('T')[0]
     supabase.from('amat_loan_leads')
       .select('id,status,updated_at')
       .eq('status','closed')
@@ -506,9 +358,19 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved")')
       .eq('archived', false)
       .then(({data})=>{
-        if(data) setBotLeads(data as LoanLead[])
+        if(data) {
+          // FIX 2: deduplicar por phone_number al cargar la bandeja inicial
+          const seen = new Set<string>()
+          const unique = (data as LoanLead[]).filter(l => {
+            const key = l.phone_number || String(l.id)
+            if(seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+          setBotLeads(unique)
+        }
       })
-    // Cargar flujos de consultas para saber si cada phone es ventas o cobranzas
+    // Cargar flujos de consultas
     supabase.from('amat_consultas')
       .select('phone,flujo')
       .in('phone', phones.slice(0,500))
@@ -524,18 +386,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // Cargar cola según rol del usuario logueado
   const loadCola = (user: typeof me, leads: LoanLead[]) => {
     if(!user) return
-    // Sin asignar = cola disponible
     let disponibles = leads.filter(l => !l.assigned_to && l.status !== 'finalizado')
-    // Filtrar por rol
-    if(user.role === 'Vendedor') {
-      // Solo flujo solicitud — filtramos por consultas con flujo=solicitud
-      // Como no tenemos flujo en loan_leads, mostramos todos los sin asignar al Vendedor
-      // Los de cobranzas los filtra el sistema de consultas
-      disponibles = disponibles
-    } else if(user.role === 'Cobranza') {
-      disponibles = disponibles
-    }
-    // Admin ve todo
     setCola(disponibles)
   }
 
@@ -543,7 +394,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   //  CARGAR CONSULTAS desde amat_consultas
   // ─────────────────────────────────────────────
 
-  // Refs para siempre leer valores frescos (mismo patrón que loadBase)
   const cSearchRef = useRef(cSearch)
   const cFlujoRef  = useRef(cFlujo)
   const cEstadoRef = useRef(cEstado)
@@ -572,27 +422,21 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setConsultasLoading(false)
   }
 
-  // Cargar consultas al entrar al tab
   useEffect(()=>{
-    if(tab==='consultas'){
-      console.log('[CONSULTAS] Ejecutando loadConsultas, tab cambió a consultas')
-      loadConsultas()
-    }
+    if(tab==='consultas') loadConsultas()
     if(tab==='reportes') loadReportes()
     if(tab==='pipeline') loadPipeline()
   },[tab]) // eslint-disable-line
 
-  // Recargar cuando cambian filtros (solo si estamos en consultas)
   useEffect(()=>{
     if(tab==='consultas') loadConsultas()
   },[cSearch, cFlujo, cEstado, cRep]) // eslint-disable-line
 
-  // Cargar datos del pipeline — todos los leads incluyendo archivados
+  // Cargar datos del pipeline
   const loadPipeline = async () => {
     const { data } = await supabase.from('amat_loan_leads').select('*').order('updated_at', { ascending: false })
     if(data) {
       setPipelineLeads(data as LoanLead[])
-      // Cargar flujos para el pipeline
       const phones = data.map((l:any) => l.phone_number).filter(Boolean)
       if(phones.length > 0) {
         const { data: cdata } = await supabase.from('amat_consultas').select('phone,flujo').in('phone', phones.slice(0,500))
@@ -605,7 +449,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
-  // Cargar datos de reportes — todos los leads incluyendo archivados/cerrados
+  // Cargar datos de reportes
   const loadReportes = async () => {
     setReporteLoading(true)
     const { data } = await supabase
@@ -613,7 +457,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .select('*')
       .order('updated_at', { ascending: false })
     setReporteLeads((data as LoanLead[]) || [])
-    // Actualizar cerrados hoy con dato real de BD
     if(data) {
       const hoy = new Date().toDateString()
       setCerradosHoyCount(data.filter((l:any)=>l.status==='closed'&&new Date(l.updated_at).toDateString()===hoy).length)
@@ -621,7 +464,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setReporteLoading(false)
   }
 
-  // Cargar base paginada — usando refs para siempre tener valores frescos
+  // Cargar base paginada
   const baseSearchRef   = useRef(baseSearch)
   const baseRepRef      = useRef(baseRep)
   const baseBancoRef    = useRef(baseBanco)
@@ -659,25 +502,18 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     else if(assigned!=='all') q=q.eq('assigned_to',assigned)
     q=q.order('full_name',{ascending:true}).range(page*PAGE_SIZE,(page+1)*PAGE_SIZE-1)
     const {data,count,error}=await q
-    console.log('[BASE] data:', data?.length, 'count:', count, 'error:', error)
     if(error) console.error('[BASE] Error Supabase:', error)
     setBaseLeads((data as LoanLead[])||[])
     setBaseTotal(count||0)
     setBaseLoading(false)
   }
 
-  // Log cuando se ejecuta loadBase
   useEffect(()=>{
-    if(tab==='base'){
-      console.log('[BASE] Ejecutando loadBase, tab cambió a base')
-      loadBase()
-    }
+    if(tab==='base') loadBase()
   },[tab]) // eslint-disable-line
 
-  // Recargar cuando cambian filtros o página (solo si estamos en base)
   useEffect(()=>{ if(tab==='base') loadBase() },[baseSearch,baseRep,baseBanco,baseStatus,baseTel,baseAssigned,basePage]) // eslint-disable-line
-  
-  // Recargar bandeja cuando se cambia a esa pestaña
+
   useEffect(()=>{
     if(tab==='bandeja'){
       supabase.from('amat_messages').select('*').order('created_at',{ascending:false}).limit(500)
@@ -718,7 +554,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const upd:any={status,updated_at:new Date().toISOString()}
     if(notes!==undefined) upd.notes=notes
     await supabase.from('amat_loan_leads').update(upd).eq('id',id)
-    // Sincronizar estado en amat_consultas también
     const lead = bandejaLeads.find(l=>l.id===id)||baseLeads.find(l=>l.id===id)
     if(lead?.phone_number) {
       const estadoConsulta =
@@ -735,7 +570,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
-  // Tomar una conversación de la cola — auto contactado
   const tomarConversacion = async (lead: LoanLead) => {
     if(!me) return
     await supabase.from('amat_loan_leads')
@@ -750,7 +584,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setVistaMode('mis_chats')
   }
 
-  // Al seleccionar un chat en Mis chats → auto contactado si estaba nuevo
   const abrirChat = async (lead: LoanLead) => {
     setSelectedPhone(lead.phone_number)
     if(lead.status === 'new') {
@@ -760,21 +593,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
-  // Finalizar conversación — guarda el status final real + archived=true
   const finalizarConversacion = async (nota?: string) => {
     if(!currentLead) return
-    // Determinar el status final real a guardar en BD
-    // Si el operador eligió un estado en el modal, usarlo. Si ya tenía uno (closed, etc.), respetarlo.
     const estadosFinales = ['not_interested','rejected','closed','resolved','unresolved']
     const statusFinal = estadosFinales.includes(currentLead.status||'')
-      ? currentLead.status  // respetar el status real (ej: closed de una venta)
+      ? currentLead.status
       : (finalizarEstado || 'finalizado')
     await supabase.from('amat_loan_leads')
       .update({ status: statusFinal, archived: true, updated_at: new Date().toISOString() })
       .eq('id', currentLead.id)
-    // Eliminar de botLeads inmediatamente
     setBotLeads(prev => prev.filter(l => l.id !== currentLead.id))
-    // Actualizar cerradosHoy si el status final es closed
     if(statusFinal === 'closed') {
       setCerradosHoyCount(c => c + 1)
     }
@@ -795,7 +623,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
-  // Guardar cierre de venta
   const guardarVenta = async () => {
     if(!currentLead||!me) return
     const venta = {
@@ -817,11 +644,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         updated_at:new Date().toISOString()
       })
       .eq('phone', currentLead.phone_number||'')
-    // Actualizar botLeads en memoria
     setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, ...venta} : l))
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
-    // NO cerramos el chat — el operador debe presionar Finalizar explícitamente
   }
 
   const openEdit=(lead:LoanLead)=>{
@@ -860,7 +685,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setShowRejectModal(false); setRejectReason('')
   }
 
-  // Exportar ventas cerradas con todos los datos
   const exportVentas = async () => {
     const {data} = await supabase.from('amat_loan_leads')
       .select('*').eq('status','closed').order('updated_at',{ascending:false})
@@ -912,7 +736,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   }
 
   // ── DATOS DERIVADOS ───────────────────────
-  const allLeads=[...botLeads]
+  // FIX 3: deduplicar allLeads como red de seguridad final antes del render
+  const seenLeads = new Set<string>()
+  const allLeads = botLeads.filter(l => {
+    const key = l.phone_number || String(l.id)
+    if(seenLeads.has(key)) return false
+    seenLeads.add(key)
+    return true
+  })
 
   // Bandeja: solo leads con conversación (mensajes)
   const phonesConMensajes=[...new Set(messages.map(m=>m.phone_number))]
@@ -942,24 +773,20 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   const sc=(status:string)=>LEAD_STATUS[status]||LEAD_STATUS.new
   const scCob=(status:string)=>COBRANZA_STATUS[status]||COBRANZA_STATUS.new
-  // Obtener el status display según el flujo del lead actual
   const scFor=(status:string,phone:string|null)=>{
     const flujo = phone ? flujoMap[phone] : 'solicitud'
     return flujo==='cobranzas' ? scCob(status) : sc(status)
   }
-  // Estados disponibles según flujo
   const getEstadosFor=(phone:string|null)=>{
     const flujo = phone ? flujoMap[phone] : 'solicitud'
     return flujo==='cobranzas' ? COBRANZA_STATUS : LEAD_STATUS
   }
-  // Estados finales (que permiten finalizar) según flujo
   const getEstadosFinalesFor=(phone:string|null)=>{
     const flujo = phone ? flujoMap[phone] : 'solicitud'
     return flujo==='cobranzas'
       ? ['resolved','unresolved']
       : ['not_interested','rejected','closed']
   }
-  // Label de flujo
   const getFlujoLabel=(phone:string|null)=>
     phone && flujoMap[phone]==='cobranzas' ? 'Cobranzas' : 'Ventas'
 
@@ -988,7 +815,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         </div>
         {loginErr&&<div style={{background:'rgba(239,68,68,.1)',border:'1px solid rgba(239,68,68,.2)',borderRadius:10,padding:'10px 14px',marginBottom:16,fontSize:13,color:'#FCA5A5'}}>⚠️ {loginErr}</div>}
         {locked&&<div style={{background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.2)',borderRadius:10,padding:'10px 14px',marginBottom:16,fontSize:13,color:'#FCD34D',textAlign:'center'}}>🔒 {countdown}s...</div>}
-        {/* Recordar usuario */}
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
           <input type="checkbox" id="rememberMe" checked={rememberMe} onChange={e=>{
             setRememberMe(e.target.checked)
@@ -1070,9 +896,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         <span style={{fontWeight:700,fontSize:15,color:'#0F172A',marginRight:6,whiteSpace:'nowrap'}}>AMAT · CRM</span>
         <div style={{display:'flex',gap:2,background:'#F1F5F9',padding:3,borderRadius:10}}>
           {([['bandeja','💬','Bandeja'],['consultas','📥','Consultas'],['base','👥','Base'],['pipeline','📋','Pipeline'],['reportes','📊','Reportes']] as const).map(([t,i,l])=>(
-            <button key={t} className={`tabbtn ${tab===t?'on':''}`} onClick={()=>setTab(t)}>{i} {l}
-  
-            </button>
+            <button key={t} className={`tabbtn ${tab===t?'on':''}`} onClick={()=>setTab(t)}>{i} {l}</button>
           ))}
         </div>
         <div style={{display:'flex',gap:16,marginLeft:16}}>
@@ -1098,7 +922,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         <div style={{display:'flex',flex:1,overflow:'hidden'}}>
           {/* Sidebar */}
           <div style={{width:292,borderRight:'1px solid #E2E8F0',background:'white',display:'flex',flexDirection:'column',flexShrink:0}}>
-            {/* Toggle Cola / Mis Chats */}
             <div style={{padding:'10px 12px',borderBottom:'1px solid #F1F5F9',display:'flex',flexDirection:'column',gap:8}}>
               <div style={{display:'flex',gap:4,background:'#F1F5F9',padding:3,borderRadius:8}}>
                 <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='cola'?'white':'transparent',color:vistaMode==='cola'?'#0F172A':'#64748B',boxShadow:vistaMode==='cola'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
@@ -1128,13 +951,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               </div>
             </div>
 
-            {/* Lista */}
             <div style={{flex:1,overflowY:'auto'}}>
               {vistaMode==='cola'&&(()=>{
-                // Cola: leads sin asignar, filtrados por rol
                 let leads = bandejaLeads.filter(l=>{
                   if(l.assigned_to||l.status==='finalizado') return false
-                  // Filtrar por rol: Vendedor→solicitud, Cobranza→cobranzas, Admin→todo
                   if(me?.role==='Vendedor'){
                     const fl=flujoMap[l.phone_number||'']||'solicitud'
                     return fl!=='cobranzas'
@@ -1143,7 +963,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     const fl=flujoMap[l.phone_number||'']||'solicitud'
                     return fl==='cobranzas'
                   }
-                  return true // Admin ve todo
+                  return true
                 })
                 if(bandejaSearch) leads=leads.filter(l=>(l.full_name||'').toLowerCase().includes(bandejaSearch.toLowerCase())||(l.phone_number||'').includes(bandejaSearch)||(l.dni||'').includes(bandejaSearch))
                 if(leads.length===0) return (
@@ -1231,7 +1051,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
             {selectedPhone&&currentLead?(
               <>
-                {/* Header */}
                 <div style={{padding:'10px 18px',background:'white',borderBottom:'1px solid #E2E8F0',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
                   <div className="av" style={{width:40,height:40,fontSize:13,background:'#EFF6FF',color:'#1D4ED8'}}>{(currentLead.full_name||selectedPhone).slice(0,2).toUpperCase()}</div>
                   <div style={{flex:1,minWidth:0}}>
@@ -1259,7 +1078,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   </div>
                 </div>
 
-                {/* Mensajes */}
                 <div style={{flex:1,overflowY:'auto',padding:'16px 20px',display:'flex',flexDirection:'column',gap:10,background:'#F8FAFC'}}>
                   {currentMsgs.length===0&&<div style={{textAlign:'center',color:'#94A3B8',fontSize:13,marginTop:60}}>💬 Sin mensajes</div>}
                   {currentMsgs.map(msg=>(
@@ -1308,7 +1126,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   <div ref={msgEndRef}/>
                 </div>
 
-                {/* Input */}
                 <div style={{padding:'12px 18px',background:'white',borderTop:'1px solid #E2E8F0',display:'flex',gap:8,alignItems:'flex-end',flexShrink:0}}>
                   <textarea value={replyText} onChange={e=>setReplyText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendReply()}}}
                     placeholder={`Respondé como ${me.username}... (Enter envía, Shift+Enter nueva línea)`}
@@ -1381,7 +1198,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       {/* ══ BASE DE CONTACTOS ══ */}
       {tab==='base'&&(
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          {/* Barra filtros */}
           <div style={{padding:'10px 16px',background:'white',borderBottom:'1px solid #E2E8F0',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',flexShrink:0}}>
             <div style={{position:'relative',flex:'1',minWidth:200}}>
               <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'#94A3B8',fontSize:13,pointerEvents:'none'}}>🔍</span>
@@ -1397,7 +1213,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             </div>
             <button className="btn pri" onClick={()=>{setBaseSearch(baseSearchInput);setBasePage(0)}}>Buscar</button>
             <button className="btn suc" onClick={()=>setShowImportExport(true)}>📊 Imp/Exp</button>
-
             <button style={{padding:'7px 14px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#18181B,#3F3F46)',color:'white',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(24,24,27,0.3)',transition:'all .15s',whiteSpace:'nowrap'}} onClick={()=>setShowCampana(true)}>
               📣 Campaña WhatsApp
             </button>
@@ -1429,7 +1244,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',whiteSpace:'nowrap'}}>{baseTotal.toLocaleString()} contacto{baseTotal!==1?'s':''}</span>
           </div>
 
-          {/* Tabla */}
           <div style={{flex:1,overflow:'auto'}}>
             {baseLoading?(
               <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'#94A3B8',flexDirection:'column',gap:10}}>
@@ -1473,7 +1287,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             )}
           </div>
 
-          {/* Paginación */}
           <div style={{padding:'10px 16px',background:'white',borderTop:'1px solid #E2E8F0',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
             <button className="pb" onClick={()=>setBasePage(0)} disabled={basePage===0}>««</button>
             <button className="pb" onClick={()=>setBasePage(p=>Math.max(0,p-1))} disabled={basePage===0}>‹ Anterior</button>
@@ -1487,7 +1300,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       {/* ══ CONSULTAS ══ */}
       {tab==='consultas'&&(
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          {/* Barra filtros */}
           <div style={{padding:'10px 16px',background:'white',borderBottom:'1px solid #E2E8F0',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',flexShrink:0,boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
             <div style={{position:'relative',flex:'1',minWidth:200}}>
               <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'#94A3B8',fontSize:13,pointerEvents:'none'}}>🔍</span>
@@ -1520,7 +1332,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',fontFamily:"'DM Mono',monospace"}}>{consultas.length} consultas</span>
           </div>
 
-          {/* Tabla */}
           <div style={{flex:1,overflow:'auto',background:'#F8FAFC'}}>
             {consultasLoading ? (
               <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',flexDirection:'column',gap:10,color:'#94A3B8'}}>
@@ -1529,7 +1340,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             ) : consultas.length === 0 ? (
               <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',flexDirection:'column',gap:10,color:'#94A3B8'}}>
                 <div style={{fontSize:48}}>📥</div>
-                <div style={{fontSize:15,fontWeight:600,color:'#64748B',fontFamily:"'Playfair Display',serif"}}>Sin consultas todavía</div>
+                <div style={{fontSize:15,fontWeight:600,color:'#64748B'}}>Sin consultas todavía</div>
                 <div style={{fontSize:13,color:'#94A3B8'}}>Las consultas del bot aparecerán acá automáticamente</div>
               </div>
             ) : (
@@ -1588,30 +1399,22 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
       {/* ══ PIPELINE ══ */}
       {tab==='pipeline'&&(()=>{
-        // Determinar modo pipeline según rol
         const esAdmin = me?.role==='Administrador'
         const rolPipe = me?.role==='Cobranza' ? 'cobranzas' : 'ventas'
-        // Admin puede togglear — usamos pipelineMode state
         const modoActivo = esAdmin ? pipelineMode : rolPipe
-
-        // Columnas según modo
         const colsVentas  = Object.entries(LEAD_STATUS)  as [string, typeof LEAD_STATUS[keyof typeof LEAD_STATUS]][]
         const colsCob     = Object.entries(COBRANZA_STATUS) as [string, typeof COBRANZA_STATUS[keyof typeof COBRANZA_STATUS]][]
         const cols        = modoActivo==='cobranzas' ? colsCob : colsVentas
-
-        // Leads filtrados por modo — usa pipelineLeads (incluye archivados/cerrados)
         const leadsParaPipe = pipelineLeads.filter(l=>{
           const fl = pipelineFlujoMap[l.phone_number||'']||flujoMap[l.phone_number||'']||'solicitud'
           if(me?.role==='Vendedor') return fl!=='cobranzas'
           if(me?.role==='Cobranza') return fl==='cobranzas'
           return modoActivo==='cobranzas' ? fl==='cobranzas' : fl!=='cobranzas'
         })
-
         return (
           <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:'#F8FAFC'}}>
-            {/* Header con toggle para Admin */}
             <div style={{padding:'12px 20px',background:'white',borderBottom:'1px solid #E2E8F0',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
-              <span style={{fontWeight:700,fontSize:14,color:'#0F172A',fontFamily:"'Playfair Display',serif"}}>Pipeline</span>
+              <span style={{fontWeight:700,fontSize:14,color:'#0F172A'}}>Pipeline</span>
               {esAdmin && (
                 <div style={{display:'flex',gap:4,background:'#F1F5F9',padding:3,borderRadius:8,marginLeft:8}}>
                   {(['ventas','cobranzas'] as const).map(m=>(
@@ -1634,16 +1437,13 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               )}
               <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',fontFamily:"'DM Mono',monospace"}}>{leadsParaPipe.length} contactos</span>
             </div>
-
-            {/* Columnas kanban */}
             <div style={{flex:1,overflowX:'auto',padding:20}}>
               <div style={{display:'flex',gap:12,minWidth:'max-content',height:'100%'}}>
                 {cols.map(([status,s])=>{
                   const col = leadsParaPipe.filter(l=>l.status===status)
                   const isCob = modoActivo==='cobranzas'
                   return (
-                    <div key={status} style={{background:'#F1F5F9',borderRadius:14,padding:12,width:220,flexShrink:0,minHeight:200,
-                      borderTop:`3px solid ${s.color}`}}>
+                    <div key={status} style={{background:'#F1F5F9',borderRadius:14,padding:12,width:220,flexShrink:0,minHeight:200,borderTop:`3px solid ${s.color}`}}>
                       <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:12}}>
                         <div style={{width:8,height:8,borderRadius:'50%',background:s.color,flexShrink:0}}/>
                         <span style={{fontSize:12,fontWeight:700,color:'#374151'}}>{s.label}</span>
@@ -1674,21 +1474,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
       {/* ══ REPORTES ══ */}
       {tab==='reportes'&&(()=>{
-        // Separar leads por flujo usando pipelineFlujoMap + flujoMap
         const getFlujo = (phone:string|null) => pipelineFlujoMap[phone||''] || flujoMap[phone||''] || 'solicitud'
         const rLeadsVentas = reporteLeads.filter(l=>getFlujo(l.phone_number)!=='cobranzas')
         const rLeadsCob    = reporteLeads.filter(l=>getFlujo(l.phone_number)==='cobranzas')
-        const rLeads       = reporteMode==='cobranzas' ? rLeadsCob : rLeadsVentas
         const esAdminR     = me?.role==='Administrador'
         const modoR        = esAdminR ? reporteMode : (me?.role==='Cobranza' ? 'cobranzas' : 'ventas')
         const rLeadsFinal  = modoR==='cobranzas' ? rLeadsCob : rLeadsVentas
-
         return (
         <div style={{flex:1,overflow:'auto',padding:'20px 24px',background:'#F8FAFC'}}>
-
-          {/* Header con toggle */}
           <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
-            <span style={{fontWeight:700,fontSize:16,color:'#0F172A',fontFamily:"'Playfair Display',serif"}}>Reportes</span>
+            <span style={{fontWeight:700,fontSize:16,color:'#0F172A'}}>Reportes</span>
             {esAdminR && (
               <div style={{display:'flex',gap:4,background:'#F1F5F9',padding:3,borderRadius:8}}>
                 {(['ventas','cobranzas'] as const).map(m=>(
@@ -1702,16 +1497,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 ))}
               </div>
             )}
-            {!esAdminR && (
-              <span style={{fontSize:12,padding:'3px 12px',borderRadius:99,fontWeight:600,
-                background:modoR==='cobranzas'?'#F5F3FF':'#EFF6FF',
-                color:modoR==='cobranzas'?'#6D28D9':'#1D4ED8'}}>
-                {modoR==='cobranzas'?'🔔 Cobranzas':'💼 Ventas'}
-              </span>
-            )}
           </div>
 
-          {/* KPI cards */}
           <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:12,marginBottom:20}}>
             {(modoR==='cobranzas' ? [
               {label:'Total casos',val:rLeadsFinal.length,color:'#7C3AED',icon:'◈',sub:'Histórico total'},
@@ -1731,19 +1518,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   <span style={{fontSize:11,fontWeight:600,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'0.07em',fontFamily:"'DM Mono',monospace"}}>{k.label}</span>
                   <span style={{fontSize:18,color:k.color,opacity:0.6}}>{k.icon}</span>
                 </div>
-                <div style={{fontSize:28,fontWeight:700,color:k.color,fontFamily:"'Playfair Display',serif",lineHeight:1}}>{k.val}</div>
+                <div style={{fontSize:28,fontWeight:700,color:k.color,lineHeight:1}}>{k.val}</div>
                 <div style={{fontSize:11,color:'#94A3B8',marginTop:6,fontFamily:"'DM Mono',monospace"}}>{k.sub}</div>
               </div>
             ))}
           </div>
 
-          {/* Fila 1: Barras de estado + Pie repartición */}
           <div style={{display:'grid',gridTemplateColumns:'1.4fr 1fr',gap:16,marginBottom:16}}>
-
-            {/* Gráfico de barras — distribución por estado */}
             <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'20px 20px 12px'}}>
               <div style={{marginBottom:16}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A',fontFamily:"'Playfair Display',serif"}}>Distribución por estado</div>
+                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Distribución por estado</div>
                 <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Cantidad de leads en cada etapa del proceso</div>
               </div>
               <ResponsiveContainer width="100%" height={220}>
@@ -1752,56 +1536,37 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   margin={{top:0,right:10,left:-10,bottom:40}}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-                  <XAxis dataKey="name" tick={{fontSize:10,fill:'#94A3B8',fontFamily:"'DM Mono',monospace"}} angle={-35} textAnchor="end" interval={0} tickLine={false} axisLine={false}/>
+                  <XAxis dataKey="name" tick={{fontSize:10,fill:'#94A3B8'}} angle={-35} textAnchor="end" interval={0} tickLine={false} axisLine={false}/>
                   <YAxis tick={{fontSize:11,fill:'#94A3B8'}} tickLine={false} axisLine={false} allowDecimals={false}/>
-                  <Tooltip
-                    contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12,boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}
-                    cursor={{fill:'rgba(59,130,246,0.05)'}}
-                    formatter={(val:any)=>[`${val} leads`,'']}
-                  />
+                  <Tooltip contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12}} cursor={{fill:'rgba(59,130,246,0.05)'}} formatter={(val:any)=>[`${val} leads`,'']}/>
                   <Bar dataKey="value" radius={[4,4,0,0]}>
-                    {Object.entries(LEAD_STATUS).map(([k,v],i)=>(
-                      <Cell key={i} fill={v.color}/>
-                    ))}
+                    {Object.entries(LEAD_STATUS).map(([k,v],i)=>(<Cell key={i} fill={v.color}/>))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-
-            {/* Pie chart — repartición */}
             <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'20px 20px 12px'}}>
               <div style={{marginBottom:16}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A',fontFamily:"'Playfair Display',serif"}}>Por repartición</div>
+                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Por repartición</div>
                 <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Composición del segmento activo</div>
               </div>
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
-                  <Pie
-                    data={REPARTICIONES.map(r=>({name:r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB'),value:rLeadsFinal.filter(l=>l.reparticion===r).length})).filter(d=>d.value>0)}
-                    cx="50%" cy="50%" innerRadius={55} outerRadius={90}
-                    paddingAngle={2} dataKey="value"
-                  >
-                    {REPARTICIONES.map((_,i)=>(
-                      <Cell key={i} fill={['#F59E0B','#8B5CF6','#10B981','#F59E0B','#EF4444','#06B6D4','#EC4899'][i%7]}/>
-                    ))}
+                  <Pie data={REPARTICIONES.map(r=>({name:r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB'),value:rLeadsFinal.filter(l=>l.reparticion===r).length})).filter(d=>d.value>0)}
+                    cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={2} dataKey="value">
+                    {REPARTICIONES.map((_,i)=>(<Cell key={i} fill={['#F59E0B','#8B5CF6','#10B981','#F59E0B','#EF4444','#06B6D4','#EC4899'][i%7]}/>))}
                   </Pie>
-                  <Tooltip
-                    contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12,boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}
-                    formatter={(val:any)=>[`${val} leads`,'']}
-                  />
-                  <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:11,fontFamily:"'DM Mono',monospace"}}/>
+                  <Tooltip contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12}} formatter={(val:any)=>[`${val} leads`,'']}/>
+                  <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:11}}/>
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Fila 2: Area chart progreso + Barras asesores */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
-
-            {/* Area chart — embudo de conversión */}
             <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'20px 20px 12px'}}>
               <div style={{marginBottom:16}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A',fontFamily:"'Playfair Display',serif"}}>Embudo de conversión</div>
+                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Embudo de conversión</div>
                 <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Leads que avanzan por cada etapa</div>
               </div>
               <ResponsiveContainer width="100%" height={200}>
@@ -1818,8 +1583,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     {etapa:'Rechazados',leads:rLeadsFinal.filter(l=>l.status==='rejected').length},
                     {etapa:'Cerrados',leads:rLeadsFinal.filter(l=>l.status==='closed').length},
                   ]}
-                  margin={{top:5,right:20,left:-10,bottom:5}}
-                >
+                  margin={{top:5,right:20,left:-10,bottom:5}}>
                   <defs>
                     <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.15}/>
@@ -1827,26 +1591,20 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-                  <XAxis dataKey="etapa" tick={{fontSize:11,fill:'#94A3B8',fontFamily:"'DM Mono',monospace"}} tickLine={false} axisLine={false}/>
+                  <XAxis dataKey="etapa" tick={{fontSize:11,fill:'#94A3B8'}} tickLine={false} axisLine={false}/>
                   <YAxis tick={{fontSize:11,fill:'#94A3B8'}} tickLine={false} axisLine={false} allowDecimals={false}/>
-                  <Tooltip
-                    contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12,boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}
-                    formatter={(val:any)=>[`${val} leads`,'']}
-                  />
+                  <Tooltip contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12}} formatter={(val:any)=>[`${val} leads`,'']}/>
                   <Area type="monotone" dataKey="leads" stroke="#3B82F6" strokeWidth={2} fill="url(#colorLeads)" dot={{fill:'#F59E0B',strokeWidth:0,r:4}}/>
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-
-            {/* Barras horizontales — asesores */}
             <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'20px 20px 12px'}}>
               <div style={{marginBottom:16}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A',fontFamily:"'Playfair Display',serif"}}>Rendimiento por asesor</div>
+                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Rendimiento por asesor</div>
                 <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Leads asignados y cerrados por usuario</div>
               </div>
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart
-                  layout="vertical"
+                <BarChart layout="vertical"
                   data={USERS.filter(u=>u.username!=='Nicolas').map(u=>({
                     name:u.username,
                     asignados:rLeadsFinal.filter(l=>l.assigned_to===u.username).length,
@@ -1855,15 +1613,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                       : rLeadsFinal.filter(l=>l.assigned_to===u.username&&l.status==='closed').length,
                     color:u.color,
                   }))}
-                  margin={{top:0,right:20,left:10,bottom:0}}
-                >
+                  margin={{top:0,right:20,left:10,bottom:0}}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false}/>
                   <XAxis type="number" tick={{fontSize:11,fill:'#94A3B8'}} tickLine={false} axisLine={false} allowDecimals={false}/>
-                  <YAxis type="category" dataKey="name" tick={{fontSize:11,fill:'#64748B',fontFamily:"'DM Mono',monospace"}} tickLine={false} axisLine={false} width={60}/>
-                  <Tooltip
-                    contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12,boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}
-                  />
-                  <Legend iconType="square" iconSize={8} wrapperStyle={{fontSize:11,fontFamily:"'DM Mono',monospace"}}/>
+                  <YAxis type="category" dataKey="name" tick={{fontSize:11,fill:'#64748B'}} tickLine={false} axisLine={false} width={60}/>
+                  <Tooltip contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12}}/>
+                  <Legend iconType="square" iconSize={8} wrapperStyle={{fontSize:11}}/>
                   <Bar dataKey="asignados" name="Asignados" fill="#BFDBFE" radius={[0,4,4,0]}/>
                   <Bar dataKey="cerrados" name="Cerrados" fill="#2563EB" radius={[0,4,4,0]}/>
                 </BarChart>
@@ -1871,13 +1626,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             </div>
           </div>
 
-          {/* Fila 3: Tabla resumen detallada */}
           <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,overflow:'hidden',marginBottom:16}}>
-            <div style={{padding:'16px 20px',borderBottom:'1px solid #F1F5F9',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-              <div>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A',fontFamily:"'Playfair Display',serif"}}>Resumen por repartición</div>
-                <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Desglose completo de estados por organismo</div>
-              </div>
+            <div style={{padding:'16px 20px',borderBottom:'1px solid #F1F5F9'}}>
+              <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Resumen por repartición</div>
             </div>
             <div style={{overflowX:'auto'}}>
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5}}>
@@ -1886,9 +1637,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     {(modoR==='cobranzas'
                       ? ['Repartición','Total','Nuevos','Contactados','Resueltos','No resueltos','% Resolución']
                       : ['Repartición','Total','Nuevos','Contactados','No interesados','Cerrados','Rechazados','% Cierre']
-                    ).map(h=>(
-                      <th key={h} style={{textAlign:'left',padding:'10px 14px',fontSize:10.5,fontWeight:600,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.07em',borderBottom:'1px solid #E2E8F0',fontFamily:"'DM Mono',monospace",whiteSpace:'nowrap'}}>{h}</th>
-                    ))}
+                    ).map(h=>(<th key={h} style={{textAlign:'left',padding:'10px 14px',fontSize:10.5,fontWeight:600,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.07em',borderBottom:'1px solid #E2E8F0',whiteSpace:'nowrap'}}>{h}</th>))}
                   </tr>
                 </thead>
                 <tbody>
@@ -1900,7 +1649,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     const pctCierre=total>0?Math.round(exito/total*100):0
                     return (
                       <tr key={r} style={{borderBottom:'1px solid #F8FAFC'}} onMouseEnter={e=>(e.currentTarget.style.background='#F8FAFC')} onMouseLeave={e=>(e.currentTarget.style.background='white')}>
-                        <td style={{padding:'10px 14px',fontWeight:600,color:'#0F172A',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB')}</td>
+                        <td style={{padding:'10px 14px',fontWeight:600,color:'#0F172A'}}>{r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB')}</td>
                         <td style={{padding:'10px 14px',fontWeight:700,color:modoR==='cobranzas'?'#7C3AED':'#F59E0B',fontFamily:"'DM Mono',monospace"}}>{total}</td>
                         <td style={{padding:'10px 14px',color:'#94A3B8',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='new').length}</td>
                         <td style={{padding:'10px 14px',color:'#06B6D4',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='contacted').length}</td>
@@ -1917,15 +1666,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                             <div style={{flex:1,height:4,background:'#F1F5F9',borderRadius:99,overflow:'hidden',minWidth:40}}>
                               <div style={{height:'100%',width:`${pctCierre}%`,background:'#10B981',borderRadius:99}}/>
                             </div>
-                            <span style={{fontSize:11,fontWeight:700,color:pctCierre>20?'#10B981':pctCierre>10?'#F59E0B':'#94A3B8',fontFamily:"'DM Mono',monospace",minWidth:30}}>{pctCierre}%</span>
+                            <span style={{fontSize:11,fontWeight:700,color:pctCierre>20?'#10B981':pctCierre>10?'#F59E0B':'#94A3B8',minWidth:30}}>{pctCierre}%</span>
                           </div>
                         </td>
                       </tr>
                     )
                   })}
-                  {/* Fila total */}
                   <tr style={{background:'#F8FAFC',borderTop:'2px solid #E2E8F0'}}>
-                    <td style={{padding:'10px 14px',fontWeight:700,color:'#0F172A',fontFamily:"'DM Mono',monospace",fontSize:11,textTransform:'uppercase',letterSpacing:'0.05em'}}>TOTAL</td>
+                    <td style={{padding:'10px 14px',fontWeight:700,color:'#0F172A',fontSize:11,textTransform:'uppercase'}}>TOTAL</td>
                     <td style={{padding:'10px 14px',fontWeight:700,color:modoR==='cobranzas'?'#7C3AED':'#F59E0B',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.length}</td>
                     <td style={{padding:'10px 14px',color:'#94A3B8',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='new').length}</td>
                     <td style={{padding:'10px 14px',color:'#06B6D4',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='contacted').length}</td>
@@ -1948,18 +1696,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             </div>
           </div>
 
-          {/* Fila 4: RadialBar campañas + tabla asesores detallada */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr',gap:16,marginBottom:20}}>
-
-            {/* RadialBar — estados positivos vs negativos */}
             <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'20px 20px 12px'}}>
               <div style={{marginBottom:8}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A',fontFamily:"'Playfair Display',serif"}}>Salud del pipeline</div>
+                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Salud del pipeline</div>
                 <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Estados positivos vs negativos</div>
               </div>
               <ResponsiveContainer width="100%" height={200}>
-                <RadialBarChart
-                  innerRadius="25%" outerRadius="90%"
+                <RadialBarChart innerRadius="25%" outerRadius="90%"
                   data={modoR==='cobranzas' ? [
                     {name:'Resueltos',value:rLeadsFinal.filter(l=>l.status==='resolved').length,fill:'#10B981'},
                     {name:'Contactados',value:rLeadsFinal.filter(l=>l.status==='contacted').length,fill:'#06B6D4'},
@@ -1970,28 +1714,22 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     {name:'No interesados',value:rLeadsFinal.filter(l=>l.status==='not_interested').length,fill:'#6B7280'},
                     {name:'Rechazados',value:rLeadsFinal.filter(l=>l.status==='rejected').length,fill:'#EF4444'},
                   ]}
-                  startAngle={90} endAngle={-270}
-                >
+                  startAngle={90} endAngle={-270}>
                   <RadialBar dataKey="value" cornerRadius={4} background={{fill:'#F8FAFC'}}/>
-                  <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:11,fontFamily:"'DM Mono',monospace"}}/>
-                  <Tooltip
-                    contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12,boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}
-                  />
+                  <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:11}}/>
+                  <Tooltip contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12}}/>
                 </RadialBarChart>
               </ResponsiveContainer>
             </div>
-
-            {/* Tabla detallada asesores */}
             <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,overflow:'hidden'}}>
               <div style={{padding:'16px 20px',borderBottom:'1px solid #F1F5F9'}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A',fontFamily:"'Playfair Display',serif"}}>Detalle por asesor</div>
-                <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Gestión individual del equipo</div>
+                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Detalle por asesor</div>
               </div>
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5}}>
                 <thead>
                   <tr style={{background:'#F8FAFC'}}>
                     {['Asesor','Asignados','Contactados','Cerrados','% Cierre'].map(h=>(
-                      <th key={h} style={{textAlign:'left',padding:'9px 14px',fontSize:10.5,fontWeight:600,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.07em',borderBottom:'1px solid #E2E8F0',fontFamily:"'DM Mono',monospace"}}>{h}</th>
+                      <th key={h} style={{textAlign:'left',padding:'9px 14px',fontSize:10.5,fontWeight:600,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.07em',borderBottom:'1px solid #E2E8F0'}}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -2008,7 +1746,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                           <div style={{display:'flex',alignItems:'center',gap:8}}>
                             <div style={{width:28,height:28,borderRadius:'50%',background:u.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:10,fontWeight:700,flexShrink:0}}>{u.initials}</div>
                             <div>
-                              <div style={{fontWeight:600,color:'#0F172A',fontSize:12.5,fontFamily:"'DM Mono',monospace"}}>{u.username}</div>
+                              <div style={{fontWeight:600,color:'#0F172A',fontSize:12.5}}>{u.username}</div>
                               <div style={{fontSize:10.5,color:'#94A3B8'}}>{u.role}</div>
                             </div>
                           </div>
@@ -2031,7 +1769,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               </table>
             </div>
           </div>
-
         </div>
         )
       })()}
@@ -2086,7 +1823,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             {USERS.map(u=>(
               <div key={u.id} className="mopt" onClick={async()=>{
                 await supabase.from('amat_loan_leads').update({assigned_to:u.username,updated_at:new Date().toISOString()}).eq('id',currentLead.id)
-                // Si cambia de rol (ventas↔cobranzas), actualizar consulta
                 await supabase.from('amat_consultas').update({vendedor:u.username,updated_at:new Date().toISOString()}).eq('phone',currentLead.phone_number||'')
                 setShowAssignModal(false)
               }}>
@@ -2111,8 +1847,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         <div className="movo" onClick={()=>setShowNoteModal(false)}>
           <div className="mod" onClick={e=>e.stopPropagation()}>
             <h3>📝 Nota interna</h3>
-            <p style={{fontSize:12,color:'#64748B',margin:'0 0 12px'}}>Solo visible para el equipo. Quedará registrada con fecha y usuario.</p>
-            <textarea className="ta" placeholder="Ej: Cliente interesado, llamar lunes a las 10hs. Pidió info de 24 cuotas." value={noteText} onChange={e=>setNoteText(e.target.value)}/>
+            <p style={{fontSize:12,color:'#64748B',margin:'0 0 12px'}}>Solo visible para el equipo.</p>
+            <textarea className="ta" placeholder="Ej: Cliente interesado, llamar lunes a las 10hs." value={noteText} onChange={e=>setNoteText(e.target.value)}/>
             <div style={{display:'flex',gap:8,marginTop:14}}>
               <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={saveNote}>Guardar nota</button>
               <button className="btn" style={{flex:1,justifyContent:'center'}} onClick={()=>setShowNoteModal(false)}>Cancelar</button>
@@ -2126,7 +1862,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         <div className="movo" onClick={()=>setShowRejectModal(false)}>
           <div className="mod" onClick={e=>e.stopPropagation()}>
             <h3>✕ Motivo de rechazo</h3>
-            <p style={{fontSize:12,color:'#64748B',margin:'0 0 14px'}}>Seleccioná el motivo para clasificar correctamente este contacto.</p>
             {REJECTION_REASONS.map(r=>(
               <div key={r} className="mopt" style={{background:rejectReason===r?'#FEF2F2':'',borderColor:rejectReason===r?'#FECACA':''}} onClick={()=>setRejectReason(r)}>
                 <div style={{width:16,height:16,borderRadius:'50%',border:`2px solid ${rejectReason===r?'#EF4444':'#E2E8F0'}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
@@ -2163,7 +1898,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               </div>
               <div>
                 <label className="fl">Email</label>
-                <input className="fi" type="email" placeholder="nombre@gmail.com" value={editForm.email||''} onChange={e=>setEditForm(f=>({...f,email:e.target.value}))}/>
+                <input className="fi" type="email" value={editForm.email||''} onChange={e=>setEditForm(f=>({...f,email:e.target.value}))}/>
               </div>
               <div>
                 <label className="fl">Repartición</label>
@@ -2181,11 +1916,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               </div>
               <div>
                 <label className="fl">Monto solicitado</label>
-                <input className="fi" type="number" placeholder="150000" value={editForm.amount||''} onChange={e=>setEditForm(f=>({...f,amount:Number(e.target.value)||null as any}))}/>
+                <input className="fi" type="number" value={editForm.amount||''} onChange={e=>setEditForm(f=>({...f,amount:Number(e.target.value)||null as any}))}/>
               </div>
               <div>
                 <label className="fl">Cuotas</label>
-                <input className="fi" type="number" placeholder="12" value={editForm.installments||''} onChange={e=>setEditForm(f=>({...f,installments:Number(e.target.value)||null as any}))}/>
+                <input className="fi" type="number" value={editForm.installments||''} onChange={e=>setEditForm(f=>({...f,installments:Number(e.target.value)||null as any}))}/>
               </div>
               <div>
                 <label className="fl">Estado</label>
@@ -2219,7 +1954,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           <div className="mod" onClick={e=>e.stopPropagation()}>
             <h3>💬 Plantillas de mensaje</h3>
             <div style={{background:'#FFFBEB',border:'1px solid #FDE68A',borderRadius:10,padding:'10px 14px',marginBottom:16,fontSize:12,color:'#92400E'}}>
-              ⚠️ <strong>Próximamente:</strong> Una vez que el número de AMAT esté verificado en Meta Business, estas plantillas se enviarán directamente desde el CRM como mensajes de WhatsApp. Por ahora podés previsualizar y preparar el contenido.
+              ⚠️ <strong>Próximamente:</strong> Estas plantillas se enviarán directamente desde el CRM como mensajes de WhatsApp una vez que el número esté verificado en Meta Business.
             </div>
             {!selectedTemplate?(
               <>
@@ -2245,13 +1980,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                       <input className="fi" value={templateVars[v]||''} onChange={e=>setTemplateVars(tv=>({...tv,[v]:e.target.value}))}/>
                     </div>
                   ))}
-                  <label className="fl" style={{marginTop:12}}>Vista previa del mensaje</label>
+                  <label className="fl" style={{marginTop:12}}>Vista previa</label>
                   <div style={{background:'#F8FAFC',border:'1px solid #E2E8F0',borderRadius:10,padding:'12px 14px',fontSize:13,lineHeight:1.6,color:'#1E293B',whiteSpace:'pre-wrap'}}>
                     {selectedTemplate.body.replace(/\{\{(\w+)\}\}/g,(_,k)=>templateVars[k]||`[${k}]`)}
                   </div>
-                </div>
-                <div style={{background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:10,padding:'10px 14px',fontSize:12,color:'#1D4ED8',marginBottom:14}}>
-                  📋 Cuando Meta esté conectado, este mensaje se enviará automáticamente al número <strong>{editTarget.phone_number}</strong>
                 </div>
                 <div style={{display:'flex',gap:8}}>
                   <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={()=>{updateStatus(editTarget.id,'attempted');setShowTemplateModal(false)}}>
@@ -2268,9 +2000,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       {/* ══ MODAL: FINALIZAR CONVERSACIÓN ══ */}
       {showFinalizarModal&&currentLead&&(()=>{
         const flujo = flujoMap[currentLead.phone_number||'']||'solicitud'
-        const estadosFinales = flujo==='cobranzas'
-          ? ['resolved','unresolved']
-          : ['not_interested','rejected','closed']
+        const estadosFinales = flujo==='cobranzas' ? ['resolved','unresolved'] : ['not_interested','rejected','closed']
         const yaFinalizado = estadosFinales.includes(currentLead.status||'')
         const statusOpts = flujo==='cobranzas'
           ? Object.entries(COBRANZA_STATUS).filter(([k])=>['resolved','unresolved'].includes(k))
@@ -2280,47 +2010,36 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         return (
           <div className="movo" onClick={()=>{ setShowFinalizarModal(false); setFinalizarEstado('') }}>
             <div className="mod" onClick={e=>e.stopPropagation()} style={{width:420}}>
-              <h3 style={{fontFamily:"'Playfair Display',serif"}}>✓ Finalizar conversación</h3>
+              <h3>✓ Finalizar conversación</h3>
               <p style={{fontSize:13,color:'#64748B',marginBottom:16,lineHeight:1.6}}>
-                Al finalizar, la conversación con <strong>{currentLead.full_name||currentLead.phone_number}</strong> se cerrará
-                y saldrá de tu bandeja. Podrás verla en la pestaña <strong>Consultas</strong> y <strong>Pipeline</strong>.
+                Al finalizar, la conversación con <strong>{currentLead.full_name||currentLead.phone_number}</strong> se cerrará y saldrá de tu bandeja.
               </p>
-
               {yaFinalizado ? (
                 <div style={{background:'#F0FDF4',border:'1px solid #BBF7D0',borderRadius:10,padding:'12px 14px',marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
                   <span style={{fontSize:18}}>✅</span>
                   <div>
-                    <div style={{fontSize:11,color:'#166534',textTransform:'uppercase',letterSpacing:'.07em',fontFamily:"'DM Mono',monospace",marginBottom:2}}>Estado registrado</div>
+                    <div style={{fontSize:11,color:'#166534',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:2}}>Estado registrado</div>
                     <div style={{fontSize:14,fontWeight:600,color:'#166534'}}>{estadoLabel}</div>
-                    <div style={{fontSize:12,color:'#166534',opacity:.7,marginTop:2}}>La conversación se cerrará y quedará guardada en Consultas.</div>
                   </div>
                 </div>
               ) : (
                 <div style={{background:'#FFF7ED',border:'1px solid #FED7AA',borderRadius:10,padding:'12px 14px',marginBottom:16}}>
-                  <div style={{fontSize:12,color:'#C2410C',fontWeight:600,marginBottom:8}}>
-                    ⚠️ Debés elegir un estado final antes de cerrar
-                  </div>
+                  <div style={{fontSize:12,color:'#C2410C',fontWeight:600,marginBottom:8}}>⚠️ Debés elegir un estado final antes de cerrar</div>
                   <label className="fl">Estado final</label>
                   <select className="fs" value={finalizarEstado} onChange={e=>setFinalizarEstado(e.target.value)}>
                     <option value="">— Seleccioná un estado —</option>
-                    {statusOpts.map(([k,v])=>(
-                      <option key={k} value={k}>{v.label}</option>
-                    ))}
+                    {statusOpts.map(([k,v])=>(<option key={k} value={k}>{v.label}</option>))}
                   </select>
                 </div>
               )}
-
               {!yaFinalizado && (
                 <div style={{marginBottom:12}}>
-                  <label className="fl">Anotación / Resolución <span style={{color:'#94A3B8',fontWeight:400}}>(opcional)</span></label>
-                  <textarea className="ta" style={{minHeight:64}} placeholder="Describí qué se resolvió, qué se acordó, motivo de cierre..." value={finalizarNota} onChange={e=>setFinalizarNota(e.target.value)}/>
+                  <label className="fl">Anotación <span style={{color:'#94A3B8',fontWeight:400}}>(opcional)</span></label>
+                  <textarea className="ta" style={{minHeight:64}} placeholder="Describí qué se resolvió, motivo de cierre..." value={finalizarNota} onChange={e=>setFinalizarNota(e.target.value)}/>
                 </div>
               )}
               <div style={{display:'flex',gap:8}}>
-                <button
-                  className="btn pri"
-                  style={{flex:1,justifyContent:'center',opacity:puedeConfirmar?1:0.4}}
-                  disabled={!puedeConfirmar}
+                <button className="btn pri" style={{flex:1,justifyContent:'center',opacity:puedeConfirmar?1:0.4}} disabled={!puedeConfirmar}
                   onClick={async()=>{
                     if(!yaFinalizado&&finalizarEstado) await updateStatus(currentLead.id,finalizarEstado)
                     await finalizarConversacion(yaFinalizado?undefined:finalizarNota)
@@ -2344,9 +2063,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         return (
         <div className="movo" onClick={()=>setShowVentaModal(false)}>
           <div className="mod" onClick={e=>e.stopPropagation()} style={{width:540}}>
-            <h3 style={{fontFamily:"'Playfair Display',serif"}}>🎉 Registrar venta cerrada</h3>
+            <h3>🎉 Registrar venta cerrada</h3>
             <p style={{fontSize:12,color:'#64748B',marginBottom:14}}>El valor de cuota se calcula automáticamente con la grilla AMAT.</p>
-
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
               <div>
                 <label className="fl">Entidad</label>
@@ -2404,12 +2122,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 </div>
               </div>
             </div>
-
             {calcCuota>0&&(
               <div style={{background:'#ECFDF5',border:'1px solid #BBF7D0',borderRadius:10,padding:'12px 16px',marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <div>
-                  <div style={{fontSize:11,color:'#065F46',fontFamily:"'DM Mono',monospace",textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}}>Total por cuota</div>
-                  <div style={{fontSize:26,fontWeight:700,color:'#065F46',fontFamily:"'Playfair Display',serif"}}>{fmtP(calcCuota)}</div>
+                  <div style={{fontSize:11,color:'#065F46',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}}>Total por cuota</div>
+                  <div style={{fontSize:26,fontWeight:700,color:'#065F46'}}>{fmtP(calcCuota)}</div>
                 </div>
                 <div style={{textAlign:'right',fontSize:12,color:'#047857'}}>
                   <div>{ventaForm.entidad} · {ventaForm.linea}</div>
@@ -2417,10 +2134,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 </div>
               </div>
             )}
-
             <div style={{marginBottom:12}}>
               <label className="fl">Notas (opcional)</label>
-              <textarea className="ta" style={{minHeight:56}} placeholder="Observaciones..." value={ventaForm.notas} onChange={e=>setVentaForm((f:any)=>({...f,notas:e.target.value}))}/>
+              <textarea className="ta" style={{minHeight:56}} value={ventaForm.notas} onChange={e=>setVentaForm((f:any)=>({...f,notas:e.target.value}))}/>
             </div>
             <div style={{display:'flex',gap:8}}>
               <button style={{flex:2,padding:'10px',background:'linear-gradient(135deg,#059669,#10B981)',color:'white',border:'none',borderRadius:9,fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:(!ventaForm.entidad||!ventaForm.linea||!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas)?0.4:1}}
@@ -2439,9 +2155,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       {showConsultaModal&&consultaSelected&&(
         <div className="movo" onClick={()=>setShowConsultaModal(false)}>
           <div className="mod" onClick={e=>e.stopPropagation()} style={{width:560}}>
-            <h3 style={{fontFamily:"'Playfair Display',serif"}}>📥 Gestionar consulta</h3>
-
-            {/* Datos del cliente */}
+            <h3>📥 Gestionar consulta</h3>
             <div style={{background:'#F8FAFC',border:'1px solid #E2E8F0',borderRadius:10,padding:'14px 16px',marginBottom:16}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 {[
@@ -2457,20 +2171,18 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   ['Message ID',   consultaSelected.message_id||'—'],
                 ].map(([l,v])=>(
                   <div key={l as string}>
-                    <div style={{fontSize:10,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'.07em',fontFamily:"'DM Mono',monospace",marginBottom:2}}>{l}</div>
+                    <div style={{fontSize:10,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:2}}>{l}</div>
                     <div style={{fontSize:13,color:'#0F172A',fontWeight:500}}>{v as string}</div>
                   </div>
                 ))}
               </div>
               {consultaSelected.consulta_texto&&(
                 <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid #E2E8F0'}}>
-                  <div style={{fontSize:10,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'.07em',fontFamily:"'DM Mono',monospace",marginBottom:4}}>Detalle consulta</div>
+                  <div style={{fontSize:10,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:4}}>Detalle consulta</div>
                   <div style={{fontSize:13,color:'#374151',lineHeight:1.6}}>{consultaSelected.consulta_texto}</div>
                 </div>
               )}
             </div>
-
-            {/* Gestión */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
               <div>
                 <label className="fl">Vendedor asignado</label>
@@ -2491,9 +2203,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             </div>
             <div style={{marginBottom:16}}>
               <label className="fl">Situación / Resolución</label>
-              <textarea className="ta" placeholder="Describí qué pasó con esta consulta, cómo se resolvió, qué se acordó..." value={consultaEdit.situacion} onChange={e=>setConsultaEdit((f:any)=>({...f,situacion:e.target.value}))}/>
+              <textarea className="ta" placeholder="Describí qué pasó con esta consulta..." value={consultaEdit.situacion} onChange={e=>setConsultaEdit((f:any)=>({...f,situacion:e.target.value}))}/>
             </div>
-
             <div style={{display:'flex',gap:8,paddingTop:14,borderTop:'1px solid #F1F5F9'}}>
               <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={async()=>{
                 await supabase.from('amat_consultas').update({
@@ -2513,9 +2224,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
       {/* ══ MODAL: CAMPAÑA WHATSAPP ══ */}
       {showCampana&&(
-        <CampanaModal
-          onClose={()=>setShowCampana(false)}
-        />
+        <CampanaModal onClose={()=>setShowCampana(false)}/>
       )}
 
       {/* ══ MODAL: IMPORTAR / EXPORTAR ══ */}
