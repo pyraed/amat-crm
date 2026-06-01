@@ -354,7 +354,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(phones.length===0){ setBotLeads([]); return }
     supabase.from('amat_loan_leads')
       .select('*')
-      .in('phone_number', phones.slice(0,50000000))
+      .in('phone_number', phones)
       .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved")')
       .eq('archived', false)
       .then(({data})=>{
@@ -373,7 +373,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     // Cargar flujos de consultas
     supabase.from('amat_consultas')
       .select('phone,flujo')
-      .in('phone', phones.slice(0,50000000))
+      .in('phone', phones)
       .then(({data})=>{
         if(data){
           const map: Record<string,string> = {}
@@ -439,7 +439,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       setPipelineLeads(data as LoanLead[])
       const phones = data.map((l:any) => l.phone_number).filter(Boolean)
       if(phones.length > 0) {
-        const { data: cdata } = await supabase.from('amat_consultas').select('phone,flujo').in('phone', phones.slice(0,500))
+        const { data: cdata } = await supabase.from('amat_consultas').select('phone,flujo').in('phone', phones)
         if(cdata) {
           const map: Record<string,string> = {}
           cdata.forEach((r:any) => { if(r.phone) map[r.phone] = r.flujo || 'solicitud' })
@@ -516,7 +516,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   useEffect(()=>{
     if(tab==='bandeja'){
-      supabase.from('amat_messages').select('*').order('created_at',{ascending:false}).limit(500)
+      supabase.from('amat_messages').select('*').order('created_at',{ascending:false}).limit(5000)
         .then(({data})=>{
           if(data) setMessages(data as Message[])
         })
