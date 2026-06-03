@@ -606,6 +606,22 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   const abrirChat = async (lead: LoanLead) => {
     setSelectedPhone(lead.phone_number)
+    // Cargar TODOS los mensajes de este chat específico sin límite
+    if(lead.phone_number) {
+      supabase.from('amat_messages')
+        .select('*')
+        .eq('phone_number', lead.phone_number)
+        .order('created_at', {ascending: true})
+        .then(({data}) => {
+          if(data) {
+            // Mergear con los mensajes existentes sin duplicar
+            setMessages(prev => {
+              const otherMsgs = prev.filter(m => m.phone_number !== lead.phone_number)
+              return [...otherMsgs, ...data as Message[]]
+            })
+          }
+        })
+    }
     if(lead.status === 'new') {
       await supabase.from('amat_loan_leads')
         .update({status:'contacted', updated_at:new Date().toISOString()})
