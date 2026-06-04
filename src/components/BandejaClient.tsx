@@ -1364,10 +1364,13 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             </select>
             <select className="fsel" value={cEstado} onChange={e=>setCEstado(e.target.value)}>
               <option value="all">Todos los estados</option>
+              <option value="nuevo">Nuevo</option>
               <option value="pendiente">Pendiente</option>
               <option value="en_proceso">En proceso</option>
               <option value="resuelto">Resuelto</option>
               <option value="cerrado">Cerrado</option>
+              <option value="cerrado_rechazado">Rechazado</option>
+              <option value="cerrado_no_interesado">No interesado</option>
             </select>
             <select className="fsel" value={cRep} onChange={e=>setCRep(e.target.value)}>
               <option value="all">Todas las reparticiones</option>
@@ -1399,10 +1402,13 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 <tbody>
                   {consultas.map(c=>{
                     const estadoColors: Record<string,{bg:string,text:string}> = {
-                      pendiente:  {bg:'#FFFBEB',text:'#92400E'},
-                      en_proceso: {bg:'#EFF6FF',text:'#1D4ED8'},
-                      resuelto:   {bg:'#ECFDF5',text:'#065F46'},
-                      cerrado:    {bg:'#F8FAFC',text:'#475569'},
+                      nuevo:               {bg:'#F0F9FF',text:'#0369A1'},
+                      pendiente:           {bg:'#FFFBEB',text:'#92400E'},
+                      en_proceso:          {bg:'#EFF6FF',text:'#1D4ED8'},
+                      resuelto:            {bg:'#ECFDF5',text:'#065F46'},
+                      cerrado:             {bg:'#F8FAFC',text:'#475569'},
+                      cerrado_rechazado:   {bg:'#FEF2F2',text:'#DC2626'},
+                      cerrado_no_interesado:{bg:'#F5F3FF',text:'#6D28D9'},
                     }
                     const ec = estadoColors[c.estado] || estadoColors.pendiente
                     return (
@@ -1425,7 +1431,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                         <td style={{fontSize:12,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#64748B'}}>{c.situacion||'—'}</td>
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:ec.bg,color:ec.text}}>
-                            {({'pendiente':'Pendiente','en_proceso':'En proceso','resuelto':'Resuelto','cerrado':'Cerrado'} as any)[c.estado]||c.estado}
+                            {({'nuevo':'Nuevo','pendiente':'Pendiente','en_proceso':'En proceso','resuelto':'Resuelto','cerrado':'Cerrado','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado'} as any)[c.estado]||c.estado}
                           </span>
                         </td>
                         <td>
