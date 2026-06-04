@@ -639,24 +639,23 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setVistaMode('mis_chats')
   }
 
+  // Helper: cargar mensajes de un phone sin límite
+  const cargarMensajes = (phone: string) => {
+    supabase.from('amat_messages')
+      .select('*')
+      .eq('phone_number', phone)
+      .order('created_at', {ascending: true})
+      .then(({data}) => {
+        if(data) setMessages(prev => [
+          ...prev.filter(m => m.phone_number !== phone),
+          ...data as Message[]
+        ])
+      })
+  }
+
   const abrirChat = async (lead: LoanLead) => {
     setSelectedPhone(lead.phone_number)
-    // Cargar TODOS los mensajes de este chat específico sin límite
-    if(lead.phone_number) {
-      supabase.from('amat_messages')
-        .select('*')
-        .eq('phone_number', lead.phone_number)
-        .order('created_at', {ascending: true})
-        .then(({data}) => {
-          if(data) {
-            // Mergear con los mensajes existentes sin duplicar
-            setMessages(prev => {
-              const otherMsgs = prev.filter(m => m.phone_number !== lead.phone_number)
-              return [...otherMsgs, ...data as Message[]]
-            })
-          }
-        })
-    }
+    if(lead.phone_number) cargarMensajes(lead.phone_number)
     if(lead.status === 'new') {
       await supabase.from('amat_loan_leads')
         .update({status:'contacted', updated_at:new Date().toISOString()})
@@ -1570,7 +1569,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                       {col.map(lead=>(
                         <div key={lead.id}
                           style={{background:'white',border:'1px solid #E2E8F0',borderRadius:10,padding:'12px 14px',marginBottom:8,cursor:'pointer',transition:'all .15s',borderLeft:`3px solid ${s.color}`}}
-                          onClick={()=>{setSelectedPhone(lead.phone_number);setTab('bandeja')}}
+                          onClick={()=>{setSelectedPhone(lead.phone_number);setTab('bandeja');if(lead.phone_number)cargarMensajes(lead.phone_number)}}
                           onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.boxShadow='0 4px 14px rgba(0,0,0,.08)';(e.currentTarget as HTMLDivElement).style.transform='translateY(-1px)'}}
                           onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.boxShadow='none';(e.currentTarget as HTMLDivElement).style.transform='none'}}>
                           <div style={{fontWeight:600,fontSize:13,color:'#0F172A',marginBottom:3}}>{lead.full_name||lead.phone_number||'Sin datos'}</div>
