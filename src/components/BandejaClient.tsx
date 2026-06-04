@@ -463,7 +463,25 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       }
     }
 
-    setConsultas([...sinConsulta, ...((data as any[]) || [])])
+    // Deduplicar por teléfono — mostrar solo la más reciente por persona
+    const todasConsultas = [...sinConsulta, ...((data as any[]) || [])]
+    const seenPhones = new Map<string, any>()
+    todasConsultas.forEach(c => {
+      const phone = c.phone || ''
+      if(!phone) return
+      const existing = seenPhones.get(phone)
+      if(!existing) {
+        seenPhones.set(phone, c)
+      } else {
+        // Quedarse con la más reciente
+        const existingDate = new Date(existing.created_at || 0).getTime()
+        const newDate = new Date(c.created_at || 0).getTime()
+        if(newDate > existingDate) seenPhones.set(phone, c)
+      }
+    })
+    // Mantener el orden original (más reciente primero)
+    const consultasUnicas = todasConsultas.filter(c => seenPhones.get(c.phone || '') === c)
+    setConsultas(consultasUnicas)
     setConsultasLoading(false)
   }
 
