@@ -2342,13 +2342,28 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             </div>
             <div style={{display:'flex',gap:8,paddingTop:14,borderTop:'1px solid #F1F5F9'}}>
               <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={async()=>{
-                // Guardar en amat_consultas
-                await supabase.from('amat_consultas').update({
-                  vendedor:  consultaEdit.vendedor,
-                  situacion: consultaEdit.situacion,
-                  estado:    consultaEdit.estado,
-                  updated_at:new Date().toISOString()
-                }).eq('id',consultaSelected.id)
+                // Si es lead sin consulta (id empieza con 'lead_') → INSERT, sino UPDATE
+                if(String(consultaSelected.id).startsWith('lead_')) {
+                  await supabase.from('amat_consultas').insert({
+                    phone:            consultaSelected.phone,
+                    nombre_apellido:  consultaSelected.nombre_apellido,
+                    dni:              consultaSelected.dni,
+                    reparticion_label:consultaSelected.reparticion_label,
+                    flujo:            consultaSelected.flujo||'solicitud',
+                    vendedor:         consultaEdit.vendedor,
+                    situacion:        consultaEdit.situacion,
+                    estado:           consultaEdit.estado,
+                    created_at:       new Date().toISOString(),
+                    updated_at:       new Date().toISOString()
+                  })
+                } else {
+                  await supabase.from('amat_consultas').update({
+                    vendedor:  consultaEdit.vendedor,
+                    situacion: consultaEdit.situacion,
+                    estado:    consultaEdit.estado,
+                    updated_at:new Date().toISOString()
+                  }).eq('id',consultaSelected.id)
+                }
 
                 // Solo si está pendiente y tiene vendedor asignado → llevar a bandeja
                 if(consultaEdit.vendedor && consultaSelected.phone && consultaSelected.estado==='pendiente') {
