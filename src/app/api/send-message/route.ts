@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
             type: 'template',
             template: {
               name: templateName,
-              language: { code: 'es' },
+              language: { code: 'es_AR' },
             },
           }
         : {
