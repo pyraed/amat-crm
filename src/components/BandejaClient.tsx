@@ -1400,13 +1400,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             <select className="fsel" value={cEstado} onChange={e=>setCEstado(e.target.value)}>
               <option value="all">Todos los estados</option>
               <option value="nuevo">Nuevo</option>
-              <option value="nuevo">Nuevo</option>
               <option value="pendiente">Pendiente</option>
               <option value="en_proceso">En proceso</option>
               <option value="resuelto">Resuelto</option>
               <option value="cerrado">Cerrado</option>
-              <option value="cerrado_rechazado">Rechazado</option>
-              <option value="cerrado_no_interesado">No interesado</option>
               <option value="cerrado_rechazado">Rechazado</option>
               <option value="cerrado_no_interesado">No interesado</option>
             </select>
