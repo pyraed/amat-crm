@@ -428,7 +428,42 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if (rep !== 'all')    q = q.eq('reparticion_label', rep)
     const { data, error } = await q
     if (error) console.error('[CONSULTAS] Error Supabase:', error)
-    setConsultas((data as any[]) || [])
+
+    // Traer también leads new sin registro en amat_consultas (sin contactar)
+    // Solo si no hay filtros que los excluirían
+    let sinConsulta: any[] = []
+    const mostrarNuevos = (estado === 'all' || estado === 'nuevo') && !search
+    if(mostrarNuevos) {
+      const phonesConConsulta = (data||[]).map((c:any) => c.phone).filter(Boolean)
+      const { data: leadsNew } = await supabase
+        .from('amat_loan_leads')
+        .select('*')
+        .eq('status','new')
+        .eq('archived', false)
+        .order('created_at', { ascending: false })
+      if(leadsNew) {
+        sinConsulta = leadsNew
+          .filter((l:any) => !phonesConConsulta.includes(l.phone_number))
+          .map((l:any) => ({
+            id: `lead_${l.id}`,
+            phone: l.phone_number,
+            nombre_apellido: l.full_name,
+            dni: l.dni,
+            reparticion_label: l.reparticion,
+            flujo: flujoMap[l.phone_number||'']||'solicitud',
+            prestacion: null,
+            afiliado: null,
+            vendedor: l.assigned_to,
+            situacion: null,
+            estado: 'nuevo',
+            created_at: l.created_at,
+            _esLeadSinConsulta: true,
+          }))
+          .filter((c:any) => flujo === 'all' || c.flujo === flujo)
+      }
+    }
+
+    setConsultas([...sinConsulta, ...((data as any[]) || [])])
     setConsultasLoading(false)
   }
 
@@ -1365,10 +1400,13 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             <select className="fsel" value={cEstado} onChange={e=>setCEstado(e.target.value)}>
               <option value="all">Todos los estados</option>
               <option value="nuevo">Nuevo</option>
+              <option value="nuevo">Nuevo</option>
               <option value="pendiente">Pendiente</option>
               <option value="en_proceso">En proceso</option>
               <option value="resuelto">Resuelto</option>
               <option value="cerrado">Cerrado</option>
+              <option value="cerrado_rechazado">Rechazado</option>
+              <option value="cerrado_no_interesado">No interesado</option>
               <option value="cerrado_rechazado">Rechazado</option>
               <option value="cerrado_no_interesado">No interesado</option>
             </select>
@@ -1435,22 +1473,38 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                           </span>
                         </td>
                         <td>
-                          <div style={{display:'flex',gap:4}}>
+                          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
                             <button className="btn" style={{padding:'4px 9px',fontSize:11}} onClick={e=>{e.stopPropagation();setConsultaSelected(c);setConsultaEdit({vendedor:c.vendedor||'',situacion:c.situacion||'',estado:c.estado||'pendiente'});setShowConsultaModal(true)}}>
                               ✏️ Gestionar
                             </button>
+                            <button className="btn" style={{padding:'4px 9px',fontSize:11,borderColor:'#6EE7B7',color:'#065F46',background:'#ECFDF5'}} onClick={async e=>{
+                              e.stopPropagation()
+                              setTab('bandeja')
+                              setSelectedPhone(c.phone)
+                              // Cargar historial completo del chat
+                              const {data:msgs} = await supabase.from('amat_messages')
+                                .select('*').eq('phone_number',c.phone)
+                                .order('created_at',{ascending:true})
+                              if(msgs) setMessages(prev=>[...prev.filter(m=>m.phone_number!==c.phone),...msgs as Message[]])
+                              // Si el lead no está en botLeads traerlo igual
+                              if(!allLeads.find(l=>l.phone_number===c.phone)){
+                                const {data:lead} = await supabase.from('amat_loan_leads')
+                                  .select('*').eq('phone_number',c.phone).single()
+                                if(lead) setBotLeads(prev=>prev.find(l=>l.phone_number===c.phone)?prev:[lead as any,...prev])
+                              }
+                            }}>
+                              💬 Chat
+                            </button>
                             <button className="btn war" style={{padding:'4px 9px',fontSize:11}} onClick={e=>{
                               e.stopPropagation()
-                              // Buscar el lead correspondiente a esta consulta
                               const lead = baseLeads.find(l=>l.phone_number===c.phone)||allLeads.find(l=>l.phone_number===c.phone)
                               if(lead) openTemplate(lead)
                               else {
-                                // Si no está en baseLeads, crear un lead mínimo para el modal
                                 setEditTarget({id:0,phone_number:c.phone,full_name:c.nombre_apellido||c.phone,reparticion:c.reparticion||'',status:'new',archived:false} as any)
                                 setSelectedTemplate(null); setTemplateVars({}); setShowTemplateModal(true)
                               }
                             }}>
-                              💬 Plantilla
+                              📋 Plantilla
                             </button>
                           </div>
                         </td>
