@@ -13,16 +13,16 @@ export async function POST(req: NextRequest) {
     const accessToken   = process.env.WHATSAPP_ACCESS_TOKEN || process.env.META_TOKEN
 
     if (phoneNumberId && accessToken) {
-      // Armar body según si es plantilla o texto libre
+      const templateName = template === 'ayuda_economica' ? 'primer_contacto_esp' : template
+
       const waBody = template
         ? {
             messaging_product: 'whatsapp',
             to: phone,
             type: 'template',
             template: {
-              // Mapear IDs internos a nombres aprobados por Meta
-              name: template === 'ayuda_economica' ? 'primer_contacto_esp' : template,
-              language: { code: 'es_AR' },
+              name: templateName,
+              language: { code: 'es' },
             },
           }
         : {
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
           }
 
       const waRes = await fetch(
-        `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+        `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
         {
           method: 'POST',
           headers: {
@@ -43,13 +43,15 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify(waBody),
         }
       )
+
       if (!waRes.ok) {
         const err = await waRes.json()
-        console.error('WhatsApp API error:', err)
+        console.error('WhatsApp API error:', JSON.stringify(err))
+        // Devolver el error real para debug
+        return NextResponse.json({ ok: false, error: err }, { status: 200 })
       }
     }
 
-    // Texto a guardar en Supabase (para plantillas guardamos el contenido real)
     const TEMPLATES: Record<string, string> = {
       recontacto: 'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
       ayuda_economica: 'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
