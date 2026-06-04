@@ -15,7 +15,7 @@ export default async function Home() {
     const { data } = await supabaseAdmin
       .from('amat_loan_leads')
       .select('*')
-      .in('phone_number', phones)
+      .in('phone_number', phones.slice(0,500))
       .not('status', 'in', `(${ESTADOS_EXCLUIDOS.map(s => `"${s}"`).join(',')})`)
       .eq('archived', false)
     leads = (data as LoanLead[]) || []
