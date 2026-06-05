@@ -2383,26 +2383,27 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   }).eq('id',consultaSelected.id)
                 }
 
-                // Solo si está pendiente y tiene vendedor asignado → llevar a bandeja
-                if(consultaEdit.vendedor && consultaSelected.phone && consultaSelected.estado==='pendiente') {
+                // SIEMPRE actualizar assigned_to en amat_loan_leads cuando se asigna vendedor
+                if(consultaEdit.vendedor && consultaSelected.phone) {
                   const {data: existingLead} = await supabase
                     .from('amat_loan_leads')
-                    .select('id,archived,assigned_to')
+                    .select('id,archived,assigned_to,status')
                     .eq('phone_number', consultaSelected.phone)
                     .single()
 
                   if(existingLead) {
-                    // Actualizar lead existente — desarchivarlo y asignarlo
-                    await supabase.from('amat_loan_leads').update({
+                    const updateData: any = {
                       assigned_to: consultaEdit.vendedor,
                       archived:    false,
-                      status:      'contacted',
                       updated_at:  new Date().toISOString()
-                    }).eq('id', existingLead.id)
+                    }
+                    // Solo cambiar status a contacted si estaba en new
+                    if(existingLead.status === 'new') updateData.status = 'contacted'
+                    await supabase.from('amat_loan_leads').update(updateData).eq('id', existingLead.id)
                     // Actualizar en memoria para que aparezca en bandeja
                     setBotLeads(prev => {
                       const exists = prev.find(l=>l.id===existingLead.id)
-                      if(exists) return prev.map(l=>l.id===existingLead.id?{...l,assigned_to:consultaEdit.vendedor,archived:false,status:'contacted' as any}:l)
+                      if(exists) return prev.map(l=>l.id===existingLead.id?{...l,...updateData}:l)
                       // Si no estaba en bandeja, recargarlo
                       supabase.from('amat_loan_leads').select('*').eq('id',existingLead.id).single()
                         .then(({data})=>{ if(data) setBotLeads(p=>[data as any,...p]) })
