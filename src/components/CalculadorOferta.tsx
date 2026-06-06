@@ -76,12 +76,16 @@ const TABLA_BAPRO: Record<number,number> = {
 // ─────────────────────────────────────────────
 //  DOCUMENTACIÓN por repartición
 // ─────────────────────────────────────────────
-const DOCS: Record<string, string[]> = {
+// Docs según línea
+const DOCS_HABERES: Record<string, string[]> = {
   policia:   ['DNI frente y dorso','Certificado de Afectación','Comprobante de Servicio','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
   spb:       ['DNI frente y dorso','Certificado de Afectación','Comprobante de Servicio','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
   educacion: ['DNI frente y dorso','Certificado de Afectación','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
   salud:     ['DNI frente y dorso','Certificado de Afectación','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
 }
+const DOCS_AYUDA = ['DNI frente y dorso','Servicio','Datero completo','Recibo','Selfie con DNI en mano','CBU','Movimientos']
+const DOCS_BAPRO = ['DNI frente y dorso','Servicio','Datero completo','Recibo','Selfie con DNI en mano','CBU','Movimientos','Foto tarjeta de débito (frente y dorso)']
+const DOCS: Record<string, string[]> = DOCS_HABERES
 
 const fmt = (n: number) =>
   '$ ' + n.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')
@@ -98,7 +102,9 @@ function generarMensaje(params: {
 }): string {
   const { linea, entidad, reparticion, monto, cuotas, total, link, nombre } = params
   const saludo = nombre ? `${nombre} tenemos esta oferta para vos. 👋\n\n` : ''
-  const docs = DOCS[reparticion] || DOCS['educacion']
+  const docs = linea === 'bapro' ? DOCS_BAPRO :
+               linea === 'ayuda' ? DOCS_AYUDA :
+               (DOCS_HABERES[reparticion] || DOCS_HABERES['educacion'])
   const entLabel = entidad === 'dos_agosto' ? 'DOS DE AGOSTO' : 'AMAT'
   const repLabel = reparticion.charAt(0).toUpperCase() + reparticion.slice(1)
 
