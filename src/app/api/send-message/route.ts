@@ -2,20 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
 const META_TEMPLATE_NAMES: Record<string, string> = {
-  'primer_contacto_esp':              'primer_contacto_esp',
-  'recontacto':                       'recontacto',
+  'primer_contacto_esp':                  'primer_contacto_esp',
+  'recontacto':                           'recontacto',
   // aliases legacy
-  'ayuda_economica':                  'primer_contacto_esp',
+  'ayuda_economica':                      'primer_contacto_esp',
   'ayuda_economica_primer_contacto_amat': 'primer_contacto_esp',
-  'recontacto_sin_respuesta_amat':    'recontacto',
-  'informacion_general_amat':         'recontacto',
+  'recontacto_sin_respuesta_amat':        'recontacto',
+  'informacion_general_amat':             'recontacto',
 }
 
+// Plantillas definidas en Meta SIN variables — no mandar components
+const TEMPLATES_SIN_PARAMS = ['primer_contacto_esp', 'recontacto']
+
 const TEMPLATES_SAVE: Record<string, string> = {
-  'primer_contacto_esp': 'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
-  'recontacto':          'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
-  // aliases legacy
-  'ayuda_economica':     'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
+  'primer_contacto_esp':           'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
+  'recontacto':                    'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
+  'ayuda_economica':               'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
   'recontacto_sin_respuesta_amat': 'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
 }
 
@@ -47,9 +49,11 @@ export async function POST(req: NextRequest) {
     if (phoneNumberId && accessToken) {
       const metaName = META_TEMPLATE_NAMES[resolvedTemplate] || resolvedTemplate
 
-      // Components solo si hay templateParams (campaña masiva)
+      // No mandar components si la plantilla en Meta no tiene variables
       const components =
-        templateParams && Object.keys(templateParams).length > 0
+        templateParams &&
+        Object.keys(templateParams).length > 0 &&
+        !TEMPLATES_SIN_PARAMS.includes(metaName)
           ? [{
               type: 'body',
               parameters: Object.values(templateParams).map((val: any) => ({
