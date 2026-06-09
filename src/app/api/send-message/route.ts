@@ -1,28 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
+const META_TEMPLATE_NAMES: Record<string, string> = {
+  'primer_contacto_esp': 'primer_contacto_esp',
+  'recontacto':          'recontacto',
+  // aliases por si algo viejo lo sigue llamando así
+  'ayuda_economica':                      'primer_contacto_esp',
+  'ayuda_economica_primer_contacto_amat': 'primer_contacto_esp',
+  'recontacto_sin_respuesta_amat':        'recontacto',
+  'informacion_general_amat':             'recontacto', // no existe en Meta, fallback a recontacto
+}
+
+const TEMPLATES_SAVE: Record<string, string> = {
+  'primer_contacto_esp': 'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
+  'recontacto':          'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { phone, text, senderName, template } = await req.json()
+    const { phone, text, senderName, templateName, templateParams } = await req.json()
 
-    if (!phone || (!text && !template)) {
-      return NextResponse.json({ error: 'phone y text o template son requeridos' }, { status: 400 })
+    if (!phone || (!text && !templateName)) {
+      return NextResponse.json({ error: 'phone y (text o templateName) son requeridos' }, { status: 400 })
     }
 
     const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID
-    const accessToken   = process.env.WHATSAPP_ACCESS_TOKEN || process.env.META_TOKEN
+    const accessToken   = process.env.WHATSAPP_ACCESS_TOKEN   || process.env.META_TOKEN
 
     if (phoneNumberId && accessToken) {
-      const templateName = template === 'ayuda_economica' ? 'primer_contacto_esp' : template
+      const metaName = META_TEMPLATE_NAMES[templateName] || templateName
 
-      const waBody = template
+      // Armar components con las variables si las hay
+      // El orden de Object.values tiene que coincidir con el orden de {{1}}, {{2}} en Meta
+      const components =
+        templateParams && Object.keys(templateParams).length > 0
+          ? [{
+              type: 'body',
+              parameters: Object.values(templateParams).map((val: any) => ({
+                type: 'text',
+                text: String(val),
+              })),
+            }]
+          : []
+
+      const waBody = templateName
         ? {
             messaging_product: 'whatsapp',
             to: phone,
             type: 'template',
             template: {
-              name: templateName,
+              name: metaName,
               language: { code: 'es_AR' },
+              ...(components.length > 0 && { components }),
             },
           }
         : {
@@ -47,18 +76,17 @@ export async function POST(req: NextRequest) {
       if (!waRes.ok) {
         const err = await waRes.json()
         console.error('WhatsApp API error:', JSON.stringify(err))
-        // Devolver el error real para debug
-        return NextResponse.json({ ok: false, error: err }, { status: 200 })
+        // Status real para que el frontend lo detecte correctamente
+        return NextResponse.json(
+          { ok: false, error: err?.error?.message || JSON.stringify(err) },
+          { status: waRes.status }
+        )
       }
     }
 
-    const TEMPLATES: Record<string, string> = {
-      recontacto: 'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
-      ayuda_economica: 'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
-      primer_contacto_esp: 'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
-    }
-
-    const bodyToSave = template ? (TEMPLATES[template] || template) : text
+    const bodyToSave = templateName
+      ? (TEMPLATES_SAVE[META_TEMPLATE_NAMES[templateName] || templateName] || templateName)
+      : text
 
     await supabaseAdmin.from('amat_messages').insert({
       phone_number: phone,
