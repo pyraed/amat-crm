@@ -498,7 +498,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // Cargar datos del pipeline
   const loadPipeline = async () => {
-    const { data } = await supabase.from('amat_loan_leads').select('*').order('updated_at', { ascending: false })
+    const { data } = await supabase.from('amat_loan_leads').select('*').order('updated_at', { ascending: false }).limit(10000)
     if(data) {
       setPipelineLeads(data as LoanLead[])
       const phones = data.map((l:any) => l.phone_number).filter(Boolean)
@@ -520,6 +520,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .from('amat_loan_leads')
       .select('*')
       .order('updated_at', { ascending: false })
+      .limit(10000)
     setReporteLeads((data as LoanLead[]) || [])
     if(data) {
       const hoy = new Date().toDateString()
