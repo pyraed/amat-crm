@@ -14,7 +14,7 @@ const TEMPLATES = [
     category: 'MARKETING',
     body: `Hola {{nombre}} 👋 Te contactamos desde *AMAT* (Asociación Mutual Amarilla de Trabajadores).\n\nComo empleado/a de {{reparticion}}, podés acceder a una *Ayuda Económica* con descuento directo en tu recibo de sueldo.\n\n¿Te interesa que te contemos más? Respondé *SI* para continuar.`,
     variables: ['nombre', 'reparticion'],
-    metaName: 'ayuda_economica_primer_contacto_amat',
+    metaName: 'primer_contacto_esp',
   },
   {
     id: 'recontacto',
@@ -22,16 +22,9 @@ const TEMPLATES = [
     category: 'MARKETING',
     body: `Hola {{nombre}}, te escribimos nuevamente desde *AMAT*.\n\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Es sin garante y con descuento por recibo.\n\n¿Podemos ayudarte?`,
     variables: ['nombre'],
-    metaName: 'recontacto_sin_respuesta_amat',
+    metaName: 'recontacto',
   },
-  {
-    id: 'info_general',
-    name: 'Información general',
-    category: 'UTILITY',
-    body: `Hola {{nombre}} 👋 Desde *AMAT* te informamos que contamos con Ayudas Económicas para empleados públicos de la Provincia de Buenos Aires.\n\n✅ Sin garante\n✅ Descuento por recibo\n✅ Aprobación rápida\n\nEscribinos para más info.`,
-    variables: ['nombre'],
-    metaName: 'informacion_general_amat',
-  },
+  // info_general eliminada — no existe en Meta todavía
 ]
 
 const REPARTICIONES = [
@@ -174,17 +167,28 @@ export default function CampanaModal({ onClose }: Props) {
   const sendMessage = async (lead: LoanLead): Promise<{ ok: boolean; error?: string }> => {
     if (!lead.phone_number) return { ok: false, error: 'Sin teléfono' }
 
-    const body = previewMessage(lead)
+    // Armar parámetros por separado — el orden tiene que coincidir
+    // con el orden de {{1}}, {{2}} en la plantilla de Meta
+    const templateParams: Record<string, string> = {}
+    selectedTpl.variables.forEach(v => {
+      if (v === 'nombre') {
+        templateParams[v] = (useContactName && lead.full_name?.trim()) ? lead.full_name.trim() : (tplVars[v] || '')
+      } else if (v === 'reparticion') {
+        templateParams[v] = (useContactRep && lead.reparticion) ? lead.reparticion : (tplVars[v] || '')
+      } else {
+        templateParams[v] = tplVars[v] || ''
+      }
+    })
 
     try {
       const res = await fetch('/api/send-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone:      lead.phone_number,
-          text:       body,
-          senderName: 'Campaña AMAT',
-          template:   selectedTpl.metaName,
+          phone:          lead.phone_number,
+          templateName:   selectedTpl.metaName,
+          templateParams,
+          senderName:     'Campaña AMAT',
         }),
       })
 
