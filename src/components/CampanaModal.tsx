@@ -116,7 +116,7 @@ export default function CampanaModal({ onClose }: Props) {
   const loadContacts = async () => {
     setLoadingContacts(true)
     let q = supabase
-      .from('loan_leads')
+      .from('amat_loan_leads')
       .select('*')
       .not('phone_number', 'is', null)
 
@@ -199,8 +199,8 @@ export default function CampanaModal({ onClose }: Props) {
 
       // Actualizar estado del lead a "attempted"
       await supabase
-        .from('loan_leads')
-        .update({ status: 'attempted', updated_at: new Date().toISOString() })
+        .from('amat_loan_leads')
+        .update({ status: 'contacted', updated_at: new Date().toISOString() })
         .eq('id', lead.id)
 
       return { ok: true }
