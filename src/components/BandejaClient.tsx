@@ -65,6 +65,9 @@ const REPARTICIONES = [
   'MINISTERIO DE EDUCACION',
   'SERVICIO PENITENCIARIO BONAERENSE',
   'MINISTERIO DE SALUD',
+  'Ministerio de Salud',
+  'Servicio Penitenciario bonaerense',
+  'Ministerio de Educacion'
 ]
 
 const BANCOS = [
