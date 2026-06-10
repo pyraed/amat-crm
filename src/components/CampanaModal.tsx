@@ -32,6 +32,9 @@ const REPARTICIONES = [
   'MINISTERIO DE EDUCACION',
   'SERVICIO PENITENCIARIO BONAERENSE',
   'MINISTERIO DE SALUD',
+  'Ministerio de Salud',
+  'Ministerio de Educacion',
+  'Servicio Penitenciario bonaerense'
 ]
 
 // Límites seguros por hora según nivel de Meta
