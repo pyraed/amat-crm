@@ -497,37 +497,68 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   },[cSearch, cFlujo, cEstado, cRep]) // eslint-disable-line
 
   // Cargar datos del pipeline
-  const loadPipeline = async () => {
-    const { data } = await supabase.from('amat_loan_leads').select('*').order('updated_at', { ascending: false }).limit(10000)
-    if(data) {
-      setPipelineLeads(data as LoanLead[])
-      const phones = data.map((l:any) => l.phone_number).filter(Boolean)
-      if(phones.length > 0) {
-        const { data: cdata } = await supabase.from('amat_consultas').select('phone,flujo').in('phone', phones)
-        if(cdata) {
-          const map: Record<string,string> = {}
-          cdata.forEach((r:any) => { if(r.phone) map[r.phone] = r.flujo || 'solicitud' })
-          setPipelineFlujoMap(map)
-        }
-      }
-    }
-  }
+const loadPipeline = async () => {
+  let allData: any[] = []
+  let from = 0
 
-  // Cargar datos de reportes
-  const loadReportes = async () => {
-    setReporteLoading(true)
+  while (true) {
     const { data } = await supabase
       .from('amat_loan_leads')
       .select('*')
       .order('updated_at', { ascending: false })
-      .limit(10000)
-    setReporteLeads((data as LoanLead[]) || [])
-    if(data) {
-      const hoy = new Date().toDateString()
-      setCerradosHoyCount(data.filter((l:any)=>l.status==='closed'&&new Date(l.updated_at).toDateString()===hoy).length)
-    }
-    setReporteLoading(false)
+      .range(from, from + 999)
+
+    if (!data || data.length === 0) break
+    allData = [...allData, ...data]
+    if (data.length < 1000) break
+    from += 1000
   }
+
+  setPipelineLeads(allData as LoanLead[])
+
+  const phones = allData.map((l: any) => l.phone_number).filter(Boolean)
+  if (phones.length > 0) {
+    // amat_consultas también puede tener más de 1000 — hacerlo en lotes
+    const BATCH = 200
+    const chunks = Array.from({ length: Math.ceil(phones.length / BATCH) }, (_, i) =>
+      phones.slice(i * BATCH, (i + 1) * BATCH)
+    )
+    const results = await Promise.all(
+      chunks.map(chunk =>
+        supabase.from('amat_consultas').select('phone,flujo').in('phone', chunk).then(({ data }) => data || [])
+      )
+    )
+    const map: Record<string, string> = {}
+    results.flat().forEach((r: any) => { if (r.phone) map[r.phone] = r.flujo || 'solicitud' })
+    setPipelineFlujoMap(map)
+  }
+}
+
+
+  // Cargar datos de reportes
+  const loadReportes = async () => {
+  setReporteLoading(true)
+  let allData: any[] = []
+  let from = 0
+
+  while (true) {
+    const { data } = await supabase
+      .from('amat_loan_leads')
+      .select('id, status, reparticion, assigned_to, updated_at, phone_number')
+      .order('updated_at', { ascending: false })
+      .range(from, from + 999)
+
+    if (!data || data.length === 0) break
+    allData = [...allData, ...data]
+    if (data.length < 1000) break
+    from += 1000
+  }
+
+  setReporteLeads(allData as LoanLead[])
+  const hoy = new Date().toDateString()
+  setCerradosHoyCount(allData.filter((l: any) => l.status === 'closed' && new Date(l.updated_at).toDateString() === hoy).length)
+  setReporteLoading(false)
+}
 
   // Cargar base paginada
   const baseSearchRef   = useRef(baseSearch)
