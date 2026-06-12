@@ -419,12 +419,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   useEffect(()=>{ cEstadoRef.current = cEstado },[cEstado])
   useEffect(()=>{ cRepRef.current    = cRep    },[cRep])
 
-  const loadConsultas = async (repOverride?: string) => {
+  const loadConsultas = async (
+    repOverride?: string,
+    flujoOverride?: string,
+    estadoOverride?: string,
+    searchOverride?: string,
+  ) => {
     setConsultasLoading(true)
-    const search = cSearchRef.current
-    const flujo  = cFlujoRef.current
-    const estado = cEstadoRef.current
-    const rep    = repOverride ?? cRepRef.current
+    const search = searchOverride ?? cSearchRef.current
+    const flujo  = flujoOverride  ?? cFlujoRef.current
+    const estado = estadoOverride ?? cEstadoRef.current
+    const rep    = repOverride    ?? cRepRef.current
 
     let q = supabase.from('amat_consultas').select('*').order('created_at', { ascending: false })
     if (search)          q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
@@ -497,7 +502,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   },[tab]) // eslint-disable-line
 
   useEffect(()=>{
-    if(tab==='consultas') loadConsultas(cRep)
+    if(tab==='consultas') loadConsultas(cRep, cFlujo, cEstado, cSearch)
   },[cSearch, cFlujo, cEstado, cRep]) // eslint-disable-line
 
   // Cargar datos del pipeline
