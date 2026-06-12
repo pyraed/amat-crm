@@ -435,7 +435,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if (search)          q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
     if (flujo !== 'all')  q = q.eq('flujo', flujo)
     if (estado !== 'all') q = q.eq('estado', estado)
-    if (rep !== 'all')    q = q.eq('reparticion_label', rep)
+    if (rep !== 'all')    q = q.ilike('reparticion_label', rep)
     const { data, error } = await q
     if (error) console.error('[CONSULTAS] Error Supabase:', error)
 
@@ -470,6 +470,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             _esLeadSinConsulta: true,
           }))
           .filter((c:any) => flujo === 'all' || c.flujo === flujo)
+          .filter((c:any) => rep === 'all' || (c.reparticion_label||'').toUpperCase() === rep.toUpperCase())
       }
     }
 
