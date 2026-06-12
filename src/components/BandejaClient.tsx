@@ -496,7 +496,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   },[tab]) // eslint-disable-line
 
   useEffect(()=>{
-    if(tab==='consultas') loadConsultas()
+    if(tab==='consultas') loadConsultas(cRep)
   },[cSearch, cFlujo, cEstado, cRep]) // eslint-disable-line
 
   // Cargar datos del pipeline
