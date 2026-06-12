@@ -203,6 +203,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // Filtros bandeja
   const [bandejaSearch, setBandejaSearch] = useState('')
   const [bandejaStatus, setBandejaStatus] = useState('all')
+  const [soloNoLeidos, setSoloNoLeidos]   = useState(false)
   const [vistaMode, setVistaMode]         = useState<'cola'|'mis_chats'>('cola')
   // Mapa phone → flujo (solicitud|cobranzas) cargado de amat_consultas
   const [flujoMap, setFlujoMap]           = useState<Record<string,string>>({})
@@ -878,9 +879,27 @@ const loadPipeline = async () => {
     const q=bandejaSearch.toLowerCase()
     const m=!q||(l.full_name||'').toLowerCase().includes(q)||(l.phone_number||'').includes(q)||(l.dni||'').includes(q)
     const s=bandejaStatus==='all'||l.status===bandejaStatus
+    if(soloNoLeidos) {
+      const hasUnread = messages.some(msg =>
+        msg.phone_number === l.phone_number &&
+        msg.direction === 'in' &&
+        new Date(msg.created_at) > new Date(l.updated_at)
+      )
+      if(!hasUnread) return false
+    }
     return m&&s
+  }).sort((a, b) => {
+    const lastA = messages
+      .filter(m => m.phone_number === a.phone_number && m.direction === 'in')
+      .sort((x, y) => new Date(y.created_at).getTime() - new Date(x.created_at).getTime())[0]
+    const lastB = messages
+      .filter(m => m.phone_number === b.phone_number && m.direction === 'in')
+      .sort((x, y) => new Date(y.created_at).getTime() - new Date(x.created_at).getTime())[0]
+    const timeA = lastA ? new Date(lastA.created_at).getTime() : 0
+    const timeB = lastB ? new Date(lastB.created_at).getTime() : 0
+    return timeB - timeA
   })
-
+  
   const currentLead=allLeads.find(l=>l.phone_number===selectedPhone)
   const currentMsgs=messages.filter(m=>m.phone_number===selectedPhone).sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())
 
@@ -1073,6 +1092,9 @@ const loadPipeline = async () => {
                 <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'#94A3B8',fontSize:13,pointerEvents:'none'}}>🔍</span>
                 <input className="si" placeholder="Buscar..." value={bandejaSearch} onChange={e=>setBandejaSearch(e.target.value)}/>
               </div>
+              <button onClick={()=>setSoloNoLeidos(p=>!p)} style={{padding:"5px 10px",borderRadius:6,border:"1px solid #E2E8F0",background:soloNoLeidos?"#FFFBEB":"white",color:soloNoLeidos?"#B45309":"#64748B",fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",transition:"all .15s",alignSelf:"flex-start"}}>
+                {soloNoLeidos ? "🔔 Solo no leídos" : "🔔 Todos"}
+              </button>
             </div>
 
             <div style={{flex:1,overflowY:'auto'}}>
