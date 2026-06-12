@@ -418,12 +418,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   useEffect(()=>{ cEstadoRef.current = cEstado },[cEstado])
   useEffect(()=>{ cRepRef.current    = cRep    },[cRep])
 
-  const loadConsultas = async () => {
+  const loadConsultas = async (repOverride?: string) => {
     setConsultasLoading(true)
     const search = cSearchRef.current
     const flujo  = cFlujoRef.current
     const estado = cEstadoRef.current
-    const rep    = cRepRef.current
+    const rep    = repOverride ?? cRepRef.current
 
     let q = supabase.from('amat_consultas').select('*').order('created_at', { ascending: false })
     if (search)          q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
