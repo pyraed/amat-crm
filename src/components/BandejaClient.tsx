@@ -28,6 +28,7 @@ const USERS: SysUser[] = [
   { id:'7',  username:'Facundo',  password:'Mutual2026',   displayName:'Facundo',  role:'Vendedor',      initials:'FA', color:'#8B5CF6' },
   { id:'8',  username:'Emanuel',  password:'Mutual2026',   displayName:'Emanuel',  role:'Cobranza',      initials:'EM', color:'#7C3AED' },
   { id:'10', username:'Matias',   password:'Mutual2026',   displayName:'Matias',   role:'Vendedor',      initials:'MT', color:'#0EA5E9' },
+  { id:'11', username:'Gonzalo',   password:'Mutual2026',   displayName:'Gonzalo',   role:'Vendedor',      initials:'GO', color:'#0EA5E9' },
 ]
 
 // ─────────────────────────────────────────────
