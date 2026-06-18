@@ -1446,7 +1446,14 @@ const loadPipeline = async () => {
                                 setSelectedPhone(lead.phone_number)
                                 if(lead.phone_number) cargarMensajes(lead.phone_number)
                                 if(!allLeads.find(l=>l.phone_number===lead.phone_number)){
-                                  setBotLeads(prev=>prev.find(l=>l.phone_number===lead.phone_number)?prev:[lead,...prev])
+                                  const { data } = await supabase
+                                    .from('amat_loan_leads')
+                                    .select('*')
+                                    .eq('phone_number', lead.phone_number)
+                                    .single()
+                                  if(data) setBotLeads(prev =>
+                                    prev.find(l=>l.phone_number===lead.phone_number) ? prev : [data as LoanLead, ...prev]
+                                  )
                                 }
                               }}>
                               💬 Chat
