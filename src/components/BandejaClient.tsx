@@ -28,6 +28,8 @@ const USERS: SysUser[] = [
   { id:'7',  username:'Facundo',  password:'Mutual2026',   displayName:'Facundo',  role:'Vendedor',      initials:'FA', color:'#8B5CF6' },
   { id:'8',  username:'Emanuel',  password:'Mutual2026',   displayName:'Emanuel',  role:'Cobranza',      initials:'EM', color:'#7C3AED' },
   { id:'10', username:'Matias',   password:'Mutual2026',   displayName:'Matias',   role:'Vendedor',      initials:'MT', color:'#0EA5E9' },
+  { id:'11', username:'Gonzalo',   password:'Mutual2026',   displayName:'Gonzalo',   role:'Vendedor',      initials:'GO', color:'#0EA5E9' },
+  
 ]
 
 // ─────────────────────────────────────────────
@@ -907,7 +909,7 @@ const loadPipeline = async () => {
     return timeB - timeA
   })
   
-  const currentLead=allLeads.find(l=>l.phone_number===selectedPhone)
+  const currentLead=allLeads.find(l=>l.phone_number===selectedPhone)||baseLeads.find(l=>l.phone_number===selectedPhone)
   const currentMsgs=messages.filter(m=>m.phone_number===selectedPhone).sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())
 
   const stats={
@@ -1440,25 +1442,7 @@ const loadPipeline = async () => {
                             <button className="btn" style={{padding:'4px 9px',fontSize:11}} onClick={()=>openEdit(lead)}>✏️</button>
                             <button className="btn war" style={{padding:'4px 9px',fontSize:11}} onClick={()=>openTemplate(lead)}>💬 Plantilla</button>
                             <button className="btn" style={{padding:'4px 9px',fontSize:11,borderColor:'#6EE7B7',color:'#065F46',background:'#ECFDF5'}}
-                              onClick={async()=>{
-                                // Primero asegurar que el lead esté en botLeads
-                                if(!allLeads.find(l=>l.phone_number===lead.phone_number)){
-                                  const { data } = await supabase
-                                    .from('amat_loan_leads')
-                                    .select('*')
-                                    .eq('phone_number', lead.phone_number)
-                                    .single()
-                                  if(data) {
-                                    await new Promise<void>(resolve => {
-                                      setBotLeads(prev => {
-                                        const exists = prev.find(l=>l.phone_number===lead.phone_number)
-                                        resolve()
-                                        return exists ? prev : [data as LoanLead, ...prev]
-                                      })
-                                    })
-                                  }
-                                }
-                                // Después cargar mensajes y abrir el chat
+                              onClick={()=>{
                                 if(lead.phone_number) cargarMensajes(lead.phone_number)
                                 setTab('bandeja')
                                 setSelectedPhone(lead.phone_number)
