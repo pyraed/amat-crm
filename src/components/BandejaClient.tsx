@@ -29,7 +29,6 @@ const USERS: SysUser[] = [
   { id:'8',  username:'Emanuel',  password:'Mutual2026',   displayName:'Emanuel',  role:'Cobranza',      initials:'EM', color:'#7C3AED' },
   { id:'10', username:'Matias',   password:'Mutual2026',   displayName:'Matias',   role:'Vendedor',      initials:'MT', color:'#0EA5E9' },
   { id:'11', username:'Gonzalo',   password:'Mutual2026',   displayName:'Gonzalo',   role:'Vendedor',      initials:'GO', color:'#0EA5E9' },
-  
 ]
 
 // ─────────────────────────────────────────────
@@ -190,6 +189,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // DATA — bandeja (solo leads que tienen conversación activa con el bot)
   const [botLeads, setBotLeads]           = useState<LoanLead[]>([])
   const [messages, setMessages]           = useState<Message[]>(initialMessages)
+  const [currentChatMsgs, setCurrentChatMsgs] = useState<Message[]>([])
 
   // DATA — base de contactos (server-side paginado)
   const [baseLeads, setBaseLeads]         = useState<LoanLead[]>([])
@@ -709,15 +709,18 @@ const loadPipeline = async () => {
       .eq('phone_number', phone)
       .order('created_at', {ascending: true})
       .then(({data, error}) => {
-        console.log('cargarMensajes', phone, 'count:', data?.length, 'error:', error)
-        if(data) setMessages(prev => [
-          ...prev.filter(m => m.phone_number !== phone),
-          ...data as Message[]
-        ])
+        if(data) {
+          setMessages(prev => [
+            ...prev.filter(m => m.phone_number !== phone),
+            ...data as Message[]
+          ])
+          setCurrentChatMsgs(data as Message[])
+        }
       })
   }
 
   const abrirChat = async (lead: LoanLead) => {
+    setCurrentChatMsgs([])
     setSelectedPhone(lead.phone_number)
     if(lead.phone_number) cargarMensajes(lead.phone_number)
     if(lead.status === 'new') {
@@ -910,7 +913,11 @@ const loadPipeline = async () => {
   })
   
   const currentLead=allLeads.find(l=>l.phone_number===selectedPhone)||baseLeads.find(l=>l.phone_number===selectedPhone)
-  const currentMsgs=messages.filter(m=>m.phone_number===selectedPhone).sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())
+  const currentMsgs = (
+    currentChatMsgs.length > 0 && currentChatMsgs[0]?.phone_number === selectedPhone
+      ? currentChatMsgs
+      : messages.filter(m=>m.phone_number===selectedPhone)
+  ).sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())
 
   const stats={
     inbound:  bandejaLeads.length,
