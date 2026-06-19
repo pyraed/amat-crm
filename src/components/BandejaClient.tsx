@@ -28,7 +28,6 @@ const USERS: SysUser[] = [
   { id:'7',  username:'Facundo',  password:'Mutual2026',   displayName:'Facundo',  role:'Vendedor',      initials:'FA', color:'#8B5CF6' },
   { id:'8',  username:'Emanuel',  password:'Mutual2026',   displayName:'Emanuel',  role:'Cobranza',      initials:'EM', color:'#7C3AED' },
   { id:'10', username:'Matias',   password:'Mutual2026',   displayName:'Matias',   role:'Vendedor',      initials:'MT', color:'#0EA5E9' },
-  { id:'11', username:'Gonzalo',   password:'Mutual2026',   displayName:'Gonzalo',   role:'Vendedor',      initials:'GO', color:'#0EA5E9' },
 ]
 
 // ─────────────────────────────────────────────
@@ -908,7 +907,9 @@ const loadPipeline = async () => {
   const phonesConMensajes=[...new Set(messages.map(m=>m.phone_number))]
   const ESTADOS_FINALES_BANDEJA = ['finalizado','rejected','not_interested','resolved','unresolved']
   const bandejaLeads=allLeads.filter(l=>{
-    if(!l.phone_number||!phonesConMensajes.includes(l.phone_number)) return false
+    if(!l.phone_number) return false
+    // Leads asignados al usuario siempre aparecen aunque sus mensajes no estén en el batch
+    if(!phonesConMensajes.includes(l.phone_number) && l.assigned_to !== me?.username) return false
     if(ESTADOS_FINALES_BANDEJA.includes(l.status||'')) return false
     const q=bandejaSearch.toLowerCase()
     const m=!q||(l.full_name||'').toLowerCase().includes(q)||(l.phone_number||'').includes(q)||(l.dni||'').includes(q)
