@@ -624,12 +624,34 @@ const loadPipeline = async () => {
 
   useEffect(()=>{
     if(tab==='bandeja'){
+      // Cargar mensajes recientes
       supabase.from('amat_messages').select('*').order('created_at',{ascending:false}).limit(5000)
         .then(({data})=>{
           if(data) setMessages(data as Message[])
         })
+
+      // Cargar leads asignados al usuario actual directamente — independiente de mensajes
+      // Así los casos asignados siempre aparecen aunque sus mensajes sean viejos
+      if(me) {
+        const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved']
+        supabase.from('amat_loan_leads')
+          .select('*')
+          .eq('assigned_to', me.username)
+          .eq('archived', false)
+          .not('status', 'in', `(${EXCLUIDOS.map(e=>`"${e}"`).join(',')})`)
+          .order('updated_at', { ascending: false })
+          .then(({data})=>{
+            if(data) setBotLeads(prev => {
+              const merged = [...prev]
+              ;(data as LoanLead[]).forEach(lead => {
+                if(!merged.find(l=>l.id===lead.id)) merged.push(lead)
+              })
+              return merged
+            })
+          })
+      }
     }
-  },[tab]) // eslint-disable-line
+  },[tab, me]) // eslint-disable-line
 
   // ── AUTH ──────────────────────────────────
   const handleLogin=()=>{
