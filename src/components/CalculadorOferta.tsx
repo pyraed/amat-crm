@@ -151,7 +151,7 @@ const CUOTAS_HABERES  = [6, 12, 18, 24]
 const CUOTAS_AYUDA    = [24]
 const CUOTAS_BAPRO    = [12]
 
-const MONTOS_HABERES = [50000,100000,150000,200000,250000,300000,350000,400000,450000,500000,600000,700000,800000,900000,1000000,1200000,1500000]
+const MONTOS_HABERES = [30000,40000,50000,60000,70000,80000,90000,100000,110000,120000,130000,140000,150000,160000,170000,180000,190000,200000,210000,220000,230000,240000,250000,260000,270000,280000,290000,300000,310000,320000,330000,340000,350000,360000,370000,380000,390000,400000,410000,420000,430000,440000,450000,460000,470000,480000,490000,500000,510000,520000,530000,540000,550000,560000,570000,580000,590000,600000,610000,620000,630000,640000,650000,660000,670000,680000,690000,700000,710000,720000,730000,740000,750000,760000,770000,780000,790000,800000,810000,820000,830000,840000,850000,860000,870000,880000,890000,900000,910000,920000,930000,940000,950000,960000,970000,980000,990000,1000000,1050000,1100000,1150000,1200000,1250000,1300000,1350000,1400000,1450000,1500000]
 const MONTOS_AYUDA_AMAT: Record<string,number> = { educacion: 200000, salud: 100000 }
 const MONTOS_BAPRO   = [100000,150000,200000,250000,300000]
 
@@ -245,20 +245,23 @@ export default function CalculadorOferta({ contactName, onSendMessage, onClose }
   )
 
   const btnMonto = (items: number[]) => (
-    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:4}}>
+    <select
+      value={monto}
+      onChange={e=>{setMonto(Number(e.target.value));setResultado(null)}}
+      style={{
+        width:'100%', padding:'8px 10px', borderRadius:7, fontSize:13, fontWeight:600,
+        fontFamily:"'DM Mono',monospace", cursor:'pointer',
+        border:`1.5px solid ${entColor}`,
+        color: entColor, background:'white',
+        outline:'none', appearance:'auto',
+      }}
+    >
       {items.map(m => (
-        <button key={m} onClick={()=>{setMonto(m);setResultado(null)}} style={{
-          padding:'5px 2px', borderRadius:5, fontSize:10.5, fontWeight:600,
-          cursor:'pointer', fontFamily:"'DM Mono',monospace", transition:'all .15s',
-          borderWidth:1, borderStyle:'solid',
-          borderColor: monto===m ? entColor : '#E2E8F0',
-          background: monto===m ? `${entColor}18` : 'white',
-          color: monto===m ? entColor : '#374151',
-        }}>
-          ${m >= 1000000 ? (m/1000000).toFixed(1)+'M' : (m/1000).toFixed(0)+'k'}
-        </button>
+        <option key={m} value={m}>
+          ${m >= 1000000 ? (m/1000000).toFixed(m%1000000===0?0:1)+'M' : m.toLocaleString('es-AR')}
+        </option>
       ))}
-    </div>
+    </select>
   )
 
   return (
