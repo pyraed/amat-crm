@@ -441,40 +441,48 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const { data, error } = await q
     if (error) console.error('[CONSULTAS] Error Supabase:', error)
 
-    // Traer también leads new sin registro en amat_consultas (sin contactar)
-    // Solo si no hay filtros que los excluirían
+    // Traer TODOS los leads de amat_loan_leads sin registro en amat_consultas
     let sinConsulta: any[] = []
-    const mostrarNuevos = (estado === 'all' || estado === 'nuevo') && !search
-    if(mostrarNuevos) {
-      const phonesConConsulta = (data||[]).map((c:any) => c.phone).filter(Boolean)
-      const { data: leadsNew } = await supabase
+    const phonesConConsulta = (data||[]).map((c:any) => c.phone).filter(Boolean)
+
+    // Cargar en lotes para no superar límites de Supabase
+    let allLeads: any[] = []
+    let fromIdx = 0
+    const BATCH = 1000
+    while(true) {
+      let lq = supabase
         .from('amat_loan_leads')
         .select('*')
-        .eq('status','new')
-        .eq('archived', false)
         .order('created_at', { ascending: false })
-      if(leadsNew) {
-        sinConsulta = leadsNew
-          .filter((l:any) => !phonesConConsulta.includes(l.phone_number))
-          .map((l:any) => ({
-            id: `lead_${l.id}`,
-            phone: l.phone_number,
-            nombre_apellido: l.full_name,
-            dni: l.dni,
-            reparticion_label: l.reparticion,
-            flujo: flujoMap[l.phone_number||'']||'solicitud',
-            prestacion: null,
-            afiliado: null,
-            vendedor: l.assigned_to,
-            situacion: null,
-            estado: 'nuevo',
-            created_at: l.created_at,
-            _esLeadSinConsulta: true,
-          }))
-          .filter((c:any) => flujo === 'all' || c.flujo === flujo)
-          .filter((c:any) => rep === 'all' || (c.reparticion_label||'').toUpperCase() === rep.toUpperCase())
-      }
+        .range(fromIdx, fromIdx + BATCH - 1)
+      if(search) lq = lq.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
+      const { data: batch } = await lq
+      if(!batch || batch.length === 0) break
+      allLeads = [...allLeads, ...batch]
+      if(batch.length < BATCH) break
+      fromIdx += BATCH
     }
+
+    sinConsulta = allLeads
+      .filter((l:any) => !phonesConConsulta.includes(l.phone_number))
+      .map((l:any) => ({
+        id: `lead_${l.id}`,
+        phone: l.phone_number,
+        nombre_apellido: l.full_name,
+        dni: l.dni,
+        reparticion_label: l.reparticion,
+        flujo: flujoMap[l.phone_number||'']||'solicitud',
+        prestacion: null,
+        afiliado: null,
+        vendedor: l.assigned_to,
+        situacion: null,
+        estado: l.status === 'new' ? 'nuevo' : l.status === 'contacted' ? 'en_proceso' : l.status === 'closed' ? 'resuelto' : l.status,
+        created_at: l.created_at,
+        _esLeadSinConsulta: true,
+      }))
+      .filter((c:any) => flujo === 'all' || c.flujo === flujo)
+      .filter((c:any) => rep === 'all' || (c.reparticion_label||'').toUpperCase() === rep.toUpperCase())
+      .filter((c:any) => estado === 'all' || c.estado === estado)
 
     // Deduplicar por teléfono — mostrar solo la más reciente por persona
     const todasConsultas = [...sinConsulta, ...((data as any[]) || [])]
