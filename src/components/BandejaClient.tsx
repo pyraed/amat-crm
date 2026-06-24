@@ -326,6 +326,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             supabase.from('amat_loan_leads').select('*').eq('phone_number',msg.phone_number).single()
               .then(({data})=>{
                 if(data) {
+                  // No reinsertar si está archivado o en estado final
+                  const estadosFinales = ['closed','rejected','not_interested','resolved','unresolved','finalizado']
+                  if((data as any).archived || estadosFinales.includes((data as LoanLead).status||'')) return
                   setBotLeads(p2 => {
                     // Verificar de nuevo con el estado más fresco para evitar duplicados
                     if(p2.find(l => l.phone_number === (data as LoanLead).phone_number)) return p2
@@ -842,7 +845,7 @@ const loadPipeline = async () => {
       valor_cuota:     parseFloat(ventaForm.valor_cuota)||0,
       notes:           ventaForm.notas || null,
     }
-    await supabase.from('amat_loan_leads').update(venta).eq('id',currentLead.id)
+    await supabase.from('amat_loan_leads').update({...venta, archived: true}).eq('id',currentLead.id)
     await supabase.from('amat_consultas')
       .update({
         estado:'resuelto',
@@ -850,7 +853,10 @@ const loadPipeline = async () => {
         updated_at:new Date().toISOString()
       })
       .eq('phone', currentLead.phone_number||'')
-    setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, ...venta} : l))
+    // Sacar de bandeja — está cerrado y archivado, no debe aparecer más
+    setBotLeads(prev => prev.filter(l => l.id !== currentLead.id))
+    setCerradosHoyCount(c => c + 1)
+    setSelectedPhone(null)
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
   }
