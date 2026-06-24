@@ -2417,7 +2417,7 @@ const loadPipeline = async () => {
                   <option value="">— Seleccioná un monto —</option>
                   {Object.keys(TABLAS_CUOTA[parseInt(ventaForm.cuotas)||12]||TABLAS_CUOTA[12]).map(Number).sort((a,b)=>a-b).map(m=>(
                     <option key={m} value={m}>
-                      ${'{'}m.toLocaleString('es-AR'){'}'}{ventaForm.cuotas && TABLAS_CUOTA[parseInt(ventaForm.cuotas)]?.[m] ? ` → $${'{'}TABLAS_CUOTA[parseInt(ventaForm.cuotas)][m].toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}){'}'}` : ''}
+                      {'$' + m.toLocaleString('es-AR') + (ventaForm.cuotas && TABLAS_CUOTA[parseInt(ventaForm.cuotas)]?.[m] ? ' → $' + TABLAS_CUOTA[parseInt(ventaForm.cuotas)][m].toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}) : '')}
                     </option>
                   ))}
                 </select>
