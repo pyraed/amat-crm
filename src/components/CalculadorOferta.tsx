@@ -258,7 +258,7 @@ export default function CalculadorOferta({ contactName, onSendMessage, onClose }
     >
       {items.map(m => (
         <option key={m} value={m}>
-          ${m >= 1000000 ? (m/1000000).toFixed(m%1000000===0?0:1)+'M' : m.toLocaleString('es-AR')}
+          {'$' + (m >= 1000000 ? (m/1000000).toFixed(m%1000000===0?0:1)+'M' : m.toLocaleString('es-AR'))}
         </option>
       ))}
     </select>
