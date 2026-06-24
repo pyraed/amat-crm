@@ -265,7 +265,46 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       setRememberMe(true)
     }
   },[])
-  useEffect(()=>{ msgEndRef.current?.scrollIntoView({behavior:'smooth'}) },[messages,selectedPhone])
+  const chatScrollRef  = useRef<HTMLDivElement>(null)
+  const isAtBottom     = useRef(true)
+  const prevPhone      = useRef<string|null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const prevMsgCount   = useRef(0)
+
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    const el = chatScrollRef.current
+    if(!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior })
+    setUnreadCount(0)
+    isAtBottom.current = true
+  }
+
+  const handleChatScroll = () => {
+    const el = chatScrollRef.current
+    if(!el) return
+    isAtBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    if(isAtBottom.current) setUnreadCount(0)
+  }
+
+  useEffect(()=>{
+    const phoneChanged = prevPhone.current !== selectedPhone
+    prevPhone.current = selectedPhone
+    if(phoneChanged) {
+      // Cambio de chat: bajar instantáneo sin animación
+      scrollToBottom('instant' as ScrollBehavior)
+      prevMsgCount.current = messages.length
+      return
+    }
+    const newMsgs = messages.length - prevMsgCount.current
+    prevMsgCount.current = messages.length
+    if(newMsgs > 0 && !isAtBottom.current) {
+      // Llegaron mensajes y el usuario está leyendo arriba: mostrar badge
+      setUnreadCount(c => c + newMsgs)
+    } else if(isAtBottom.current) {
+      // Ya estaba abajo: seguir bajando automático
+      scrollToBottom('smooth')
+    }
+  },[messages, selectedPhone])
   useEffect(()=>{ if(!me) setTimeout(()=>userRef.current?.focus(),100) },[me])
 
   // Bloqueo
@@ -688,7 +727,7 @@ const loadPipeline = async () => {
     setReplyText(''); setSending(false)
   }
 
-  const sendTemplate=async(template:'recontacto'|'primer_contacto_esp')=>{
+  const sendTemplate=async(template:'recontacto'|'primer_contacto_esp'|'ayuda_economica')=>{
     if(!selectedPhone||!me) return
     setSending(true)
     await fetch('/api/send-message',{
@@ -1272,7 +1311,19 @@ const loadPipeline = async () => {
                   </div>
                 </div>
 
-                <div style={{flex:1,overflowY:'auto',padding:'16px 20px',display:'flex',flexDirection:'column',gap:10,background:'#F8FAFC'}}>
+                <div style={{flex:1,position:'relative',minHeight:0}}>
+                  {unreadCount > 0 && (
+                    <button onClick={()=>scrollToBottom('smooth')} style={{
+                      position:'absolute',bottom:12,left:'50%',transform:'translateX(-50%)',
+                      zIndex:10,padding:'6px 14px',borderRadius:20,border:'none',
+                      background:'#1E293B',color:'white',fontSize:12,fontWeight:600,
+                      cursor:'pointer',boxShadow:'0 4px 12px rgba(0,0,0,.25)',
+                      display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',
+                    }}>
+                      ↓ {unreadCount} mensaje{unreadCount>1?'s':''} nuevo{unreadCount>1?'s':''}
+                    </button>
+                  )}
+                <div ref={chatScrollRef} onScroll={handleChatScroll} style={{height:'100%',overflowY:'auto',padding:'16px 20px',display:'flex',flexDirection:'column',gap:10,background:'#F8FAFC',overflowAnchor:'none'}}>
                   {currentMsgs.length===0&&<div style={{textAlign:'center',color:'#94A3B8',fontSize:13,marginTop:60}}>💬 Sin mensajes</div>}
                   {currentMsgs.map(msg=>(
                     <div key={msg.id} style={{display:'flex',justifyContent:msg.direction==='out'?'flex-end':'flex-start'}}>
@@ -1317,7 +1368,8 @@ const loadPipeline = async () => {
                       </div>
                     </div>
                   ))}
-                  <div ref={msgEndRef}/>
+                  <div ref={msgEndRef} style={{overflowAnchor:"auto",height:1}}/>
+                </div>
                 </div>
 
                 <div style={{padding:'12px 18px',background:'white',borderTop:'1px solid #E2E8F0',display:'flex',gap:8,alignItems:'flex-end',flexShrink:0}}>
