@@ -1216,7 +1216,7 @@ const loadPipeline = async () => {
                   const lastMsg=messages.filter(m=>m.phone_number===lead.phone_number).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
                   return (
                     <div key={lead.phone_number??lead.id} style={{display:'flex',gap:10,padding:'12px 14px',borderBottom:'1px solid #F1F5F9',cursor:'pointer',alignItems:'flex-start',background:'#FFFBEB',borderLeft:'3px solid #F59E0B'}}
-                      onClick={()=>tomarConversacion(lead)}>
+                      onClick={()=>{ if(lead.phone_number) cargarMensajes(lead.phone_number); setSelectedPhone(lead.phone_number) }}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:'#FFFBEB',color:'#B45309'}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
@@ -1304,6 +1304,12 @@ const loadPipeline = async () => {
                     </div>
                   </div>
                   <div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap'}}>
+                    {!currentLead.assigned_to && (
+                      <button className="btn" style={{background:'#FFFBEB',borderColor:'#FCD34D',color:'#B45309',fontWeight:700}}
+                        onClick={()=>tomarConversacion(currentLead)}>
+                        ✋ Tomar conversación
+                      </button>
+                    )}
                     <button className="btn" onClick={()=>setShowStatusModal(true)}>
                       <span className="pill" style={{background:scFor(currentLead.status,currentLead.phone_number).bg,color:scFor(currentLead.status,currentLead.phone_number).text}}>{scFor(currentLead.status,currentLead.phone_number).label}</span>▾
                     </button>
