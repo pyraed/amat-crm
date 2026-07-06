@@ -502,7 +502,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       if(search) lq = lq.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
       if(rep !== 'all') lq = lq.ilike('reparticion', `%${rep}%`)
       const { data: leadsData } = await lq
-      const statusMap: Record<string,string> = { new:'nuevo', contacted:'en_proceso', closed:'resuelto' }
+      const statusMap: Record<string,string> = { new:'pendiente', contacted:'pendiente', closed:'resuelto' }
       sinConsulta = (leadsData||[])
         .filter((l:any) => !phonesConConsulta.includes(l.phone_number))
         .map((l:any) => ({
@@ -703,8 +703,7 @@ const loadPipeline = async () => {
         if(allMsgs.length) setMessages(allMsgs)
       })()
 
-      // Cargar leads asignados al usuario actual directamente — independiente de mensajes
-      // Así los casos asignados siempre aparecen aunque sus mensajes sean viejos
+      // Cargar leads asignados al usuario — independiente de mensajes
       if(me) {
         const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved']
         supabase.from('amat_loan_leads')
@@ -723,6 +722,38 @@ const loadPipeline = async () => {
             })
           })
       }
+
+      // Cargar cola directamente desde Supabase — independiente del batch de mensajes
+      // Sin esto los leads sin mensajes recientes no aparecen en la cola
+      ;(async () => {
+        const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
+        let colaLeads: LoanLead[] = []
+        let fromIdx = 0
+        const BATCH = 1000
+        while(true) {
+          const { data: batch } = await supabase
+            .from('amat_loan_leads')
+            .select('*')
+            .is('assigned_to', null)
+            .eq('archived', false)
+            .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
+            .order('created_at', { ascending: true })
+            .range(fromIdx, fromIdx + BATCH - 1)
+          if(!batch || batch.length === 0) break
+          colaLeads = [...colaLeads, ...batch as LoanLead[]]
+          if(batch.length < BATCH) break
+          fromIdx += BATCH
+        }
+        if(colaLeads.length) {
+          setBotLeads(prev => {
+            const merged = [...prev]
+            colaLeads.forEach(lead => {
+              if(!merged.find(l=>l.id===lead.id)) merged.push(lead)
+            })
+            return merged
+          })
+        }
+      })()
     }
   },[tab, me]) // eslint-disable-line
 
@@ -805,7 +836,7 @@ const loadPipeline = async () => {
         status==='rejected'    ? 'cerrado'    :
         status==='finalizado'  ? 'cerrado'    :
         status==='not_interested' ? 'cerrado' :
-        status==='contacted'   ? 'en_proceso' : 'pendiente'
+        status==='contacted'   ? 'pendiente' : 'pendiente'
       await supabase.from('amat_consultas')
         .update({estado: estadoConsulta, updated_at:new Date().toISOString()})
         .eq('phone', lead.phone_number)
@@ -1674,11 +1705,8 @@ const loadPipeline = async () => {
             </select>
             <select className="fsel" value={cEstado} onChange={e=>setCEstado(e.target.value)}>
               <option value="all">Todos los estados</option>
-              <option value="nuevo">Nuevo</option>
               <option value="pendiente">Pendiente</option>
-              <option value="en_proceso">En proceso</option>
-              <option value="resuelto">Resuelto</option>
-              <option value="cerrado">Cerrado</option>
+              <option value="resuelto">Vendido</option>
               <option value="cerrado_rechazado">Rechazado</option>
               <option value="cerrado_no_interesado">No interesado</option>
             </select>
@@ -1686,15 +1714,8 @@ const loadPipeline = async () => {
               <option value="all">Todas las reparticiones</option>
               {REPARTICIONES.map(r=><option key={r} value={r}>{r}</option>)}
             </select>
-            <select className="fsel" value={cDiasSinCampana} onChange={e=>setCDiasSinCampana(e.target.value)}>
-              <option value="all">Sin filtro de campaña</option>
-              <option value="3">Sin campaña +3 días</option>
-              <option value="5">Sin campaña +5 días</option>
-              <option value="7">Sin campaña +7 días</option>
-              <option value="15">Sin campaña +15 días</option>
-              <option value="30">Sin campaña +30 días</option>
-            </select>
-            <button className="btn" onClick={()=>{setCSearch('');setCSearchInput('');setCFlujo('all');setCEstado('all');setCRep('all');setCDiasSinCampana('all')}}>✕ Limpiar</button>
+
+            <button className="btn" onClick={()=>{setCSearch('');setCSearchInput('');setCFlujo('all');setCEstado('all');setCRep('all')}}>✕ Limpiar</button>
             <button className="btn" style={{borderColor:'#BBF7D0',color:'#065F46',background:'#ECFDF5'}} onClick={exportVentas}>🎉 Exportar ventas</button>
             <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',fontFamily:"'DM Mono',monospace"}}>{consultas.length} consultas</span>
           </div>
@@ -1713,7 +1734,7 @@ const loadPipeline = async () => {
             ) : (
               <table className="tbl" style={{width:'100%',borderCollapse:'collapse'}}>
                 <thead><tr>
-                  {['Fecha','Nombre','DNI','Teléfono','Repartición','Flujo','Prestación','Afiliado','Vendedor','Situación','Sin campaña','Estado','Acciones'].map(h=>(
+                  {['Fecha','Nombre','DNI','Teléfono','Repartición','Flujo','Prestación','Afiliado','Vendedor','Situación','Estado','Acciones'].map(h=>(
                     <th key={h}>{h}</th>
                   ))}
                 </tr></thead>
@@ -1727,13 +1748,15 @@ const loadPipeline = async () => {
                     return dias >= limite
                   }).map(c=>{
                     const estadoColors: Record<string,{bg:string,text:string}> = {
-                      nuevo:               {bg:'#F0F9FF',text:'#0369A1'},
+                      nuevo:               {bg:'#FFFBEB',text:'#92400E'},
                       pendiente:           {bg:'#FFFBEB',text:'#92400E'},
-                      en_proceso:          {bg:'#EFF6FF',text:'#1D4ED8'},
+                      en_proceso:          {bg:'#FFFBEB',text:'#92400E'},
                       resuelto:            {bg:'#ECFDF5',text:'#065F46'},
                       cerrado:             {bg:'#F8FAFC',text:'#475569'},
                       cerrado_rechazado:   {bg:'#FEF2F2',text:'#DC2626'},
                       cerrado_no_interesado:{bg:'#F5F3FF',text:'#6D28D9'},
+                      rejected:            {bg:'#FEF2F2',text:'#991B1B'},
+                      not_interested:      {bg:'#F9FAFB',text:'#374151'},
                     }
                     const ec = estadoColors[c.estado] || estadoColors.pendiente
                     return (
@@ -1754,16 +1777,10 @@ const loadPipeline = async () => {
                         </td>
                         <td style={{fontSize:12,color:'#64748B'}}>{c.vendedor||<span style={{color:'#CBD5E1'}}>—</span>}</td>
                         <td style={{fontSize:12,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#64748B'}}>{c.situacion||'—'}</td>
-                        <td style={{fontSize:11,whiteSpace:'nowrap'}}>
-                          {campanas[c.phone] ? (()=>{
-                            const dias = Math.floor((Date.now()-new Date(campanas[c.phone]).getTime())/(1000*60*60*24))
-                            const color = dias <= 3 ? '#EF4444' : dias <= 7 ? '#F59E0B' : '#10B981'
-                            return <span style={{color,fontWeight:600}}>{dias===0?'Hoy':dias===1?'Ayer':`${dias}d`}</span>
-                          })() : <span style={{color:'#CBD5E1'}}>—</span>}
-                        </td>
+
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:ec.bg,color:ec.text}}>
-                            {({'nuevo':'Nuevo','pendiente':'Pendiente','en_proceso':'En proceso','resuelto':'Resuelto','cerrado':'Cerrado','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado'} as any)[c.estado]||c.estado}
+                            {({'nuevo':'Pendiente','pendiente':'Pendiente','en_proceso':'Pendiente','resuelto':'Vendido','cerrado':'Cerrado','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado'} as any)[c.estado]||c.estado}
                           </span>
                         </td>
                         <td>
