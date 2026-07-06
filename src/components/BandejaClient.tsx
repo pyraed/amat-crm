@@ -35,12 +35,14 @@ const USERS: SysUser[] = [
 //  CONFIGURACIÓN DE ESTADOS Y ETIQUETAS
 // ─────────────────────────────────────────────
 const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:string;desc:string}> = {
-  new:           { label:'Nuevo',          color:'#94A3B8', bg:'#F8FAFC', text:'#475569', desc:'Sin contactar' },
-  contacted:     { label:'En proceso',     color:'#06B6D4', bg:'#ECFEFF', text:'#164E63', desc:'Conversación iniciada' },
-  not_interested:{ label:'No interesado',  color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere ser contactado' },
+  new:           { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En cola, sin tomar' },
+  contacted:     { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En bandeja del operador' },
+  not_interested:{ label:'No interesado',  color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere la oferta' },
   rejected:      { label:'Rechazado',      color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No cumple requisitos' },
-  closed:        { label:'Cerrado',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
-  finalizado:    { label:'Finalizado',     color:'#6B7280', bg:'#F3F4F6', text:'#374151', desc:'Conversación finalizada' },
+  closed:        { label:'Vendido',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
+  finalizado:    { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'Conversación en curso' },
+  resolved:      { label:'Vendido',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
+  unresolved:    { label:'No resuelto',    color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No se pudo resolver' },
 }
 
 // Estados exclusivos para flujo COBRANZA
@@ -810,14 +812,25 @@ const loadPipeline = async () => {
     }
   }
 
+  const LIMITE_BANDEJA = 20
+
   const tomarConversacion = async (lead: LoanLead) => {
     if(!me) return
+    // Verificar límite de 20 conversaciones activas
+    const misActivas = bandejaLeads.filter(l =>
+      l.assigned_to === me.username &&
+      !['closed','rejected','not_interested','resolved','unresolved','finalizado'].includes(l.status||'')
+    ).length
+    if(misActivas >= LIMITE_BANDEJA) {
+      alert(`Tenés ${misActivas} conversaciones activas. El límite es ${LIMITE_BANDEJA}. Cerrá alguna antes de tomar una nueva.`)
+      return
+    }
     await supabase.from('amat_loan_leads')
       .update({assigned_to: me.username, status:'contacted', updated_at:new Date().toISOString()})
       .eq('id', lead.id)
     if(lead.phone_number) {
       await supabase.from('amat_consultas')
-        .update({vendedor: me.username, estado:'en_proceso', updated_at:new Date().toISOString()})
+        .update({vendedor: me.username, estado:'pendiente', updated_at:new Date().toISOString()})
         .eq('phone', lead.phone_number)
     }
     setSelectedPhone(lead.phone_number)
@@ -1231,7 +1244,7 @@ const loadPipeline = async () => {
                 <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='mis_chats'?'white':'transparent',color:vistaMode==='mis_chats'?'#0F172A':'#64748B',boxShadow:vistaMode==='mis_chats'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
                   onClick={()=>setVistaMode('mis_chats')}>
                   💬 Mis chats {(()=>{
-                    const n = bandejaLeads.filter(l=>l.assigned_to===me?.username&&l.status!=='finalizado').length
+                    const n = bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado'].includes(l.status||'')).length
                     return n>0?<span style={{background:'#3B82F6',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:3}}>{n}</span>:null
                   })()}
                 </button>
@@ -1359,6 +1372,20 @@ const loadPipeline = async () => {
                     </div>
                   </div>
                   <div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap'}}>
+                    {!currentLead.assigned_to && (()=>{
+                      const misActivas = bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado'].includes(l.status||'')).length
+                      const lleno = misActivas >= LIMITE_BANDEJA
+                      return (
+                        <button onClick={()=>tomarConversacion(currentLead)} style={{
+                          padding:'6px 12px',borderRadius:8,border:`1px solid ${lleno?'#FCA5A5':'#FCD34D'}`,
+                          background:lleno?'#FEF2F2':'#FFFBEB',color:lleno?'#991B1B':'#B45309',
+                          fontSize:12,fontWeight:700,cursor:lleno?'not-allowed':'pointer',
+                          fontFamily:'inherit',whiteSpace:'nowrap',opacity:lleno?0.7:1,
+                        }}>
+                          {lleno ? `🚫 Límite alcanzado (${misActivas}/${LIMITE_BANDEJA})` : `✋ Tomar conversación (${misActivas}/${LIMITE_BANDEJA})`}
+                        </button>
+                      )
+                    })()}
                     <button className="btn" onClick={()=>setShowStatusModal(true)}>
                       <span className="pill" style={{background:scFor(currentLead.status,currentLead.phone_number).bg,color:scFor(currentLead.status,currentLead.phone_number).text}}>{scFor(currentLead.status,currentLead.phone_number).label}</span>▾
                     </button>
@@ -1544,7 +1571,11 @@ const loadPipeline = async () => {
             </select>
             <select className="fsel" value={baseStatus} onChange={e=>{setBaseStatus(e.target.value);setBasePage(0)}}>
               <option value="all">Todos los estados</option>
-              {Object.entries(LEAD_STATUS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+              <option value="new">Pendiente</option>
+              <option value="contacted">En bandeja</option>
+              <option value="closed">Vendido</option>
+              <option value="rejected">Rechazado</option>
+              <option value="not_interested">No interesado</option>
             </select>
             <select className="fsel" value={baseTel} onChange={e=>{setBaseTel(e.target.value as any);setBasePage(0)}}>
               <option value="all">Con y sin teléfono</option>
@@ -2309,7 +2340,11 @@ const loadPipeline = async () => {
               <div>
                 <label className="fl">Estado</label>
                 <select className="fs" value={editForm.status||'new'} onChange={e=>setEditForm(f=>({...f,status:e.target.value as any}))}>
-                  {Object.entries(LEAD_STATUS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+                  <option value="new">Pendiente</option>
+              <option value="contacted">En bandeja</option>
+              <option value="closed">Vendido</option>
+              <option value="rejected">Rechazado</option>
+              <option value="not_interested">No interesado</option>
                 </select>
               </div>
               <div>
@@ -2399,7 +2434,10 @@ const loadPipeline = async () => {
         const yaFinalizado = estadosFinales.includes(currentLead.status||'')
         const statusOpts = flujo==='cobranzas'
           ? Object.entries(COBRANZA_STATUS).filter(([k])=>['resolved','unresolved'].includes(k))
-          : Object.entries(LEAD_STATUS).filter(([k])=>['not_interested','rejected','closed'].includes(k))
+          : [
+              ['rejected',      {label:'Rechazado',     bg:'#FEF2F2', text:'#991B1B'}],
+              ['not_interested', {label:'No interesado', bg:'#F9FAFB', text:'#374151'}],
+            ] as [string, {label:string;bg:string;text:string}][]
         const puedeConfirmar = yaFinalizado || !!finalizarEstado
         const estadoLabel = (flujo==='cobranzas'?COBRANZA_STATUS:LEAD_STATUS)[currentLead.status||'']?.label || currentLead.status
         return (
