@@ -547,26 +547,27 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setConsultasLoading(false)
   }
 
+  // Un solo useEffect para consultas — evita doble carga
+  // tabRef trackea si el tab acaba de cambiar para no disparar el filtro al mismo tiempo
+  const tabRef = useRef(tab)
   useEffect(()=>{
+    const tabCambio = tabRef.current !== tab
+    tabRef.current = tab
     if(tab==='consultas') {
-      loadConsultas()
-      supabase.from('amat_campanas').select('telefono,fecha').order('fecha',{ascending:false})
-        .then(({data})=>{
-          if(!data) return
-          const map: Record<string,string> = {}
-          data.forEach((r:any)=>{ if(r.telefono && !map[r.telefono]) map[r.telefono]=r.fecha })
-          setCampanas(map)
-        })
+      loadConsultas(cRep, cFlujo, cEstado, cSearch)
+      if(tabCambio) {
+        supabase.from('amat_campanas').select('telefono,fecha').order('fecha',{ascending:false})
+          .then(({data})=>{
+            if(!data) return
+            const map: Record<string,string> = {}
+            data.forEach((r:any)=>{ if(r.telefono && !map[r.telefono]) map[r.telefono]=r.fecha })
+            setCampanas(map)
+          })
+      }
     }
     if(tab==='reportes') loadReportes()
     if(tab==='pipeline') loadPipeline()
-  },[tab]) // eslint-disable-line
-
-  const consultasMounted = useRef(false)
-  useEffect(()=>{
-    if(!consultasMounted.current) { consultasMounted.current = true; return }
-    if(tab==='consultas') loadConsultas(cRep, cFlujo, cEstado, cSearch)
-  },[cSearch, cFlujo, cEstado, cRep]) // eslint-disable-line
+  },[tab, cSearch, cFlujo, cEstado, cRep]) // eslint-disable-line
 
   // Cargar datos del pipeline
 const loadPipeline = async () => {
