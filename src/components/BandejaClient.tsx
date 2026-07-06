@@ -36,7 +36,7 @@ const USERS: SysUser[] = [
 // ─────────────────────────────────────────────
 const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:string;desc:string}> = {
   new:           { label:'Nuevo',          color:'#94A3B8', bg:'#F8FAFC', text:'#475569', desc:'Sin contactar' },
-  contacted:     { label:'Contactado',     color:'#06B6D4', bg:'#ECFEFF', text:'#164E63', desc:'Conversación iniciada' },
+  contacted:     { label:'En proceso',     color:'#06B6D4', bg:'#ECFEFF', text:'#164E63', desc:'Conversación iniciada' },
   not_interested:{ label:'No interesado',  color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere ser contactado' },
   rejected:      { label:'Rechazado',      color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No cumple requisitos' },
   closed:        { label:'Cerrado',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
@@ -674,11 +674,26 @@ const loadPipeline = async () => {
 
   useEffect(()=>{
     if(tab==='bandeja'){
-      // Cargar mensajes recientes
-      supabase.from('amat_messages').select('*').order('created_at',{ascending:false}).limit(5000)
-        .then(({data})=>{
-          if(data) setMessages(data as Message[])
-        })
+      // Cargar mensajes: todos los de los últimos 30 días en lotes para no perder nada
+      ;(async () => {
+        const desde = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+        let allMsgs: Message[] = []
+        let fromIdx = 0
+        const BATCH = 1000
+        while(true) {
+          const { data: batch } = await supabase
+            .from('amat_messages')
+            .select('*')
+            .gte('created_at', desde)
+            .order('created_at', { ascending: false })
+            .range(fromIdx, fromIdx + BATCH - 1)
+          if(!batch || batch.length === 0) break
+          allMsgs = [...allMsgs, ...batch as Message[]]
+          if(batch.length < BATCH) break
+          fromIdx += BATCH
+        }
+        if(allMsgs.length) setMessages(allMsgs)
+      })()
 
       // Cargar leads asignados al usuario actual directamente — independiente de mensajes
       // Así los casos asignados siempre aparecen aunque sus mensajes sean viejos
@@ -1216,7 +1231,7 @@ const loadPipeline = async () => {
                   const lastMsg=messages.filter(m=>m.phone_number===lead.phone_number).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
                   return (
                     <div key={lead.phone_number??lead.id} style={{display:'flex',gap:10,padding:'12px 14px',borderBottom:'1px solid #F1F5F9',cursor:'pointer',alignItems:'flex-start',background:'#FFFBEB',borderLeft:'3px solid #F59E0B'}}
-                      onClick={()=>{ if(lead.phone_number) cargarMensajes(lead.phone_number); setSelectedPhone(lead.phone_number) }}>
+                      onClick={()=>tomarConversacion(lead)}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:'#FFFBEB',color:'#B45309'}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
@@ -1304,12 +1319,6 @@ const loadPipeline = async () => {
                     </div>
                   </div>
                   <div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap'}}>
-                    {!currentLead.assigned_to && (
-                      <button className="btn" style={{background:'#FFFBEB',borderColor:'#FCD34D',color:'#B45309',fontWeight:700}}
-                        onClick={()=>tomarConversacion(currentLead)}>
-                        ✋ Tomar conversación
-                      </button>
-                    )}
                     <button className="btn" onClick={()=>setShowStatusModal(true)}>
                       <span className="pill" style={{background:scFor(currentLead.status,currentLead.phone_number).bg,color:scFor(currentLead.status,currentLead.phone_number).text}}>{scFor(currentLead.status,currentLead.phone_number).label}</span>▾
                     </button>
