@@ -475,7 +475,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const estado = estadoOverride ?? cEstadoRef.current
     const rep    = repOverride    ?? cRepRef.current
 
-    let q = supabase.from('amat_consultas').select('*').order('created_at', { ascending: false })
+    let q = supabase.from('amat_consultas').select('*').order('updated_at', { ascending: false })
     if (search)          q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
     if (flujo !== 'all')  q = q.eq('flujo', flujo)
     if (estado !== 'all') q = q.eq('estado', estado)
