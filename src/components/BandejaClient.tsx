@@ -34,24 +34,47 @@ const USERS: SysUser[] = [
 // ─────────────────────────────────────────────
 //  CONFIGURACIÓN DE ESTADOS Y ETIQUETAS
 // ─────────────────────────────────────────────
+// ═══ MODELO CANÓNICO DE ESTADOS ═══
+// Ventas:    pendiente (new/contacted) → vendido (closed) / rechazado (rejected) / no interesado (not_interested)
+// Cobranzas: pendiente (new/contacted) → resuelto (resolved) / no resuelto (unresolved)
+// Todo estado final implica archived: true — un lead archivado nunca vuelve a bandeja/cola.
+const ESTADOS_FINALES = ['closed','rejected','not_interested','resolved','unresolved']
+
 const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:string;desc:string}> = {
   new:           { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En cola, sin tomar' },
   contacted:     { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En bandeja del operador' },
   not_interested:{ label:'No interesado',  color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere la oferta' },
   rejected:      { label:'Rechazado',      color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No cumple requisitos' },
   closed:        { label:'Vendido',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
-  finalizado:    { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'Conversación en curso' },
-  resolved:      { label:'Vendido',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
+  // legacy — solo para mostrar registros históricos, no seleccionables
+  finalizado:    { label:'Cerrado',        color:'#6B7280', bg:'#F3F4F6', text:'#374151', desc:'Conversación finalizada (histórico)' },
+  resolved:      { label:'Resuelto',       color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Caso resuelto' },
   unresolved:    { label:'No resuelto',    color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No se pudo resolver' },
+}
+
+// Opciones seleccionables en el modal Cambiar estado — por flujo, sin duplicados
+const OPCIONES_VENTAS    = ['closed','rejected','not_interested'] as const
+const OPCIONES_COBRANZAS = ['resolved','unresolved'] as const
+
+// Mapeo canónico único: status de amat_loan_leads → estado de amat_consultas
+const STATUS_A_CONSULTA: Record<string,string> = {
+  new:            'pendiente',
+  contacted:      'pendiente',
+  closed:         'resuelto',
+  resolved:       'resuelto',
+  rejected:       'cerrado_rechazado',
+  not_interested: 'cerrado_no_interesado',
+  unresolved:     'cerrado',
+  finalizado:     'cerrado',
 }
 
 // Estados exclusivos para flujo COBRANZA
 const COBRANZA_STATUS: Record<string,{label:string;color:string;bg:string;text:string;desc:string}> = {
-  new:       { label:'Nuevo',       color:'#94A3B8', bg:'#F8FAFC', text:'#475569', desc:'Sin contactar' },
-  contacted: { label:'Contactado',  color:'#06B6D4', bg:'#ECFEFF', text:'#164E63', desc:'Conversación iniciada' },
+  new:       { label:'Pendiente',   color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En cola, sin tomar' },
+  contacted: { label:'Pendiente',   color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En bandeja del operador' },
   resolved:  { label:'Resuelto',    color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Caso resuelto exitosamente' },
   unresolved:{ label:'No resuelto', color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No se pudo resolver' },
-  finalizado:{ label:'Finalizado',  color:'#6B7280', bg:'#F3F4F6', text:'#374151', desc:'Conversación finalizada' },
+  finalizado:{ label:'Cerrado',     color:'#6B7280', bg:'#F3F4F6', text:'#374151', desc:'Conversación finalizada (histórico)' },
 }
 
 // Motivos de rechazo / no interés
@@ -343,9 +366,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             supabase.from('amat_loan_leads').select('*').eq('phone_number',msg.phone_number).single()
               .then(({data})=>{
                 if(data) {
-                  // No reinsertar si está archivado o en estado final
-                  const estadosFinales = ['closed','rejected','not_interested','resolved','unresolved','finalizado']
-                  if((data as any).archived || estadosFinales.includes((data as LoanLead).status||'')) return
+                  // No reinsertar si está archivado — única condición, imposible de desincronizar
+                  // (todo estado final implica archived: true vía cambiarEstado)
+                  if((data as any).archived || ESTADOS_FINALES.includes((data as LoanLead).status||'')) return
                   setBotLeads(p2 => {
                     // Verificar de nuevo con el estado más fresco para evitar duplicados
                     if(p2.find(l => l.phone_number === (data as LoanLead).phone_number)) return p2
@@ -525,7 +548,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
     // Deduplicar con Set — O(n) en vez de O(n²)
     const phonesConConsulta = new Set((data||[]).map((c:any) => c.phone).filter(Boolean))
-    const statusMap: Record<string,string> = { new:'pendiente', contacted:'pendiente', closed:'resuelto', rejected:'rechazado', not_interested:'no_interesado' }
+    const statusMap: Record<string,string> = { new:'pendiente', contacted:'pendiente', closed:'resuelto', resolved:'resuelto', rejected:'cerrado_rechazado', not_interested:'cerrado_no_interesado', unresolved:'cerrado', finalizado:'cerrado' }
 
     const sinConsulta = (leadsData||[])
       .filter((l:any) => l.phone_number && !phonesConConsulta.has(l.phone_number))
@@ -867,24 +890,56 @@ const loadPipeline = async () => {
     }
   }
 
-  const updateStatus=async(id:number,status:string,notes?:string)=>{
-    const upd:any={status,updated_at:new Date().toISOString()}
-    if(notes!==undefined) upd.notes=notes
-    await supabase.from('amat_loan_leads').update(upd).eq('id',id)
-    const lead = bandejaLeads.find(l=>l.id===id)||baseLeads.find(l=>l.id===id)
-    if(lead?.phone_number) {
-      const estadoConsulta =
-        status==='closed'      ? 'resuelto'   :
-        status==='resolved'    ? 'resuelto'   :
-        status==='unresolved'  ? 'cerrado'    :
-        status==='rejected'    ? 'cerrado'    :
-        status==='finalizado'  ? 'cerrado'    :
-        status==='not_interested' ? 'cerrado' :
-        status==='contacted'   ? 'pendiente' : 'pendiente'
-      await supabase.from('amat_consultas')
-        .update({estado: estadoConsulta, updated_at:new Date().toISOString()})
-        .eq('phone', lead.phone_number)
+  // ═══ FUNCIÓN ÚNICA DE CAMBIO DE ESTADO ═══
+  // Todos los caminos (modal, venta, rechazo, finalizar) pasan por acá.
+  // Garantiza: leads + consultas sincronizados, archivado en finales, limpieza de memoria.
+  const cambiarEstado = async (
+    lead: LoanLead,
+    nuevoStatus: string,
+    opts?: { notes?: string; situacion?: string; extraFields?: Record<string,any> }
+  ) => {
+    const esFinal = ESTADOS_FINALES.includes(nuevoStatus)
+    const upd: any = {
+      status: nuevoStatus,
+      updated_at: new Date().toISOString(),
+      ...(esFinal && { archived: true }),
+      ...(opts?.notes !== undefined && { notes: opts.notes }),
+      ...(opts?.extraFields || {}),
     }
+    await supabase.from('amat_loan_leads').update(upd).eq('id', lead.id)
+
+    // Sincronizar amat_consultas con el mapeo canónico
+    if(lead.phone_number) {
+      const updC: any = {
+        estado: STATUS_A_CONSULTA[nuevoStatus] || 'pendiente',
+        updated_at: new Date().toISOString(),
+      }
+      if(opts?.situacion?.trim()) updC.situacion = opts.situacion.trim()
+      await supabase.from('amat_consultas').update(updC).eq('phone', lead.phone_number)
+    }
+
+    // Si es final: sacar de todas las listas en memoria y cerrar el chat si estaba abierto
+    if(esFinal) {
+      setBotLeads(prev => prev.filter(l => l.id !== lead.id))
+      if(nuevoStatus === 'closed' || nuevoStatus === 'resolved') setCerradosHoyCount(c => c + 1)
+      if(selectedPhone === lead.phone_number) setSelectedPhone(null)
+    } else {
+      setBotLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
+    }
+  }
+
+  // Compatibilidad con llamadas existentes
+  const updateStatus = async (id: number, status: string, notes?: string) => {
+    const lead = bandejaLeads.find(l=>l.id===id) || baseLeads.find(l=>l.id===id)
+    if(!lead) {
+      // Lead no está en memoria — actualizar directo en DB con la misma lógica
+      const esFinal = ESTADOS_FINALES.includes(status)
+      const upd: any = { status, updated_at: new Date().toISOString(), ...(esFinal && { archived: true }) }
+      if(notes !== undefined) upd.notes = notes
+      await supabase.from('amat_loan_leads').update(upd).eq('id', id)
+      return
+    }
+    await cambiarEstado(lead, status, { notes })
   }
 
   const LIMITE_BANDEJA = 20
@@ -965,59 +1020,29 @@ const loadPipeline = async () => {
 
   const finalizarConversacion = async (nota?: string) => {
     if(!currentLead) return
-    const estadosFinales = ['not_interested','rejected','closed','resolved','unresolved']
-    const statusFinal = estadosFinales.includes(currentLead.status||'')
-      ? currentLead.status
-      : (finalizarEstado || 'finalizado')
-    await supabase.from('amat_loan_leads')
-      .update({ status: statusFinal, archived: true, updated_at: new Date().toISOString() })
-      .eq('id', currentLead.id)
-    setBotLeads(prev => prev.filter(l => l.id !== currentLead.id))
-    if(statusFinal === 'closed') {
-      setCerradosHoyCount(c => c + 1)
-    }
-    setSelectedPhone(null)
+    const statusFinal = ESTADOS_FINALES.includes(currentLead.status||'')
+      ? currentLead.status!
+      : (finalizarEstado || 'not_interested')
+    await cambiarEstado(currentLead, statusFinal, { situacion: nota })
     setShowFinalizarModal(false)
     setFinalizarEstado('')
     setFinalizarNota('')
-    if(currentLead.phone_number) {
-      const estadoFinal =
-        statusFinal==='closed'     ? 'resuelto' :
-        statusFinal==='resolved'   ? 'resuelto' :
-        statusFinal==='unresolved' ? 'cerrado'  :
-        statusFinal==='rejected'   ? 'cerrado'  :
-        statusFinal==='not_interested' ? 'cerrado' : 'cerrado'
-      const upd: any = { estado: estadoFinal, updated_at: new Date().toISOString() }
-      if(nota?.trim()) upd.situacion = nota.trim()
-      await supabase.from('amat_consultas').update(upd).eq('phone', currentLead.phone_number)
-    }
   }
 
   const guardarVenta = async () => {
     if(!currentLead||!me) return
-    const venta = {
-      status:          'closed',
-      updated_at:      new Date().toISOString(),
-      entidad:         ventaForm.entidad,
-      linea:           ventaForm.linea,
-      reparticion:     ventaForm.reparticion || currentLead.reparticion,
-      monto_solicitado: parseInt(ventaForm.monto)||0,
-      cant_cuotas:     parseInt(ventaForm.cuotas)||0,
-      valor_cuota:     parseFloat(ventaForm.valor_cuota)||0,
-      notes:           ventaForm.notas || null,
-    }
-    await supabase.from('amat_loan_leads').update({...venta, archived: true}).eq('id',currentLead.id)
-    await supabase.from('amat_consultas')
-      .update({
-        estado:'resuelto',
-        situacion:`Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${parseInt(ventaForm.monto).toLocaleString('es-AR')} en ${ventaForm.cuotas} cuotas · Valor cuota: $${parseFloat(ventaForm.valor_cuota).toLocaleString('es-AR')}`,
-        updated_at:new Date().toISOString()
-      })
-      .eq('phone', currentLead.phone_number||'')
-    // Sacar de bandeja — está cerrado y archivado, no debe aparecer más
-    setBotLeads(prev => prev.filter(l => l.id !== currentLead.id))
-    setCerradosHoyCount(c => c + 1)
-    setSelectedPhone(null)
+    await cambiarEstado(currentLead, 'closed', {
+      notes: ventaForm.notas || undefined,
+      situacion: `Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${parseInt(ventaForm.monto).toLocaleString('es-AR')} en ${ventaForm.cuotas} cuotas · Valor cuota: $${parseFloat(ventaForm.valor_cuota).toLocaleString('es-AR')}`,
+      extraFields: {
+        entidad:          ventaForm.entidad,
+        linea:            ventaForm.linea,
+        reparticion:      ventaForm.reparticion || currentLead.reparticion,
+        monto_solicitado: parseInt(ventaForm.monto)||0,
+        cant_cuotas:      parseInt(ventaForm.cuotas)||0,
+        valor_cuota:      parseFloat(ventaForm.valor_cuota)||0,
+      },
+    })
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
   }
@@ -1851,7 +1876,7 @@ const loadPipeline = async () => {
 
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:ec.bg,color:ec.text}}>
-                            {({'nuevo':'Pendiente','pendiente':'Pendiente','en_proceso':'Pendiente','resuelto':'Vendido','cerrado':'Cerrado','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado'} as any)[c.estado]||c.estado}
+                            {({'nuevo':'Pendiente','pendiente':'Pendiente','en_proceso':'Pendiente','resuelto':'Vendido','cerrado':'Cerrado','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto'} as any)[c.estado]||c.estado}
                           </span>
                         </td>
                         <td>
@@ -2281,8 +2306,9 @@ const loadPipeline = async () => {
         <div className="movo" onClick={()=>setShowStatusModal(false)}>
           <div className="mod" onClick={e=>e.stopPropagation()}>
             <h3>Cambiar estado</h3>
-            {Object.entries(getEstadosFor(currentLead.phone_number))
-              .filter(([k])=>k!=='finalizado')
+            {(flujoMap[currentLead.phone_number||'']==='cobranzas' ? OPCIONES_COBRANZAS : OPCIONES_VENTAS)
+              .map(k => [k, getEstadosFor(currentLead.phone_number)[k]] as [string, typeof LEAD_STATUS[keyof typeof LEAD_STATUS]])
+              .filter(([,v])=>v)
               .map(([k,v])=>{
                 const esCobranza = flujoMap[currentLead.phone_number||'']==='cobranzas'
                 return (
