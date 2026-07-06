@@ -547,15 +547,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setConsultasLoading(false)
   }
 
-  // Un solo useEffect para consultas — evita doble carga
-  // tabRef trackea si el tab acaba de cambiar para no disparar el filtro al mismo tiempo
-  const tabRef = useRef(tab)
+  // useEffect con debounce — evita que múltiples dependencias disparen cargas simultáneas
+  const consultasTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
   useEffect(()=>{
-    const tabCambio = tabRef.current !== tab
-    tabRef.current = tab
+    if(tab==='reportes') loadReportes()
+    if(tab==='pipeline') loadPipeline()
     if(tab==='consultas') {
-      loadConsultas(cRep, cFlujo, cEstado, cSearch)
-      if(tabCambio) {
+      // Cancelar cualquier carga pendiente antes de arrancar una nueva
+      if(consultasTimer.current) clearTimeout(consultasTimer.current)
+      consultasTimer.current = setTimeout(()=>{
+        loadConsultas(cRep, cFlujo, cEstado, cSearch)
         supabase.from('amat_campanas').select('telefono,fecha').order('fecha',{ascending:false})
           .then(({data})=>{
             if(!data) return
@@ -563,10 +564,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             data.forEach((r:any)=>{ if(r.telefono && !map[r.telefono]) map[r.telefono]=r.fecha })
             setCampanas(map)
           })
-      }
+      }, 50) // 50ms es suficiente para que React agrupe todos los cambios de estado
     }
-    if(tab==='reportes') loadReportes()
-    if(tab==='pipeline') loadPipeline()
   },[tab, cSearch, cFlujo, cEstado, cRep]) // eslint-disable-line
 
   // Cargar datos del pipeline
