@@ -498,7 +498,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     let q = supabase
       .from('amat_consultas')
       .select('id,phone,nombre_apellido,dni,reparticion_label,flujo,prestacion,afiliado,vendedor,situacion,estado,created_at,updated_at', { count: 'exact' })
-      .order('updated_at', { ascending: cOrdenRef.current === 'asc' })
+      .order('created_at', { ascending: cOrdenRef.current === 'asc' })
       .limit(500)
     if (search)           q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
     if (flujo !== 'all')  q = q.eq('flujo', flujo)
@@ -552,13 +552,13 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       const phone = c.phone || ''
       if(!phone) continue
       const existing = seenPhones.get(phone)
-      if(!existing || new Date(c.updated_at||c.created_at||0) > new Date(existing.updated_at||existing.created_at||0)) {
+      if(!existing || new Date(c.created_at||0) > new Date(existing.created_at||0)) {
         seenPhones.set(phone, c)
       }
     }
     const ordenadas = [...seenPhones.values()].sort((a:any,b:any)=>{
-      const ta = new Date(a.updated_at||a.created_at||0).getTime()
-      const tb = new Date(b.updated_at||b.created_at||0).getTime()
+      const ta = new Date(a.created_at||0).getTime()
+      const tb = new Date(b.created_at||0).getTime()
       return cOrdenRef.current === 'asc' ? ta - tb : tb - ta
     })
     setConsultas(ordenadas)
