@@ -570,11 +570,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 const loadPipeline = async () => {
   let allData: any[] = []
   let from = 0
+  // Limitar a últimos 90 días para no traer toda la tabla
+  const desde90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
 
   while (true) {
     const { data } = await supabase
       .from('amat_loan_leads')
       .select('*')
+      .gte('updated_at', desde90)
       .order('updated_at', { ascending: false })
       .range(from, from + 999)
 
@@ -875,15 +878,11 @@ const loadPipeline = async () => {
       })
   }
 
-  const abrirChat = async (lead: LoanLead) => {
+  const abrirChat = (lead: LoanLead) => {
     setCurrentChatMsgs([])
     setSelectedPhone(lead.phone_number)
     if(lead.phone_number) cargarMensajes(lead.phone_number)
-    if(lead.status === 'new') {
-      await supabase.from('amat_loan_leads')
-        .update({status:'contacted', updated_at:new Date().toISOString()})
-        .eq('id', lead.id)
-    }
+    // No cambiar status automáticamente — el operador decide con el botón Tomar
   }
 
   const finalizarConversacion = async (nota?: string) => {
@@ -1062,15 +1061,8 @@ const loadPipeline = async () => {
     }
     return m&&s
   }).sort((a, b) => {
-    const lastA = messages
-      .filter(m => m.phone_number === a.phone_number && m.direction === 'in')
-      .sort((x, y) => new Date(y.created_at).getTime() - new Date(x.created_at).getTime())[0]
-    const lastB = messages
-      .filter(m => m.phone_number === b.phone_number && m.direction === 'in')
-      .sort((x, y) => new Date(y.created_at).getTime() - new Date(x.created_at).getTime())[0]
-    const timeA = lastA ? new Date(lastA.created_at).getTime() : 0
-    const timeB = lastB ? new Date(lastB.created_at).getTime() : 0
-    return timeB - timeA
+    // Usar updated_at del lead para evitar iterar mensajes en cada sort
+    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
   })
   
   const currentLead=allLeads.find(l=>l.phone_number===selectedPhone)||baseLeads.find(l=>l.phone_number===selectedPhone)
@@ -1305,7 +1297,7 @@ const loadPipeline = async () => {
                   const lastMsg=messages.filter(m=>m.phone_number===lead.phone_number).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
                   return (
                     <div key={lead.phone_number??lead.id} style={{display:'flex',gap:10,padding:'12px 14px',borderBottom:'1px solid #F1F5F9',cursor:'pointer',alignItems:'flex-start',background:'#FFFBEB',borderLeft:'3px solid #F59E0B'}}
-                      onClick={()=>tomarConversacion(lead)}>
+                      onClick={()=>{ if(lead.phone_number) cargarMensajes(lead.phone_number); setSelectedPhone(lead.phone_number) }}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:'#FFFBEB',color:'#B45309'}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
@@ -1729,14 +1721,7 @@ const loadPipeline = async () => {
                   ))}
                 </tr></thead>
                 <tbody>
-                  {consultas.filter(c=>{
-                    if(cDiasSinCampana === 'all') return true
-                    const limite = parseInt(cDiasSinCampana)
-                    const ultimaCampana = campanas[c.phone]
-                    if(!ultimaCampana) return true // nunca contactado = mostrar
-                    const dias = Math.floor((Date.now()-new Date(ultimaCampana).getTime())/(1000*60*60*24))
-                    return dias >= limite
-                  }).map(c=>{
+                  {consultas.map(c=>{
                     const estadoColors: Record<string,{bg:string,text:string}> = {
                       nuevo:               {bg:'#FFFBEB',text:'#92400E'},
                       pendiente:           {bg:'#FFFBEB',text:'#92400E'},
@@ -1824,7 +1809,7 @@ const loadPipeline = async () => {
         const esAdmin = me?.role==='Administrador'
         const rolPipe = me?.role==='Cobranza' ? 'cobranzas' : 'ventas'
         const modoActivo = esAdmin ? pipelineMode : rolPipe
-        const colsVentas  = Object.entries(LEAD_STATUS)  as [string, typeof LEAD_STATUS[keyof typeof LEAD_STATUS]][]
+        const colsVentas  = Object.entries(LEAD_STATUS).filter(([k])=>!['finalizado','unresolved'].includes(k)) as [string, typeof LEAD_STATUS[keyof typeof LEAD_STATUS]][]
         const colsCob     = Object.entries(COBRANZA_STATUS) as [string, typeof COBRANZA_STATUS[keyof typeof COBRANZA_STATUS]][]
         const cols        = modoActivo==='cobranzas' ? colsCob : colsVentas
         const leadsParaPipe = pipelineLeads.filter(l=>{
@@ -2411,18 +2396,33 @@ const loadPipeline = async () => {
                 <div style={{display:'flex',gap:8}}>
                   <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={async()=>{
                     if(!editTarget?.phone_number||!me) return
-                    // Enviar plantilla real por WhatsApp
-                    await fetch('/api/send-message',{
-                      method:'POST',headers:{'Content-Type':'application/json'},
-                      body:JSON.stringify({
-                        phone: editTarget.phone_number,
-                        template: selectedTemplate.id,
-                        senderName: me.username
+                    try {
+                      const controller = new AbortController()
+                      const timeout = setTimeout(()=>controller.abort(), 8000)
+                      await fetch('/api/send-message',{
+                        method:'POST',headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({
+                          phone: editTarget.phone_number,
+                          template: selectedTemplate.id,
+                          senderName: me.username
+                        }),
+                        signal: controller.signal,
                       })
-                    })
-                    await updateStatus(editTarget.id,'contacted')
-                    setShowTemplateModal(false)
-                    alert(`✅ Plantilla enviada a ${editTarget.full_name}`)
+                      clearTimeout(timeout)
+                    } catch(e) {
+                      console.error('[plantilla modal] timeout o error:', e)
+                    } finally {
+                      await supabase.from('amat_campanas').insert({
+                        documento: editTarget.dni || null,
+                        telefono: editTarget.phone_number,
+                        fecha: new Date().toISOString(),
+                        plantilla: selectedTemplate.id,
+                        operador: me.username,
+                      })
+                      await updateStatus(editTarget.id,'contacted')
+                      setShowTemplateModal(false)
+                      alert(`✅ Plantilla enviada a ${editTarget.full_name}`)
+                    }
                   }}>
                     ✈️ Enviar plantilla
                   </button>
@@ -2634,13 +2634,12 @@ const loadPipeline = async () => {
               <div>
                 <label className="fl">Estado</label>
                 <select className="fs" value={consultaEdit.estado} onChange={e=>setConsultaEdit((f:any)=>({...f,estado:e.target.value}))}>
-                  <option value="pendiente">Nuevo</option>
-                  <option value="en_proceso">Contactado</option>
+                  <option value="pendiente">Pendiente</option>
                   {consultaSelected.flujo==='cobranzas' ? (<>
                     <option value="resuelto">Resuelto</option>
                     <option value="cerrado">No resuelto</option>
                   </>) : (<>
-                    <option value="resuelto">Cerrado</option>
+                    <option value="resuelto">Vendido</option>
                     <option value="cerrado_rechazado">Rechazado</option>
                     <option value="cerrado_no_interesado">No interesado</option>
                   </>)}

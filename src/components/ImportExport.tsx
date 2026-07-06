@@ -133,7 +133,7 @@ export default function ImportExport({ onClose, onImportDone, currentFilters }: 
 
           // Buscar si ya existe por DNI
           const { data: existing } = await supabase
-            .from('loan_leads').select('id,phone_number,email').eq('dni',dni).maybeSingle()
+            .from('amat_loan_leads').select('id,phone_number,email').eq('dni',dni).maybeSingle()
 
           if(existing) {
             // Actualizar — solo sobreescribir teléfono y email si vienen con datos
@@ -177,8 +177,8 @@ export default function ImportExport({ onClose, onImportDone, currentFilters }: 
 
   const REPARTICIONES = ['all','MINISTERIO DE EDUCACION','MINISTERIO DE SEGURIDAD','MINISTERIO DE SALUD','SERVICIO PENITENCIARIO BONAERENSE','IPS','CAJA DE POLICIA','OTRA REPARTICION']
   const BANCOS = ['all','BANCO PROVINCIA','BANCO NACION','BANCO GALICIA','BANCO SANTANDER','BANCO ICBC','BANCO MACRO','BANCO PATAGONIA','OTRO']
-  const ESTADOS = ['all','new','no_phone','attempted','no_answer','interested','not_interested','evaluation','contacted','closed','rejected']
-  const ESTADO_LABELS: Record<string,string> = {all:'Todos',new:'Nuevo',no_phone:'Sin teléfono',attempted:'Intentado',no_answer:'No contesta',interested:'Interesado',not_interested:'No interesado',evaluation:'En evaluación',contacted:'Contactado',closed:'Cerrado',rejected:'Rechazado'}
+  const ESTADOS = ['all','new','contacted','closed','rejected','not_interested']
+  const ESTADO_LABELS: Record<string,string> = {all:'Todos',new:'Pendiente',contacted:'En bandeja',closed:'Vendido',rejected:'Rechazado',not_interested:'No interesado'}
 
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:300,backdropFilter:'blur(3px)',fontFamily:"'DM Sans',system-ui,sans-serif"}}>
