@@ -723,31 +723,21 @@ const loadPipeline = async () => {
           })
       }
 
-      // Cargar cola directamente desde Supabase — independiente del batch de mensajes
-      // Sin esto los leads sin mensajes recientes no aparecen en la cola
+      // Cargar cola — solo los más recientes con mensajes, límite 200 para no trabar el browser
       ;(async () => {
         const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
-        let colaLeads: LoanLead[] = []
-        let fromIdx = 0
-        const BATCH = 1000
-        while(true) {
-          const { data: batch } = await supabase
-            .from('amat_loan_leads')
-            .select('*')
-            .is('assigned_to', null)
-            .eq('archived', false)
-            .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
-            .order('created_at', { ascending: true })
-            .range(fromIdx, fromIdx + BATCH - 1)
-          if(!batch || batch.length === 0) break
-          colaLeads = [...colaLeads, ...batch as LoanLead[]]
-          if(batch.length < BATCH) break
-          fromIdx += BATCH
-        }
-        if(colaLeads.length) {
+        const { data: colaLeads } = await supabase
+          .from('amat_loan_leads')
+          .select('*')
+          .is('assigned_to', null)
+          .eq('archived', false)
+          .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
+          .order('updated_at', { ascending: false })
+          .limit(200)
+        if(colaLeads?.length) {
           setBotLeads(prev => {
             const merged = [...prev]
-            colaLeads.forEach(lead => {
+            ;(colaLeads as LoanLead[]).forEach(lead => {
               if(!merged.find(l=>l.id===lead.id)) merged.push(lead)
             })
             return merged
