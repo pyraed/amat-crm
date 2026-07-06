@@ -172,6 +172,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [showCreds, setShowCreds]         = useState(false)
   const [rememberMe, setRememberMe]       = useState(false)
 
+  // DATA — campañas (último envío por teléfono)
+  const [campanas, setCampanas]             = useState<Record<string,string>>({})
+
   // DATA — consultas (llegadas del bot)
   const [consultas, setConsultas]           = useState<any[]>([])
   const [consultasLoading, setConsultasLoading] = useState(false)
@@ -549,7 +552,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   }
 
   useEffect(()=>{
-    if(tab==='consultas') loadConsultas()
+    if(tab==='consultas') {
+      loadConsultas()
+      // Cargar último envío de campaña por teléfono
+      supabase.from('amat_campanas').select('telefono,fecha').order('fecha',{ascending:false})
+        .then(({data})=>{
+          if(!data) return
+          const map: Record<string,string> = {}
+          data.forEach((r:any)=>{ if(r.telefono && !map[r.telefono]) map[r.telefono]=r.fecha })
+          setCampanas(map)
+        })
+    }
     if(tab==='reportes') loadReportes()
     if(tab==='pipeline') loadPipeline()
   },[tab]) // eslint-disable-line
@@ -751,6 +764,15 @@ const loadPipeline = async () => {
     await fetch('/api/send-message',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({phone:selectedPhone,template,senderName:me.username})
+    })
+    // Registrar envío de campaña
+    const lead = bandejaLeads.find(l=>l.phone_number===selectedPhone)
+    await supabase.from('amat_campanas').insert({
+      documento: lead?.dni || null,
+      telefono: selectedPhone,
+      fecha: new Date().toISOString(),
+      plantilla: template,
+      operador: me.username,
     })
     setSending(false)
   }
@@ -1634,7 +1656,7 @@ const loadPipeline = async () => {
             ) : (
               <table className="tbl" style={{width:'100%',borderCollapse:'collapse'}}>
                 <thead><tr>
-                  {['Fecha','Nombre','DNI','Teléfono','Repartición','Flujo','Prestación','Afiliado','Vendedor','Situación','Estado','Acciones'].map(h=>(
+                  {['Fecha','Nombre','DNI','Teléfono','Repartición','Flujo','Prestación','Afiliado','Vendedor','Situación','Últ. campaña','Estado','Acciones'].map(h=>(
                     <th key={h}>{h}</th>
                   ))}
                 </tr></thead>
@@ -1668,6 +1690,12 @@ const loadPipeline = async () => {
                         </td>
                         <td style={{fontSize:12,color:'#64748B'}}>{c.vendedor||<span style={{color:'#CBD5E1'}}>—</span>}</td>
                         <td style={{fontSize:12,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#64748B'}}>{c.situacion||'—'}</td>
+                        <td style={{fontSize:11,color:'#94A3B8',whiteSpace:'nowrap'}}>
+                          {campanas[c.phone] ? (()=>{
+                            const dias = Math.floor((Date.now()-new Date(campanas[c.phone]).getTime())/(1000*60*60*24))
+                            return dias===0 ? 'Hoy' : dias===1 ? 'Ayer' : `Hace ${dias}d`
+                          })() : '—'}
+                        </td>
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:ec.bg,color:ec.text}}>
                             {({'nuevo':'Nuevo','pendiente':'Pendiente','en_proceso':'En proceso','resuelto':'Resuelto','cerrado':'Cerrado','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado'} as any)[c.estado]||c.estado}
@@ -2315,6 +2343,14 @@ const loadPipeline = async () => {
                         template: selectedTemplate.id,
                         senderName: me.username
                       })
+                    })
+                    // Registrar envío de campaña
+                    await supabase.from('amat_campanas').insert({
+                      documento: editTarget.dni || null,
+                      telefono: editTarget.phone_number,
+                      fecha: new Date().toISOString(),
+                      plantilla: selectedTemplate.id,
+                      operador: me.username,
                     })
                     await updateStatus(editTarget.id,'contacted')
                     setShowTemplateModal(false)
