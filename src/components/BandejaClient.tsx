@@ -129,7 +129,7 @@ const TEMPLATES = [
 const PAGE_SIZE = 50
 
 type Props = { initialLeads: LoanLead[]; initialMessages: Message[] }
-type Tab = 'bandeja' | 'consultas' | 'base' | 'pipeline' | 'reportes'
+type Tab = 'bandeja' | 'consultas' | 'base' | 'reportes'
 
 // ─────────────────────────────────────────────
 //  MENSAJES DE EJEMPLO (simulados del bot)
@@ -245,11 +245,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [showFinalizarModal, setShowFinalizarModal] = useState(false)
   const [finalizarEstado, setFinalizarEstado]       = useState('')
   const [finalizarNota, setFinalizarNota]           = useState('')
-  const [pipelineMode, setPipelineMode]             = useState<'ventas'|'cobranzas'>('ventas')
   const [cerradosHoyCount, setCerradosHoyCount]     = useState(0)
   const [reporteLeads, setReporteLeads]             = useState<LoanLead[]>([])
   const [reporteLoading, setReporteLoading]         = useState(false)
-  const [pipelineLeads, setPipelineLeads]           = useState<LoanLead[]>([])
   const [pipelineFlujoMap, setPipelineFlujoMap]     = useState<Record<string,string>>({})
   const [reporteMode, setReporteMode]               = useState<'ventas'|'cobranzas'>('ventas')
   const [showVentaModal, setShowVentaModal]         = useState(false)
@@ -592,13 +590,15 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const consultasTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
   useEffect(()=>{
     if(tab==='reportes') loadReportes()
-    if(tab==='pipeline') loadPipeline()
     if(tab==='consultas') {
       // Cancelar cualquier carga pendiente antes de arrancar una nueva
       if(consultasTimer.current) clearTimeout(consultasTimer.current)
       consultasTimer.current = setTimeout(()=>{
         loadConsultas(cRep, cFlujo, cEstado, cSearch)
-        supabase.from('amat_campanas').select('telefono,fecha').order('fecha',{ascending:false})
+        supabase.from('amat_campanas').select('telefono,fecha')
+          .gte('fecha', new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString())
+          .order('fecha',{ascending:false})
+          .limit(5000)
           .then(({data})=>{
             if(!data) return
             const map: Record<string,string> = {}
@@ -609,18 +609,19 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   },[tab, cSearch, cFlujo, cEstado, cRep, cOrden]) // eslint-disable-line
 
-  // Cargar datos del pipeline
-const loadPipeline = async () => {
+
+  // Cargar datos de reportes
+  const loadReportes = async () => {
+  setReporteLoading(true)
   let allData: any[] = []
   let from = 0
-  // Limitar a últimos 90 días para no traer toda la tabla
-  const desde90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+  let batches = 0
+  const MAX_BATCHES = 20 // tope: 20.000 leads máximo en reportes
 
-  while (true) {
+  while (batches < MAX_BATCHES) {
     const { data } = await supabase
       .from('amat_loan_leads')
-      .select('*')
-      .gte('updated_at', desde90)
+      .select('id, status, reparticion, assigned_to, updated_at, phone_number')
       .order('updated_at', { ascending: false })
       .range(from, from + 999)
 
@@ -628,13 +629,16 @@ const loadPipeline = async () => {
     allData = [...allData, ...data]
     if (data.length < 1000) break
     from += 1000
+    batches++
   }
 
-  setPipelineLeads(allData as LoanLead[])
+  setReporteLeads(allData as LoanLead[])
+  const hoy = new Date().toDateString()
+  setCerradosHoyCount(allData.filter((l: any) => l.status === 'closed' && new Date(l.updated_at).toDateString() === hoy).length)
 
+  // Cargar flujo por teléfono para separar ventas/cobranzas en los reportes
   const phones = allData.map((l: any) => l.phone_number).filter(Boolean)
   if (phones.length > 0) {
-    // amat_consultas también puede tener más de 1000 — hacerlo en lotes
     const BATCH = 200
     const chunks = Array.from({ length: Math.ceil(phones.length / BATCH) }, (_, i) =>
       phones.slice(i * BATCH, (i + 1) * BATCH)
@@ -648,31 +652,6 @@ const loadPipeline = async () => {
     results.flat().forEach((r: any) => { if (r.phone) map[r.phone] = r.flujo || 'solicitud' })
     setPipelineFlujoMap(map)
   }
-}
-
-
-  // Cargar datos de reportes
-  const loadReportes = async () => {
-  setReporteLoading(true)
-  let allData: any[] = []
-  let from = 0
-
-  while (true) {
-    const { data } = await supabase
-      .from('amat_loan_leads')
-      .select('id, status, reparticion, assigned_to, updated_at, phone_number')
-      .order('updated_at', { ascending: false })
-      .range(from, from + 999)
-
-    if (!data || data.length === 0) break
-    allData = [...allData, ...data]
-    if (data.length < 1000) break
-    from += 1000
-  }
-
-  setReporteLeads(allData as LoanLead[])
-  const hoy = new Date().toDateString()
-  setCerradosHoyCount(allData.filter((l: any) => l.status === 'closed' && new Date(l.updated_at).toDateString() === hoy).length)
   setReporteLoading(false)
 }
 
@@ -741,10 +720,12 @@ const loadPipeline = async () => {
         let allMsgs: Message[] = []
         let fromIdx = 0
         const BATCH = 1000
-        while(true) {
+        const MAX_BATCHES = 10 // tope de seguridad: 10.000 mensajes máximo
+        let batches = 0
+        while(batches < MAX_BATCHES) {
           const { data: batch } = await supabase
             .from('amat_messages')
-            .select('*')
+            .select('id,phone_number,body,direction,sender,created_at,media_url,media_type')
             .gte('created_at', desde)
             .order('created_at', { ascending: false })
             .range(fromIdx, fromIdx + BATCH - 1)
@@ -752,6 +733,7 @@ const loadPipeline = async () => {
           allMsgs = [...allMsgs, ...batch as Message[]]
           if(batch.length < BATCH) break
           fromIdx += BATCH
+          batches++
         }
         if(allMsgs.length) setMessages(allMsgs)
       })()
@@ -1056,14 +1038,32 @@ const loadPipeline = async () => {
   const saveEdit=async()=>{
     if(!editTarget) return
     setEditSaving(true)
-    const upd = {
+    const upd: any = {
       ...editForm,
       full_name:    editForm.full_name?.toUpperCase()||editForm.full_name,
       reparticion:  editForm.reparticion?.toUpperCase()||editForm.reparticion,
       bank:         editForm.bank?.toUpperCase()||editForm.bank,
       updated_at:   new Date().toISOString()
     }
+    // Coherencia de archivado con el modelo canónico
+    if(editForm.status) {
+      if(ESTADOS_FINALES.includes(editForm.status)) {
+        upd.archived = true
+      } else {
+        upd.archived = false
+      }
+    }
     await supabase.from('amat_loan_leads').update(upd).eq('id',editTarget.id)
+    // Si quedó en estado final, sacarlo de bandeja en memoria
+    if(editForm.status && ESTADOS_FINALES.includes(editForm.status)) {
+      setBotLeads(prev => prev.filter(l => l.id !== editTarget.id))
+    }
+    // Sincronizar amat_consultas
+    if(editTarget.phone_number && editForm.status) {
+      await supabase.from('amat_consultas')
+        .update({ estado: STATUS_A_CONSULTA[editForm.status] || 'pendiente', updated_at: new Date().toISOString() })
+        .eq('phone', editTarget.phone_number)
+    }
     setEditSaving(false); setShowEditModal(false); setEditTarget(null)
     if(tab==='base') loadBase()
   }
@@ -1310,7 +1310,7 @@ const loadPipeline = async () => {
         <div style={{width:34,height:34,background:'linear-gradient(135deg,#B45309,#F59E0B)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>🏦</div>
         <span style={{fontWeight:700,fontSize:15,color:'#0F172A',marginRight:6,whiteSpace:'nowrap'}}>AMAT · CRM</span>
         <div style={{display:'flex',gap:2,background:'#F1F5F9',padding:3,borderRadius:10}}>
-          {([['bandeja','💬','Bandeja'],['consultas','📥','Consultas'],['base','👥','Base'],['pipeline','📋','Pipeline'],['reportes','📊','Reportes']] as const).map(([t,i,l])=>(
+          {([['bandeja','💬','Bandeja'],['consultas','📥','Consultas'],['base','👥','Base'],['reportes','📊','Reportes']] as const).map(([t,i,l])=>(
             <button key={t} className={`tabbtn ${tab===t?'on':''}`} onClick={()=>{ if(tab!==t){ const tieneSpinnerPropio=['consultas','base','reportes'].includes(t); if(tieneSpinnerPropio){ setTab(t) } else { setTabLoading(true); setTimeout(()=>{ setTab(t); setTabLoading(false) },30) } } }}>{i} {l}</button>
           ))}
         </div>
@@ -1926,80 +1926,6 @@ const loadPipeline = async () => {
       )}
 
       {/* ══ PIPELINE ══ */}
-      {tab==='pipeline'&&(()=>{
-        const esAdmin = me?.role==='Administrador'
-        const rolPipe = me?.role==='Cobranza' ? 'cobranzas' : 'ventas'
-        const modoActivo = esAdmin ? pipelineMode : rolPipe
-        const colsVentas  = Object.entries(LEAD_STATUS).filter(([k])=>!['finalizado','unresolved'].includes(k)) as [string, typeof LEAD_STATUS[keyof typeof LEAD_STATUS]][]
-        const colsCob     = Object.entries(COBRANZA_STATUS) as [string, typeof COBRANZA_STATUS[keyof typeof COBRANZA_STATUS]][]
-        const cols        = modoActivo==='cobranzas' ? colsCob : colsVentas
-        const leadsParaPipe = pipelineLeads.filter(l=>{
-          const fl = pipelineFlujoMap[l.phone_number||'']||flujoMap[l.phone_number||'']||'solicitud'
-          if(me?.role==='Vendedor') return fl!=='cobranzas'
-          if(me?.role==='Cobranza') return fl==='cobranzas'
-          return modoActivo==='cobranzas' ? fl==='cobranzas' : fl!=='cobranzas'
-        })
-        return (
-          <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:'#F8FAFC'}}>
-            <div style={{padding:'12px 20px',background:'white',borderBottom:'1px solid #E2E8F0',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
-              <span style={{fontWeight:700,fontSize:14,color:'#0F172A'}}>Pipeline</span>
-              {esAdmin && (
-                <div style={{display:'flex',gap:4,background:'#F1F5F9',padding:3,borderRadius:8,marginLeft:8}}>
-                  {(['ventas','cobranzas'] as const).map(m=>(
-                    <button key={m} onClick={()=>setPipelineMode(m)}
-                      style={{padding:'5px 16px',borderRadius:6,border:'none',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',
-                        background:pipelineMode===m?'white':'transparent',
-                        color:pipelineMode===m?'#0F172A':'#64748B',
-                        boxShadow:pipelineMode===m?'0 1px 3px rgba(0,0,0,.1)':'none'}}>
-                      {m==='ventas'?'💼 Ventas':'🔔 Cobranzas'}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {!esAdmin && (
-                <span style={{fontSize:12,padding:'3px 12px',borderRadius:99,fontWeight:600,
-                  background:modoActivo==='cobranzas'?'#F5F3FF':'#EFF6FF',
-                  color:modoActivo==='cobranzas'?'#6D28D9':'#1D4ED8'}}>
-                  {modoActivo==='cobranzas'?'🔔 Cobranzas':'💼 Ventas'}
-                </span>
-              )}
-              <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',fontFamily:"'DM Mono',monospace"}}>{leadsParaPipe.length} contactos</span>
-            </div>
-            <div style={{flex:1,overflowX:'auto',padding:20}}>
-              <div style={{display:'flex',gap:12,minWidth:'max-content',height:'100%'}}>
-                {cols.map(([status,s])=>{
-                  const col = leadsParaPipe.filter(l=>l.status===status)
-                  const isCob = modoActivo==='cobranzas'
-                  return (
-                    <div key={status} style={{background:'#F1F5F9',borderRadius:14,padding:12,width:220,flexShrink:0,minHeight:200,borderTop:`3px solid ${s.color}`}}>
-                      <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:12}}>
-                        <div style={{width:8,height:8,borderRadius:'50%',background:s.color,flexShrink:0}}/>
-                        <span style={{fontSize:12,fontWeight:700,color:'#374151'}}>{s.label}</span>
-                        <span style={{fontSize:11,color:'#94A3B8',marginLeft:'auto',background:'white',padding:'1px 8px',borderRadius:99,border:'1px solid #E2E8F0',fontWeight:600}}>{col.length}</span>
-                      </div>
-                      {col.map(lead=>(
-                        <div key={lead.id}
-                          style={{background:'white',border:'1px solid #E2E8F0',borderRadius:10,padding:'12px 14px',marginBottom:8,cursor:'pointer',transition:'all .15s',borderLeft:`3px solid ${s.color}`}}
-                          onClick={()=>{setSelectedPhone(lead.phone_number);setTab('bandeja');if(lead.phone_number)cargarMensajes(lead.phone_number)}}
-                          onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.boxShadow='0 4px 14px rgba(0,0,0,.08)';(e.currentTarget as HTMLDivElement).style.transform='translateY(-1px)'}}
-                          onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.boxShadow='none';(e.currentTarget as HTMLDivElement).style.transform='none'}}>
-                          <div style={{fontWeight:600,fontSize:13,color:'#0F172A',marginBottom:3}}>{lead.full_name||lead.phone_number||'Sin datos'}</div>
-                          <div style={{fontSize:11,color:'#64748B'}}>{lead.reparticion||'—'}</div>
-                          {!isCob && lead.amount&&<div style={{fontSize:11,color:'#374151',fontWeight:500,marginTop:4}}>${lead.amount.toLocaleString('es-AR')} · {lead.installments}c</div>}
-                          {lead.assigned_to&&<div style={{fontSize:10,color:'#94A3B8',marginTop:5}}>👤 {lead.assigned_to}</div>}
-                          <div style={{fontSize:10,color:'#CBD5E1',marginTop:4,fontFamily:"'DM Mono',monospace"}}>{new Date(lead.updated_at).toLocaleDateString('es-AR')}</div>
-                        </div>
-                      ))}
-                      {col.length===0&&<div style={{textAlign:'center',color:'#CBD5E1',fontSize:12,padding:'24px 0'}}>Sin contactos</div>}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
       {/* ══ REPORTES ══ */}
       {tab==='reportes'&&(()=>{
         const getFlujo = (phone:string|null) => pipelineFlujoMap[phone||''] || flujoMap[phone||''] || 'solicitud'
@@ -2227,7 +2153,7 @@ const loadPipeline = async () => {
           <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr',gap:16,marginBottom:20}}>
             <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'20px 20px 12px'}}>
               <div style={{marginBottom:8}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Salud del pipeline</div>
+                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Salud de la operación</div>
                 <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Estados positivos vs negativos</div>
               </div>
               <ResponsiveContainer width="100%" height={200}>
@@ -2797,8 +2723,19 @@ const loadPipeline = async () => {
                   }).eq('id',consultaSelected.id)
                 }
 
-                // SIEMPRE actualizar assigned_to en amat_loan_leads cuando se asigna vendedor
-                if(consultaEdit.vendedor && consultaSelected.phone) {
+                // Sincronizar amat_loan_leads con el estado elegido — mapeo inverso canónico
+                if(consultaSelected.phone) {
+                  const esCob = consultaSelected.flujo === 'cobranzas'
+                  const CONSULTA_A_STATUS: Record<string,string> = {
+                    pendiente:              'contacted',
+                    resuelto:               esCob ? 'resolved' : 'closed',
+                    cerrado:                esCob ? 'unresolved' : 'not_interested',
+                    cerrado_rechazado:      'rejected',
+                    cerrado_no_interesado:  'not_interested',
+                  }
+                  const nuevoStatus = CONSULTA_A_STATUS[consultaEdit.estado] || 'contacted'
+                  const esFinal = ESTADOS_FINALES.includes(nuevoStatus)
+
                   const {data: existingLead} = await supabase
                     .from('amat_loan_leads')
                     .select('id,archived,assigned_to,status')
@@ -2807,22 +2744,33 @@ const loadPipeline = async () => {
 
                   if(existingLead) {
                     const updateData: any = {
-                      assigned_to: consultaEdit.vendedor,
-                      archived:    false,
-                      updated_at:  new Date().toISOString()
+                      status:      nuevoStatus,
+                      updated_at:  new Date().toISOString(),
                     }
-                    // Solo cambiar status a contacted si estaba en new
-                    if(existingLead.status === 'new') updateData.status = 'contacted'
+                    if(esFinal) {
+                      // Estado final: archivar SIEMPRE, salir de bandeja/cola
+                      updateData.archived = true
+                    } else {
+                      // Pendiente: activo, asignar vendedor si se eligió
+                      updateData.archived = false
+                      if(consultaEdit.vendedor) updateData.assigned_to = consultaEdit.vendedor
+                    }
                     await supabase.from('amat_loan_leads').update(updateData).eq('id', existingLead.id)
-                    // Actualizar en memoria para que aparezca en bandeja
-                    setBotLeads(prev => {
-                      const exists = prev.find(l=>l.id===existingLead.id)
-                      if(exists) return prev.map(l=>l.id===existingLead.id?{...l,...updateData}:l)
-                      // Si no estaba en bandeja, recargarlo
-                      supabase.from('amat_loan_leads').select('*').eq('id',existingLead.id).single()
-                        .then(({data})=>{ if(data) setBotLeads(p=>[data as any,...p]) })
-                      return prev
-                    })
+
+                    if(esFinal) {
+                      // Sacar de memoria — no debe aparecer más en bandeja/cola
+                      setBotLeads(prev => prev.filter(l => l.id !== existingLead.id))
+                      if(selectedPhone === consultaSelected.phone) setSelectedPhone(null)
+                    } else if(consultaEdit.vendedor) {
+                      // Activo con vendedor: reflejar en bandeja
+                      setBotLeads(prev => {
+                        const exists = prev.find(l=>l.id===existingLead.id)
+                        if(exists) return prev.map(l=>l.id===existingLead.id?{...l,...updateData}:l)
+                        supabase.from('amat_loan_leads').select('*').eq('id',existingLead.id).single()
+                          .then(({data})=>{ if(data) setBotLeads(p=>p.find(x=>x.id===(data as any).id)?p:[data as any,...p]) })
+                        return prev
+                      })
+                    }
                   }
                 }
 
