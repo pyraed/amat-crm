@@ -66,6 +66,7 @@ export default function CampanaModal({ onClose }: Props) {
   const [filterTel, setFilterTel]     = useState<'con' | 'all'>('con')
   const [filterAssigned, setFilterAssigned] = useState('all')
   const [limitCount, setLimitCount]   = useState('500')
+  const [filterDiasSinCampana, setFilterDiasSinCampana] = useState('3')
 
   // Plantilla
   const [selectedTpl, setSelectedTpl] = useState(TEMPLATES[0])
@@ -118,6 +119,20 @@ export default function CampanaModal({ onClose }: Props) {
   // ── Cargar contactos del segmento ────────────────────────
   const loadContacts = async () => {
     setLoadingContacts(true)
+
+    // 1. Traer teléfonos que recibieron campaña dentro del rango de días
+    let telefonosExcluidos: Set<string> = new Set()
+    if (filterDiasSinCampana !== 'all') {
+      const dias = parseInt(filterDiasSinCampana)
+      const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString()
+      const { data: campanas } = await supabase
+        .from('amat_campanas')
+        .select('telefono')
+        .gte('fecha', desde)
+      if (campanas) campanas.forEach((r: any) => { if(r.telefono) telefonosExcluidos.add(r.telefono) })
+    }
+
+    // 2. Traer leads del segmento
     let q = supabase
       .from('amat_loan_leads')
       .select('*')
@@ -129,15 +144,21 @@ export default function CampanaModal({ onClose }: Props) {
     if (filterAssigned !== 'all') q = q.eq('assigned_to', filterAssigned)
 
     const limit = parseInt(limitCount) || 500
-    q = q.order('created_at', { ascending: true }).limit(limit)
+    q = q.order('created_at', { ascending: true }).limit(limit + telefonosExcluidos.size)
 
     const { data } = await q
-    setContacts((data as LoanLead[]) || [])
+
+    // 3. Filtrar los que recibieron campaña recientemente
+    const filtered = ((data as LoanLead[]) || [])
+      .filter(c => !telefonosExcluidos.has(c.phone_number || ''))
+      .slice(0, limit)
+
+    setContacts(filtered)
     setLoadingContacts(false)
 
     // Inicializar resultados
     setResults(
-      ((data as LoanLead[]) || []).map(c => ({
+      filtered.map(c => ({
         phone: c.phone_number || '',
         name: c.full_name || c.phone_number || '—',
         status: 'pending',
@@ -200,11 +221,20 @@ export default function CampanaModal({ onClose }: Props) {
         return { ok: false, error: err.error || `HTTP ${res.status}` }
       }
 
-      // Actualizar estado del lead a "attempted"
+      // Actualizar estado del lead
       await supabase
         .from('amat_loan_leads')
         .update({ status: 'contacted', updated_at: new Date().toISOString() })
         .eq('id', lead.id)
+
+      // Registrar en amat_campanas
+      await supabase.from('amat_campanas').insert({
+        documento: lead.dni || null,
+        telefono: lead.phone_number,
+        fecha: new Date().toISOString(),
+        plantilla: selectedTpl.id,
+        operador: 'campaña',
+      })
 
       return { ok: true }
     } catch (e: any) {
@@ -539,6 +569,21 @@ export default function CampanaModal({ onClose }: Props) {
                   <div>
                     <label style={s.label}>Límite de contactos</label>
                     <input style={s.input} type="number" placeholder="500" value={limitCount} onChange={e => setLimitCount(e.target.value)} />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={s.label}>🛡️ Excluir contactados en los últimos</label>
+                    <select style={{...s.select, borderColor:'#FCD34D', background:'#FFFBEB'}} value={filterDiasSinCampana} onChange={e => setFilterDiasSinCampana(e.target.value)}>
+                      <option value="1">1 día</option>
+                      <option value="3">3 días (recomendado)</option>
+                      <option value="5">5 días</option>
+                      <option value="7">7 días</option>
+                      <option value="15">15 días</option>
+                      <option value="30">30 días</option>
+                      <option value="all">Sin filtro — enviar a todos</option>
+                    </select>
+                    <div style={{ fontSize:11, color:'#92400E', marginTop:4, fontFamily:"'DM Mono',monospace" }}>
+                      Se excluirán automáticamente los teléfonos que ya recibieron una campaña en ese período.
+                    </div>
                   </div>
                 </div>
               </div>
