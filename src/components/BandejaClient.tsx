@@ -481,70 +481,69 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const estado = estadoOverride ?? cEstadoRef.current
     const rep    = repOverride    ?? cRepRef.current
 
-    let q = supabase.from('amat_consultas').select('*').order('updated_at', { ascending: false })
-    if (search)          q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
+    // Query principal de consultas — solo columnas necesarias, límite 500
+    let q = supabase
+      .from('amat_consultas')
+      .select('id,phone,nombre_apellido,dni,reparticion_label,flujo,prestacion,afiliado,vendedor,situacion,estado,created_at,updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(500)
+    if (search)           q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
     if (flujo !== 'all')  q = q.eq('flujo', flujo)
     if (estado !== 'all') q = q.eq('estado', estado)
     if (rep !== 'all')    q = q.ilike('reparticion_label', rep)
-    const { data, error } = await q
+
+    // Query de leads sin consulta — paralela, solo si hay filtro activo
+    const leadsPromise = (search || estado !== 'all' || rep !== 'all' || flujo !== 'all')
+      ? (() => {
+          let lq = supabase
+            .from('amat_loan_leads')
+            .select('id,phone_number,full_name,dni,reparticion,assigned_to,status,created_at')
+            .order('created_at', { ascending: false })
+            .limit(300)
+          if(search) lq = lq.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
+          if(rep !== 'all') lq = lq.ilike('reparticion', `%${rep}%`)
+          return lq
+        })()
+      : Promise.resolve({ data: [] })
+
+    // Ejecutar en paralelo
+    const [{ data, error }, { data: leadsData }] = await Promise.all([q, leadsPromise])
     if (error) console.error('[CONSULTAS] Error Supabase:', error)
 
-    // Traer leads sin consulta — solo con filtros activos y límite de 500 para no bloquear
-    let sinConsulta: any[] = []
-    const phonesConConsulta = (data||[]).map((c:any) => c.phone).filter(Boolean)
+    // Deduplicar con Set — O(n) en vez de O(n²)
+    const phonesConConsulta = new Set((data||[]).map((c:any) => c.phone).filter(Boolean))
+    const statusMap: Record<string,string> = { new:'pendiente', contacted:'pendiente', closed:'resuelto', rejected:'rechazado', not_interested:'no_interesado' }
 
-    // Solo buscar si hay un search o filtro activo que lo justifique
-    if(search || estado !== 'all' || rep !== 'all' || flujo !== 'all') {
-      let lq = supabase
-        .from('amat_loan_leads')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(500)
-      if(search) lq = lq.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
-      if(rep !== 'all') lq = lq.ilike('reparticion', `%${rep}%`)
-      const { data: leadsData } = await lq
-      const statusMap: Record<string,string> = { new:'pendiente', contacted:'pendiente', closed:'resuelto' }
-      sinConsulta = (leadsData||[])
-        .filter((l:any) => !phonesConConsulta.includes(l.phone_number))
-        .map((l:any) => ({
-          id: `lead_${l.id}`,
-          phone: l.phone_number,
-          nombre_apellido: l.full_name,
-          dni: l.dni,
-          reparticion_label: l.reparticion,
-          flujo: flujoMap[l.phone_number||'']||'solicitud',
-          prestacion: null,
-          afiliado: null,
-          vendedor: l.assigned_to,
-          situacion: null,
-          estado: statusMap[l.status||''] || l.status,
-          created_at: l.created_at,
-          _esLeadSinConsulta: true,
-        }))
-        .filter((c:any) => flujo === 'all' || c.flujo === flujo)
-        .filter((c:any) => estado === 'all' || c.estado === estado)
-    }
+    const sinConsulta = (leadsData||[])
+      .filter((l:any) => l.phone_number && !phonesConConsulta.has(l.phone_number))
+      .map((l:any) => ({
+        id: `lead_${l.id}`,
+        phone: l.phone_number,
+        nombre_apellido: l.full_name,
+        dni: l.dni,
+        reparticion_label: l.reparticion,
+        flujo: flujoMap[l.phone_number||'']||'solicitud',
+        prestacion: null, afiliado: null,
+        vendedor: l.assigned_to, situacion: null,
+        estado: statusMap[l.status||''] || l.status,
+        created_at: l.created_at,
+        _esLeadSinConsulta: true,
+      }))
+      .filter((c:any) => flujo === 'all' || c.flujo === flujo)
+      .filter((c:any) => estado === 'all' || c.estado === estado)
 
-    // Deduplicar por teléfono — mostrar solo la más reciente por persona
+    // Deduplicar consultas — O(n) con Map
     const todasConsultas = [...sinConsulta, ...((data as any[]) || [])]
     const seenPhones = new Map<string, any>()
-    todasConsultas.forEach(c => {
+    for(const c of todasConsultas) {
       const phone = c.phone || ''
-      if(!phone) return
+      if(!phone) continue
       const existing = seenPhones.get(phone)
-      if(!existing) {
+      if(!existing || new Date(c.updated_at||c.created_at||0) > new Date(existing.updated_at||existing.created_at||0)) {
         seenPhones.set(phone, c)
-      } else {
-        // Quedarse con la más reciente
-        const existingDate = new Date(existing.created_at || 0).getTime()
-        const newDate = new Date(c.created_at || 0).getTime()
-        if(newDate > existingDate) seenPhones.set(phone, c)
       }
-    })
-    // Mantener el orden original (más reciente primero)
-    const consultasUnicas = todasConsultas.filter(c => seenPhones.get(c.phone || '') === c)
-    // Aplicar filtro de días sin campaña (se aplica en el render, no en la query)
-    setConsultas(consultasUnicas)
+    }
+    setConsultas([...seenPhones.values()])
     setConsultasLoading(false)
   }
 
@@ -563,7 +562,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(tab==='pipeline') loadPipeline()
   },[tab]) // eslint-disable-line
 
+  const consultasMounted = useRef(false)
   useEffect(()=>{
+    if(!consultasMounted.current) { consultasMounted.current = true; return }
     if(tab==='consultas') loadConsultas(cRep, cFlujo, cEstado, cSearch)
   },[cSearch, cFlujo, cEstado, cRep]) // eslint-disable-line
 
@@ -661,7 +662,7 @@ const loadPipeline = async () => {
     const assigned = baseAssignedRef.current
     const page     = basePageRef.current
 
-    let q=supabase.from('amat_loan_leads').select('*',{count:'exact'})
+    let q=supabase.from('amat_loan_leads').select('id,phone_number,full_name,dni,reparticion,bank,status,assigned_to,created_at,updated_at,archived,email',{count:'exact'})
     if(search)           q=q.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
     if(rep!=='all')      q=q.eq('reparticion',rep)
     if(banco!=='all')    q=q.eq('bank',banco)
@@ -670,7 +671,7 @@ const loadPipeline = async () => {
     if(tel==='sin')      q=q.is('phone_number',null)
     if(assigned==='sin') q=q.is('assigned_to',null)
     else if(assigned!=='all') q=q.eq('assigned_to',assigned)
-    q=q.order('full_name',{ascending:true}).range(page*PAGE_SIZE,(page+1)*PAGE_SIZE-1)
+    q=q.order('updated_at',{ascending:false}).range(page*PAGE_SIZE,(page+1)*PAGE_SIZE-1)
     const {data,count,error}=await q
     if(error) console.error('[BASE] Error Supabase:', error)
     setBaseLeads((data as LoanLead[])||[])
@@ -678,11 +679,18 @@ const loadPipeline = async () => {
     setBaseLoading(false)
   }
 
+  const baseMounted = useRef(false)
   useEffect(()=>{
-    if(tab==='base') loadBase()
+    if(tab==='base') {
+      baseMounted.current = false // resetear al cambiar de tab
+      loadBase()
+    }
   },[tab]) // eslint-disable-line
 
-  useEffect(()=>{ if(tab==='base') loadBase() },[baseSearch,baseRep,baseBanco,baseStatus,baseTel,baseAssigned,basePage]) // eslint-disable-line
+  useEffect(()=>{
+    if(!baseMounted.current) { baseMounted.current = true; return }
+    if(tab==='base') loadBase()
+  },[baseSearch,baseRep,baseBanco,baseStatus,baseTel,baseAssigned,basePage]) // eslint-disable-line
 
   useEffect(()=>{
     if(tab==='bandeja'){
