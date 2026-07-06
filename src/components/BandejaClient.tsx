@@ -1249,7 +1249,7 @@ const loadPipeline = async () => {
         <span style={{fontWeight:700,fontSize:15,color:'#0F172A',marginRight:6,whiteSpace:'nowrap'}}>AMAT · CRM</span>
         <div style={{display:'flex',gap:2,background:'#F1F5F9',padding:3,borderRadius:10}}>
           {([['bandeja','💬','Bandeja'],['consultas','📥','Consultas'],['base','👥','Base'],['pipeline','📋','Pipeline'],['reportes','📊','Reportes']] as const).map(([t,i,l])=>(
-            <button key={t} className={`tabbtn ${tab===t?'on':''}`} onClick={()=>{ if(tab!==t){ setTabLoading(true); setTimeout(()=>{ setTab(t); setTabLoading(false) },30) } }}>{i} {l}</button>
+            <button key={t} className={`tabbtn ${tab===t?'on':''}`} onClick={()=>{ if(tab!==t){ const tieneSpinnerPropio=['consultas','base','reportes'].includes(t); if(tieneSpinnerPropio){ setTab(t) } else { setTabLoading(true); setTimeout(()=>{ setTab(t); setTabLoading(false) },30) } } }}>{i} {l}</button>
           ))}
         </div>
         <div style={{display:'flex',gap:16,marginLeft:16}}>
