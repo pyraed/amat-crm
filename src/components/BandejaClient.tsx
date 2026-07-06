@@ -591,6 +591,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   useEffect(()=>{
     if(tab==='reportes') loadReportes()
     if(tab==='consultas') {
+      // Spinner inmediato — sin esto se ve un flash de los datos viejos durante el debounce
+      setConsultasLoading(true)
       // Cancelar cualquier carga pendiente antes de arrancar una nueva
       if(consultasTimer.current) clearTimeout(consultasTimer.current)
       consultasTimer.current = setTimeout(()=>{
