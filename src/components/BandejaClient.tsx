@@ -215,6 +215,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // Mapa phone → flujo (solicitud|cobranzas) cargado de amat_consultas
   const [flujoMap, setFlujoMap]           = useState<Record<string,string>>({})
   const [cola, setCola]                   = useState<LoanLead[]>([])
+  const [colaPage, setColaPage]           = useState(50)
   const [showFinalizarModal, setShowFinalizarModal] = useState(false)
   const [finalizarEstado, setFinalizarEstado]       = useState('')
   const [finalizarNota, setFinalizarNota]           = useState('')
@@ -726,7 +727,7 @@ const loadPipeline = async () => {
           })
       }
 
-      // Cargar cola — solo los más recientes con mensajes, límite 200 para no trabar el browser
+      // Cargar cola — primeros 50, se cargan más al hacer click en "Cargar más"
       ;(async () => {
         const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
         const { data: colaLeads } = await supabase
@@ -736,7 +737,7 @@ const loadPipeline = async () => {
           .eq('archived', false)
           .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
           .order('updated_at', { ascending: false })
-          .limit(200)
+          .limit(50)
         if(colaLeads?.length) {
           setBotLeads(prev => {
             const merged = [...prev]
@@ -1299,14 +1300,14 @@ const loadPipeline = async () => {
                     No hay conversaciones nuevas pendientes
                   </div>
                 )
-                return leads.map(lead=>{
-                  const lastMsg=messages.filter(m=>m.phone_number===lead.phone_number).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
+                const leadsVisibles = leads.slice(0, colaPage)
+                return (<>
+                  {leadsVisibles.map(lead=>{
                   return (
                     <div key={lead.phone_number??lead.id} style={{display:'flex',gap:10,padding:'12px 14px',borderBottom:'1px solid #F1F5F9',cursor:'pointer',alignItems:'flex-start',background:'#FFFBEB',borderLeft:'3px solid #F59E0B'}}
                       onClick={()=>{
                         if(lead.phone_number) cargarMensajes(lead.phone_number)
                         setSelectedPhone(lead.phone_number)
-                        // Asegurar que el lead esté en botLeads para que sendTemplate lo encuentre
                         setBotLeads(prev => prev.find(l=>l.id===lead.id) ? prev : [lead, ...prev])
                       }}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:'#FFFBEB',color:'#B45309'}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
@@ -1320,12 +1321,30 @@ const loadPipeline = async () => {
                             </span>
                           )})()}
                         </div>
-                        <div style={{fontSize:11,color:'#94A3B8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lastMsg?lastMsg.body:lead.reparticion||'Sin mensajes'}</div>
+                        <div style={{fontSize:11,color:'#94A3B8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.reparticion||lead.phone_number||'—'}</div>
                         <div style={{marginTop:4,fontSize:10.5,color:'#B45309',fontWeight:600}}>👁️ Click para ver · ✋ Tomar antes de responder</div>
                       </div>
                     </div>
                   )
-                })
+                  })}
+                  {leads.length > colaPage && (
+                    <div style={{padding:'12px 16px',textAlign:'center'}}>
+                      <button onClick={async()=>{
+                        const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
+                        const { data: mas } = await supabase
+                          .from('amat_loan_leads').select('*')
+                          .is('assigned_to', null).eq('archived', false)
+                          .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
+                          .order('updated_at', { ascending: false })
+                          .range(colaPage, colaPage + 49)
+                        if(mas?.length) setBotLeads(prev => { const m=[...prev]; (mas as LoanLead[]).forEach(l=>{ if(!m.find(x=>x.id===l.id)) m.push(l) }); return m })
+                        setColaPage(p => p + 50)
+                      }} style={{padding:'8px 20px',borderRadius:8,border:'1px solid #FCD34D',background:'#FFFBEB',color:'#B45309',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                        Cargar 50 más ({leads.length - colaPage} restantes)
+                      </button>
+                    </div>
+                  )}
+                </>)
               })()}
 
               {vistaMode==='mis_chats'&&(()=>{
