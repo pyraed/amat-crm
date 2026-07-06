@@ -804,14 +804,20 @@ const loadPipeline = async () => {
     } catch(e) {
       console.error('[sendTemplate] error o timeout:', e)
     } finally {
+      // Buscar el lead en todas las fuentes posibles
       const lead = bandejaLeads.find(l=>l.phone_number===selectedPhone)
-      supabase.from('amat_campanas').insert({
-        documento: lead?.dni || null,
-        telefono: selectedPhone,
-        fecha: new Date().toISOString(),
-        plantilla: template,
-        operador: me.username,
-      })
+        || baseLeads.find(l=>l.phone_number===selectedPhone)
+      try {
+        await supabase.from('amat_campanas').insert({
+          documento: lead?.dni || null,
+          telefono: selectedPhone,
+          fecha: new Date().toISOString(),
+          plantilla: template,
+          operador: me.username,
+        })
+      } catch(insertErr) {
+        console.error('[sendTemplate] error insertando campana:', insertErr)
+      }
       setSending(false)
     }
   }
@@ -1297,7 +1303,12 @@ const loadPipeline = async () => {
                   const lastMsg=messages.filter(m=>m.phone_number===lead.phone_number).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
                   return (
                     <div key={lead.phone_number??lead.id} style={{display:'flex',gap:10,padding:'12px 14px',borderBottom:'1px solid #F1F5F9',cursor:'pointer',alignItems:'flex-start',background:'#FFFBEB',borderLeft:'3px solid #F59E0B'}}
-                      onClick={()=>{ if(lead.phone_number) cargarMensajes(lead.phone_number); setSelectedPhone(lead.phone_number) }}>
+                      onClick={()=>{
+                        if(lead.phone_number) cargarMensajes(lead.phone_number)
+                        setSelectedPhone(lead.phone_number)
+                        // Asegurar que el lead esté en botLeads para que sendTemplate lo encuentre
+                        setBotLeads(prev => prev.find(l=>l.id===lead.id) ? prev : [lead, ...prev])
+                      }}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:'#FFFBEB',color:'#B45309'}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
@@ -1310,7 +1321,7 @@ const loadPipeline = async () => {
                           )})()}
                         </div>
                         <div style={{fontSize:11,color:'#94A3B8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lastMsg?lastMsg.body:lead.reparticion||'Sin mensajes'}</div>
-                        <div style={{marginTop:4,fontSize:10.5,color:'#B45309',fontWeight:600}}>👆 Click para tomar</div>
+                        <div style={{marginTop:4,fontSize:10.5,color:'#B45309',fontWeight:600}}>👁️ Click para ver · ✋ Tomar antes de responder</div>
                       </div>
                     </div>
                   )
