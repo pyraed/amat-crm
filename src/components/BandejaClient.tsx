@@ -875,6 +875,32 @@ const loadPipeline = async () => {
     }
     setSelectedPhone(lead.phone_number)
     setVistaMode('mis_chats')
+
+    // Reemplazar el lead tomado con uno nuevo de la cola para mantener siempre ~50 visibles
+    const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
+    const colaActual = bandejaLeads.filter(l =>
+      !l.assigned_to &&
+      !EXCLUIDOS_COLA.includes(l.status||'') &&
+      !l.archived
+    )
+    // Buscar el siguiente que no esté ya en memoria
+    const idsEnMemoria = new Set(colaActual.map(l => l.id))
+    supabase
+      .from('amat_loan_leads')
+      .select('*')
+      .is('assigned_to', null)
+      .eq('archived', false)
+      .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
+      .order('updated_at', { ascending: false })
+      .range(colaActual.length, colaActual.length)  // traer solo 1 para reemplazar
+      .then(({ data }) => {
+        if(data?.length) {
+          const nuevo = data[0] as LoanLead
+          if(!idsEnMemoria.has(nuevo.id)) {
+            setBotLeads(prev => [...prev, nuevo])
+          }
+        }
+      })
   }
 
   // Helper: cargar mensajes de un phone sin límite
