@@ -185,6 +185,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [cFlujo, setCFlujo]     = useState('all')
   const [cEstado, setCEstado]   = useState('all')
   const [cDiasSinCampana, setCDiasSinCampana] = useState('all')
+  const [cOrden, setCOrden]     = useState<'desc'|'asc'>('desc')
   const [campanas, setCampanas]   = useState<Record<string,string>>({})
   const [cRep, setCRep]         = useState('all')
   const [cSearch, setCSearch]   = useState('')
@@ -327,7 +328,15 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const ch=supabase.channel('rt-msgs')
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'amat_messages'},p=>{
         const msg = p.new as Message
-        setMessages(prev=>prev.find(m=>m.id===msg.id)?prev:[...prev,msg])
+        setMessages(prev=>{
+          if(prev.find(m=>m.id===msg.id)) return prev
+          // Si es un 'out' que coincide con un mensaje temporal optimista, reemplazarlo
+          if(msg.direction==='out') {
+            const sinTemp = prev.filter(m=>!(String(m.id).startsWith('temp_')&&m.phone_number===msg.phone_number&&m.body===msg.body))
+            return [...sinTemp, msg]
+          }
+          return [...prev, msg]
+        })
         // FIX 1: doble check con estado fresco antes de insertar el lead
         setBotLeads(prev=>{
           if(!prev.find(l=>l.phone_number===msg.phone_number)){
@@ -465,11 +474,13 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const cFlujoRef  = useRef(cFlujo)
   const cEstadoRef = useRef(cEstado)
   const cRepRef    = useRef(cRep)
+  const cOrdenRef  = useRef(cOrden)
 
   useEffect(()=>{ cSearchRef.current = cSearch },[cSearch])
   useEffect(()=>{ cFlujoRef.current  = cFlujo  },[cFlujo])
   useEffect(()=>{ cEstadoRef.current = cEstado },[cEstado])
   useEffect(()=>{ cRepRef.current    = cRep    },[cRep])
+  useEffect(()=>{ cOrdenRef.current  = cOrden  },[cOrden])
 
   const loadConsultas = async (
     repOverride?: string,
@@ -487,7 +498,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     let q = supabase
       .from('amat_consultas')
       .select('id,phone,nombre_apellido,dni,reparticion_label,flujo,prestacion,afiliado,vendedor,situacion,estado,created_at,updated_at', { count: 'exact' })
-      .order('updated_at', { ascending: false })
+      .order('updated_at', { ascending: cOrdenRef.current === 'asc' })
       .limit(500)
     if (search)           q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
     if (flujo !== 'all')  q = q.eq('flujo', flujo)
@@ -545,7 +556,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         seenPhones.set(phone, c)
       }
     }
-    setConsultas([...seenPhones.values()])
+    const ordenadas = [...seenPhones.values()].sort((a:any,b:any)=>{
+      const ta = new Date(a.updated_at||a.created_at||0).getTime()
+      const tb = new Date(b.updated_at||b.created_at||0).getTime()
+      return cOrdenRef.current === 'asc' ? ta - tb : tb - ta
+    })
+    setConsultas(ordenadas)
     setConsultasLoading(false)
   }
 
@@ -568,7 +584,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           })
       }, 50) // 50ms es suficiente para que React agrupe todos los cambios de estado
     }
-  },[tab, cSearch, cFlujo, cEstado, cRep]) // eslint-disable-line
+  },[tab, cSearch, cFlujo, cEstado, cRep, cOrden]) // eslint-disable-line
 
   // Cargar datos del pipeline
 const loadPipeline = async () => {
@@ -791,6 +807,16 @@ const loadPipeline = async () => {
     const text = replyText
     setReplyText('')  // limpiar input de inmediato para que no se sienta trabado
     setSending(true)
+    // UI optimista: mostrar el mensaje al instante, sin esperar al realtime
+    const tempId = `temp_${Date.now()}`
+    setMessages(prev => [...prev, {
+      id: tempId as any,
+      phone_number: selectedPhone,
+      body: text,
+      direction: 'out',
+      sender: me.username,
+      created_at: new Date().toISOString(),
+    } as Message])
     try {
       const controller = new AbortController()
       const timeout = setTimeout(()=>controller.abort(), 8000)
@@ -1363,7 +1389,7 @@ const loadPipeline = async () => {
                     </div>
                   )
                   })}
-                  {leads.length > colaPage && (
+                  {(colaTotal > colaPage || leads.length > colaPage) && (
                     <div style={{padding:'12px 16px',textAlign:'center'}}>
                       <button onClick={async()=>{
                         const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
@@ -1376,7 +1402,7 @@ const loadPipeline = async () => {
                         if(mas?.length) setBotLeads(prev => { const m=[...prev]; (mas as LoanLead[]).forEach(l=>{ if(!m.find(x=>x.id===l.id)) m.push(l) }); return m })
                         setColaPage(p => p + 50)
                       }} style={{padding:'8px 20px',borderRadius:8,border:'1px solid #FCD34D',background:'#FFFBEB',color:'#B45309',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                        Cargar 50 más ({leads.length - colaPage} restantes)
+                        Cargar 50 más ({Math.max(colaTotal, leads.length) - Math.min(colaPage, leads.length) > 0 ? (Math.max(colaTotal, leads.length) - colaPage).toLocaleString('es-AR') : 0} restantes)
                       </button>
                     </div>
                   )}
@@ -1763,7 +1789,11 @@ const loadPipeline = async () => {
               {REPARTICIONES.map(r=><option key={r} value={r}>{r}</option>)}
             </select>
 
-            <button className="btn" onClick={()=>{setCSearch('');setCSearchInput('');setCFlujo('all');setCEstado('all');setCRep('all')}}>✕ Limpiar</button>
+            <select className="fsel" value={cOrden} onChange={e=>setCOrden(e.target.value as 'desc'|'asc')}>
+              <option value="desc">📅 Más nuevas primero</option>
+              <option value="asc">📅 Más viejas primero</option>
+            </select>
+            <button className="btn" onClick={()=>{setCSearch('');setCSearchInput('');setCFlujo('all');setCEstado('all');setCRep('all');setCOrden('desc')}}>✕ Limpiar</button>
             <button className="btn" style={{borderColor:'#BBF7D0',color:'#065F46',background:'#ECFDF5'}} onClick={exportVentas}>🎉 Exportar ventas</button>
             <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',fontFamily:"'DM Mono',monospace"}}>{consultasTotal>consultas.length?`${consultas.length} de ${consultasTotal.toLocaleString('es-AR')}`:consultas.length} consultas</span>
           </div>
