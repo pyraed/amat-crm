@@ -172,9 +172,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [showCreds, setShowCreds]         = useState(false)
   const [rememberMe, setRememberMe]       = useState(false)
 
-  // DATA — campañas (último envío por teléfono)
-  const [campanas, setCampanas]             = useState<Record<string,string>>({})
-
   // DATA — consultas (llegadas del bot)
   const [consultas, setConsultas]           = useState<any[]>([])
   const [consultasLoading, setConsultasLoading] = useState(false)
@@ -185,6 +182,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // Filtros consultas
   const [cFlujo, setCFlujo]     = useState('all')
   const [cEstado, setCEstado]   = useState('all')
+  const [cDiasSinCampana, setCDiasSinCampana] = useState('all')
+  const [campanas, setCampanas]   = useState<Record<string,string>>({})
   const [cRep, setCRep]         = useState('all')
   const [cSearch, setCSearch]   = useState('')
   const [cSearchInput, setCSearchInput] = useState('')
@@ -486,48 +485,41 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const { data, error } = await q
     if (error) console.error('[CONSULTAS] Error Supabase:', error)
 
-    // Traer TODOS los leads de amat_loan_leads sin registro en amat_consultas
+    // Traer leads sin consulta — solo con filtros activos y límite de 500 para no bloquear
     let sinConsulta: any[] = []
     const phonesConConsulta = (data||[]).map((c:any) => c.phone).filter(Boolean)
 
-    // Cargar en lotes para no superar límites de Supabase
-    let allLeads: any[] = []
-    let fromIdx = 0
-    const BATCH = 1000
-    while(true) {
+    // Solo buscar si hay un search o filtro activo que lo justifique
+    if(search || estado !== 'all' || rep !== 'all' || flujo !== 'all') {
       let lq = supabase
         .from('amat_loan_leads')
         .select('*')
         .order('created_at', { ascending: false })
-        .range(fromIdx, fromIdx + BATCH - 1)
+        .limit(500)
       if(search) lq = lq.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
-      const { data: batch } = await lq
-      if(!batch || batch.length === 0) break
-      allLeads = [...allLeads, ...batch]
-      if(batch.length < BATCH) break
-      fromIdx += BATCH
+      if(rep !== 'all') lq = lq.ilike('reparticion', `%${rep}%`)
+      const { data: leadsData } = await lq
+      const statusMap: Record<string,string> = { new:'nuevo', contacted:'en_proceso', closed:'resuelto' }
+      sinConsulta = (leadsData||[])
+        .filter((l:any) => !phonesConConsulta.includes(l.phone_number))
+        .map((l:any) => ({
+          id: `lead_${l.id}`,
+          phone: l.phone_number,
+          nombre_apellido: l.full_name,
+          dni: l.dni,
+          reparticion_label: l.reparticion,
+          flujo: flujoMap[l.phone_number||'']||'solicitud',
+          prestacion: null,
+          afiliado: null,
+          vendedor: l.assigned_to,
+          situacion: null,
+          estado: statusMap[l.status||''] || l.status,
+          created_at: l.created_at,
+          _esLeadSinConsulta: true,
+        }))
+        .filter((c:any) => flujo === 'all' || c.flujo === flujo)
+        .filter((c:any) => estado === 'all' || c.estado === estado)
     }
-
-    sinConsulta = allLeads
-      .filter((l:any) => !phonesConConsulta.includes(l.phone_number))
-      .map((l:any) => ({
-        id: `lead_${l.id}`,
-        phone: l.phone_number,
-        nombre_apellido: l.full_name,
-        dni: l.dni,
-        reparticion_label: l.reparticion,
-        flujo: flujoMap[l.phone_number||'']||'solicitud',
-        prestacion: null,
-        afiliado: null,
-        vendedor: l.assigned_to,
-        situacion: null,
-        estado: l.status === 'new' ? 'nuevo' : l.status === 'contacted' ? 'en_proceso' : l.status === 'closed' ? 'resuelto' : l.status,
-        created_at: l.created_at,
-        _esLeadSinConsulta: true,
-      }))
-      .filter((c:any) => flujo === 'all' || c.flujo === flujo)
-      .filter((c:any) => rep === 'all' || (c.reparticion_label||'').toUpperCase() === rep.toUpperCase())
-      .filter((c:any) => estado === 'all' || c.estado === estado)
 
     // Deduplicar por teléfono — mostrar solo la más reciente por persona
     const todasConsultas = [...sinConsulta, ...((data as any[]) || [])]
@@ -547,6 +539,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     })
     // Mantener el orden original (más reciente primero)
     const consultasUnicas = todasConsultas.filter(c => seenPhones.get(c.phone || '') === c)
+    // Aplicar filtro de días sin campaña (se aplica en el render, no en la query)
     setConsultas(consultasUnicas)
     setConsultasLoading(false)
   }
@@ -554,7 +547,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   useEffect(()=>{
     if(tab==='consultas') {
       loadConsultas()
-      // Cargar último envío de campaña por teléfono
       supabase.from('amat_campanas').select('telefono,fecha').order('fecha',{ascending:false})
         .then(({data})=>{
           if(!data) return
@@ -750,31 +742,51 @@ const loadPipeline = async () => {
   // ── ACCIONES ──────────────────────────────
   const sendReply=async()=>{
     if(!replyText.trim()||!selectedPhone||!me) return
+    const text = replyText
+    setReplyText('')  // limpiar input de inmediato para que no se sienta trabado
     setSending(true)
-    await fetch('/api/send-message',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({phone:selectedPhone,text:replyText,senderName:me.username})
-    })
-    setReplyText(''); setSending(false)
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(()=>controller.abort(), 8000)
+      await fetch('/api/send-message',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({phone:selectedPhone,text,senderName:me.username}),
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+    } catch(e) {
+      // Si falla o timeout, restaurar el texto para que no se pierda
+      setReplyText(text)
+    } finally {
+      setSending(false)
+    }
   }
 
   const sendTemplate=async(template:'recontacto'|'primer_contacto_esp'|'ayuda_economica')=>{
     if(!selectedPhone||!me) return
     setSending(true)
-    await fetch('/api/send-message',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({phone:selectedPhone,template,senderName:me.username})
-    })
-    // Registrar envío de campaña
-    const lead = bandejaLeads.find(l=>l.phone_number===selectedPhone)
-    await supabase.from('amat_campanas').insert({
-      documento: lead?.dni || null,
-      telefono: selectedPhone,
-      fecha: new Date().toISOString(),
-      plantilla: template,
-      operador: me.username,
-    })
-    setSending(false)
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(()=>controller.abort(), 8000)
+      await fetch('/api/send-message',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({phone:selectedPhone,template,senderName:me.username}),
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+    } catch(e) {
+      console.error('[sendTemplate] error o timeout:', e)
+    } finally {
+      const lead = bandejaLeads.find(l=>l.phone_number===selectedPhone)
+      supabase.from('amat_campanas').insert({
+        documento: lead?.dni || null,
+        telefono: selectedPhone,
+        fecha: new Date().toISOString(),
+        plantilla: template,
+        operador: me.username,
+      })
+      setSending(false)
+    }
   }
 
   const updateStatus=async(id:number,status:string,notes?:string)=>{
@@ -1637,7 +1649,15 @@ const loadPipeline = async () => {
               <option value="all">Todas las reparticiones</option>
               {REPARTICIONES.map(r=><option key={r} value={r}>{r}</option>)}
             </select>
-            <button className="btn" onClick={()=>{setCSearch('');setCSearchInput('');setCFlujo('all');setCEstado('all');setCRep('all')}}>✕ Limpiar</button>
+            <select className="fsel" value={cDiasSinCampana} onChange={e=>setCDiasSinCampana(e.target.value)}>
+              <option value="all">Sin filtro de campaña</option>
+              <option value="3">Sin campaña +3 días</option>
+              <option value="5">Sin campaña +5 días</option>
+              <option value="7">Sin campaña +7 días</option>
+              <option value="15">Sin campaña +15 días</option>
+              <option value="30">Sin campaña +30 días</option>
+            </select>
+            <button className="btn" onClick={()=>{setCSearch('');setCSearchInput('');setCFlujo('all');setCEstado('all');setCRep('all');setCDiasSinCampana('all')}}>✕ Limpiar</button>
             <button className="btn" style={{borderColor:'#BBF7D0',color:'#065F46',background:'#ECFDF5'}} onClick={exportVentas}>🎉 Exportar ventas</button>
             <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',fontFamily:"'DM Mono',monospace"}}>{consultas.length} consultas</span>
           </div>
@@ -1656,12 +1676,19 @@ const loadPipeline = async () => {
             ) : (
               <table className="tbl" style={{width:'100%',borderCollapse:'collapse'}}>
                 <thead><tr>
-                  {['Fecha','Nombre','DNI','Teléfono','Repartición','Flujo','Prestación','Afiliado','Vendedor','Situación','Últ. campaña','Estado','Acciones'].map(h=>(
+                  {['Fecha','Nombre','DNI','Teléfono','Repartición','Flujo','Prestación','Afiliado','Vendedor','Situación','Sin campaña','Estado','Acciones'].map(h=>(
                     <th key={h}>{h}</th>
                   ))}
                 </tr></thead>
                 <tbody>
-                  {consultas.map(c=>{
+                  {consultas.filter(c=>{
+                    if(cDiasSinCampana === 'all') return true
+                    const limite = parseInt(cDiasSinCampana)
+                    const ultimaCampana = campanas[c.phone]
+                    if(!ultimaCampana) return true // nunca contactado = mostrar
+                    const dias = Math.floor((Date.now()-new Date(ultimaCampana).getTime())/(1000*60*60*24))
+                    return dias >= limite
+                  }).map(c=>{
                     const estadoColors: Record<string,{bg:string,text:string}> = {
                       nuevo:               {bg:'#F0F9FF',text:'#0369A1'},
                       pendiente:           {bg:'#FFFBEB',text:'#92400E'},
@@ -1690,11 +1717,12 @@ const loadPipeline = async () => {
                         </td>
                         <td style={{fontSize:12,color:'#64748B'}}>{c.vendedor||<span style={{color:'#CBD5E1'}}>—</span>}</td>
                         <td style={{fontSize:12,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#64748B'}}>{c.situacion||'—'}</td>
-                        <td style={{fontSize:11,color:'#94A3B8',whiteSpace:'nowrap'}}>
+                        <td style={{fontSize:11,whiteSpace:'nowrap'}}>
                           {campanas[c.phone] ? (()=>{
                             const dias = Math.floor((Date.now()-new Date(campanas[c.phone]).getTime())/(1000*60*60*24))
-                            return dias===0 ? 'Hoy' : dias===1 ? 'Ayer' : `Hace ${dias}d`
-                          })() : '—'}
+                            const color = dias <= 3 ? '#EF4444' : dias <= 7 ? '#F59E0B' : '#10B981'
+                            return <span style={{color,fontWeight:600}}>{dias===0?'Hoy':dias===1?'Ayer':`${dias}d`}</span>
+                          })() : <span style={{color:'#CBD5E1'}}>—</span>}
                         </td>
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:ec.bg,color:ec.text}}>
@@ -2343,14 +2371,6 @@ const loadPipeline = async () => {
                         template: selectedTemplate.id,
                         senderName: me.username
                       })
-                    })
-                    // Registrar envío de campaña
-                    await supabase.from('amat_campanas').insert({
-                      documento: editTarget.dni || null,
-                      telefono: editTarget.phone_number,
-                      fecha: new Date().toISOString(),
-                      plantilla: selectedTemplate.id,
-                      operador: me.username,
                     })
                     await updateStatus(editTarget.id,'contacted')
                     setShowTemplateModal(false)
