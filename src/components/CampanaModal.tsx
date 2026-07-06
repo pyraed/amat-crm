@@ -32,9 +32,6 @@ const REPARTICIONES = [
   'MINISTERIO DE EDUCACION',
   'SERVICIO PENITENCIARIO BONAERENSE',
   'MINISTERIO DE SALUD',
-  'Ministerio de Salud',
-  'Ministerio de Educacion',
-  'Servicio Penitenciario bonaerense'
 ]
 
 // Límites seguros por hora según nivel de Meta
@@ -144,7 +141,9 @@ export default function CampanaModal({ onClose }: Props) {
     if (filterAssigned !== 'all') q = q.eq('assigned_to', filterAssigned)
 
     const limit = parseInt(limitCount) || 500
-    q = q.order('created_at', { ascending: true }).limit(limit + telefonosExcluidos.size)
+    // Pedir hasta 2x el límite para compensar excluidos, con tope de 2000
+    const fetchLimit = Math.min(limit * 2, 2000)
+    q = q.order('created_at', { ascending: true }).limit(fetchLimit)
 
     const { data } = await q
 
@@ -205,6 +204,8 @@ export default function CampanaModal({ onClose }: Props) {
     })
 
     try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 15000)
       const res = await fetch('/api/send-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -214,7 +215,9 @@ export default function CampanaModal({ onClose }: Props) {
           templateParams,
           senderName:     'Campaña AMAT',
         }),
+        signal: controller.signal,
       })
+      clearTimeout(timeout)
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -255,14 +258,15 @@ export default function CampanaModal({ onClose }: Props) {
     setSkippedCount(0)
     setProgress(0)
 
-    // Guardar registro de campaña en Supabase
-    await supabase.from('amat_campaigns').insert({
-      name:       campaignName || `Campaña ${new Date().toLocaleDateString('es-AR')}`,
-      template:   selectedTpl.id,
-      total:      contacts.length,
-      status:     'running',
-      created_at: new Date().toISOString(),
-    }).select().single()
+    // Registrar inicio de campaña en amat_campanas (un registro por campaña)
+    // No bloqueante — si falla no detiene la campaña
+    supabase.from('amat_campanas').insert({
+      documento: null,
+      telefono: `campaña_${Date.now()}`,
+      fecha: new Date().toISOString(),
+      plantilla: selectedTpl.id,
+      operador: campaignName || `Campaña ${new Date().toLocaleDateString('es-AR')}`,
+    }).then(() => {})
 
     // Delay entre mensajes en ms (respeta el rate limit por hora)
     const delayMs = Math.ceil(3600000 / rateLimit)
