@@ -216,6 +216,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [flujoMap, setFlujoMap]           = useState<Record<string,string>>({})
   const [cola, setCola]                   = useState<LoanLead[]>([])
   const [colaPage, setColaPage]           = useState(50)
+  const [colaTotal, setColaTotal]         = useState(0)
+  const [consultasTotal, setConsultasTotal] = useState(0)
   const [showFinalizarModal, setShowFinalizarModal] = useState(false)
   const [finalizarEstado, setFinalizarEstado]       = useState('')
   const [finalizarNota, setFinalizarNota]           = useState('')
@@ -481,10 +483,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const estado = estadoOverride ?? cEstadoRef.current
     const rep    = repOverride    ?? cRepRef.current
 
-    // Query principal de consultas — solo columnas necesarias, límite 500
+    // Query principal de consultas — solo columnas necesarias, límite 500, count real
     let q = supabase
       .from('amat_consultas')
-      .select('id,phone,nombre_apellido,dni,reparticion_label,flujo,prestacion,afiliado,vendedor,situacion,estado,created_at,updated_at')
+      .select('id,phone,nombre_apellido,dni,reparticion_label,flujo,prestacion,afiliado,vendedor,situacion,estado,created_at,updated_at', { count: 'exact' })
       .order('updated_at', { ascending: false })
       .limit(500)
     if (search)           q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
@@ -492,23 +494,23 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if (estado !== 'all') q = q.eq('estado', estado)
     if (rep !== 'all')    q = q.ilike('reparticion_label', rep)
 
-    // Query de leads sin consulta — paralela, solo si hay filtro activo
-    const leadsPromise = (search || estado !== 'all' || rep !== 'all' || flujo !== 'all')
-      ? (() => {
-          let lq = supabase
-            .from('amat_loan_leads')
-            .select('id,phone_number,full_name,dni,reparticion,assigned_to,status,created_at')
-            .order('created_at', { ascending: false })
-            .limit(300)
-          if(search) lq = lq.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
-          if(rep !== 'all') lq = lq.ilike('reparticion', `%${rep}%`)
-          return lq
-        })()
-      : Promise.resolve({ data: [] })
+    // Query de leads sin consulta — paralela, SIEMPRE con el mismo límite
+    // para que el listado sea consistente con y sin filtros
+    const leadsPromise = (() => {
+      let lq = supabase
+        .from('amat_loan_leads')
+        .select('id,phone_number,full_name,dni,reparticion,assigned_to,status,created_at')
+        .order('created_at', { ascending: false })
+        .limit(300)
+      if(search) lq = lq.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
+      if(rep !== 'all') lq = lq.ilike('reparticion', `%${rep}%`)
+      return lq
+    })()
 
     // Ejecutar en paralelo
-    const [{ data, error }, { data: leadsData }] = await Promise.all([q, leadsPromise])
+    const [{ data, error, count }, { data: leadsData }] = await Promise.all([q, leadsPromise])
     if (error) console.error('[CONSULTAS] Error Supabase:', error)
+    setConsultasTotal(count || 0)
 
     // Deduplicar con Set — O(n) en vez de O(n²)
     const phonesConConsulta = new Set((data||[]).map((c:any) => c.phone).filter(Boolean))
@@ -738,6 +740,14 @@ const loadPipeline = async () => {
       // Cargar cola — primeros 50, se cargan más al hacer click en "Cargar más"
       ;(async () => {
         const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
+        // Total real de la cola — count query, no trae datos
+        supabase
+          .from('amat_loan_leads')
+          .select('id', { count: 'exact', head: true })
+          .is('assigned_to', null)
+          .eq('archived', false)
+          .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
+          .then(({ count }) => setColaTotal(count || 0))
         const { data: colaLeads } = await supabase
           .from('amat_loan_leads')
           .select('*')
@@ -874,6 +884,7 @@ const loadPipeline = async () => {
     }
     setSelectedPhone(lead.phone_number)
     setVistaMode('mis_chats')
+    setColaTotal(t => Math.max(0, t - 1))
 
     // Reemplazar el lead tomado con uno nuevo de la cola para mantener siempre ~50 visibles
     const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
@@ -1284,16 +1295,7 @@ const loadPipeline = async () => {
               <div style={{display:'flex',gap:4,background:'#F1F5F9',padding:3,borderRadius:8}}>
                 <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='cola'?'white':'transparent',color:vistaMode==='cola'?'#0F172A':'#64748B',boxShadow:vistaMode==='cola'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
                   onClick={()=>{setVistaMode('cola');setSelectedPhone(null)}}>
-                  📥 Cola {(()=>{
-                    const disponibles = bandejaLeads.filter(l=>{
-                      if(l.assigned_to||l.status==='finalizado') return false
-                      if(me?.role==='Vendedor') return (flujoMap[l.phone_number||'']||'solicitud')!=='cobranzas'
-                      if(me?.role==='Cobranza') return (flujoMap[l.phone_number||'']||'solicitud')==='cobranzas'
-                      return true
-                    })
-                    const n = disponibles.length
-                    return n>0?<span style={{background:'#F59E0B',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:3}}>{n}</span>:null
-                  })()}
+                  📥 Cola {colaTotal>0&&<span style={{background:'#F59E0B',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:3}}>{colaTotal.toLocaleString('es-AR')}</span>}
                 </button>
                 <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='mis_chats'?'white':'transparent',color:vistaMode==='mis_chats'?'#0F172A':'#64748B',boxShadow:vistaMode==='mis_chats'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
                   onClick={()=>setVistaMode('mis_chats')}>
@@ -1763,7 +1765,7 @@ const loadPipeline = async () => {
 
             <button className="btn" onClick={()=>{setCSearch('');setCSearchInput('');setCFlujo('all');setCEstado('all');setCRep('all')}}>✕ Limpiar</button>
             <button className="btn" style={{borderColor:'#BBF7D0',color:'#065F46',background:'#ECFDF5'}} onClick={exportVentas}>🎉 Exportar ventas</button>
-            <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',fontFamily:"'DM Mono',monospace"}}>{consultas.length} consultas</span>
+            <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',fontFamily:"'DM Mono',monospace"}}>{consultasTotal>consultas.length?`${consultas.length} de ${consultasTotal.toLocaleString('es-AR')}`:consultas.length} consultas</span>
           </div>
 
           <div style={{flex:1,overflow:'auto',background:'#F8FAFC'}}>
