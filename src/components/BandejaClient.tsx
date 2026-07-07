@@ -29,6 +29,7 @@ const USERS: SysUser[] = [
   { id:'8',  username:'Emanuel',  password:'Mutual2026',   displayName:'Emanuel',  role:'Cobranza',      initials:'EM', color:'#7C3AED' },
   { id:'10', username:'Matias',   password:'Mutual2026',   displayName:'Matias',   role:'Vendedor',      initials:'MT', color:'#0EA5E9' },
   { id:'11', username:'Gonzalo',  password:'Mutual2026',   displayName:'Gonzalo',  role:'Vendedor',      initials:'GO', color:'#06B6D4' },
+  { id:'12', username:'Mariano',  password:'Mutual2026',   displayName:'Mariano',  role:'Vendedor',      initials:'MR', color:'#EC4899' },
 ]
 
 // ─────────────────────────────────────────────
@@ -91,6 +92,9 @@ const REPARTICIONES = [
   'MINISTERIO DE EDUCACION',
   'SERVICIO PENITENCIARIO BONAERENSE',
   'MINISTERIO DE SALUD',
+  'EJERCITO ARGENTINO',
+  'GENDARMERIA',
+  'FUERZAS ARMADAS',
   'Ministerio de Salud',
   'Servicio Penitenciario bonaerense',
   'Ministerio de Educacion'
@@ -1583,7 +1587,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                           {msg.body && (
                             <div style={{fontSize:13,lineHeight:1.55,whiteSpace:'pre-wrap'}}>{msg.body}</div>
                           )}
-                          <div style={{fontSize:10,marginTop:4,color:msg.direction==='out'?'rgba(255,255,255,.6)':'#94A3B8'}}>{new Date(msg.created_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</div>
+                          <div style={{fontSize:10,marginTop:4,color:msg.direction==='out'?'rgba(255,255,255,.6)':'#94A3B8'}}>
+                            {(()=>{
+                              const d = new Date(msg.created_at)
+                              const hoy = new Date()
+                              const ayer = new Date(hoy); ayer.setDate(hoy.getDate()-1)
+                              const hora = d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})
+                              if(d.toDateString()===hoy.toDateString()) return `Hoy ${hora}`
+                              if(d.toDateString()===ayer.toDateString()) return `Ayer ${hora}`
+                              return `${d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})} ${hora}`
+                            })()}
+                          </div>
                         </div>
                       </div>
                     </div>
