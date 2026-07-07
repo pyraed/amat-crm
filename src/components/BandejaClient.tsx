@@ -692,7 +692,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(search)           q=q.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
     if(rep!=='all')      q=q.eq('reparticion',rep)
     if(banco!=='all')    q=q.eq('bank',banco)
-    if(status!=='all')   q=q.eq('status',status)
+    if(status==='pendiente') q=q.in('status',['new','contacted','finalizado'])
+    else if(status!=='all') q=q.eq('status',status)
     if(tel==='con')      q=q.not('phone_number','is',null)
     if(tel==='sin')      q=q.is('phone_number',null)
     if(assigned==='sin') q=q.is('assigned_to',null)
@@ -1717,11 +1718,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             </select>
             <select className="fsel" value={baseStatus} onChange={e=>{setBaseStatus(e.target.value);setBasePage(0)}}>
               <option value="all">Todos los estados</option>
-              <option value="new">Pendiente</option>
+              <option value="pendiente">Pendiente (new + contacted)</option>
+              <option value="new">Sin tomar (cola)</option>
               <option value="contacted">En bandeja</option>
               <option value="closed">Vendido</option>
               <option value="rejected">Rechazado</option>
               <option value="not_interested">No interesado</option>
+              <option value="resolved">Resuelto (cobranzas)</option>
+              <option value="unresolved">No resuelto (cobranzas)</option>
             </select>
             <select className="fsel" value={baseTel} onChange={e=>{setBaseTel(e.target.value as any);setBasePage(0)}}>
               <option value="all">Con y sin teléfono</option>
