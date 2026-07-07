@@ -355,9 +355,18 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         const msg = p.new as Message
         setMessages(prev=>{
           if(prev.find(m=>m.id===msg.id)) return prev
-          // Si es un 'out' que coincide con un mensaje temporal optimista, reemplazarlo
           if(msg.direction==='out') {
             const sinTemp = prev.filter(m=>!(String(m.id).startsWith('temp_')&&m.phone_number===msg.phone_number&&m.body===msg.body))
+            return [...sinTemp, msg]
+          }
+          return [...prev, msg]
+        })
+        // Actualizar currentChatMsgs si el mensaje es del chat activo
+        setCurrentChatMsgs(prev=>{
+          if(prev.length===0||prev[0]?.phone_number!==msg.phone_number) return prev
+          if(prev.find(m=>m.id===msg.id)) return prev
+          if(msg.direction==='out') {
+            const sinTemp = prev.filter(m=>!(String(m.id).startsWith('temp_')&&m.body===msg.body))
             return [...sinTemp, msg]
           }
           return [...prev, msg]
@@ -819,16 +828,18 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const text = replyText
     setReplyText('')  // limpiar input de inmediato para que no se sienta trabado
     setSending(true)
-    // UI optimista: mostrar el mensaje al instante, sin esperar al realtime
+    // UI optimista: mostrar el mensaje al instante en ambos arrays
     const tempId = `temp_${Date.now()}`
-    setMessages(prev => [...prev, {
+    const tempMsg: Message = {
       id: tempId as any,
       phone_number: selectedPhone,
       body: text,
       direction: 'out',
       sender: me.username,
       created_at: new Date().toISOString(),
-    } as Message])
+    } as Message
+    setCurrentChatMsgs(prev => [...prev, tempMsg])
+    setMessages(prev => [...prev, tempMsg])
     try {
       const controller = new AbortController()
       const timeout = setTimeout(()=>controller.abort(), 8000)
@@ -986,16 +997,20 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // Helper: cargar mensajes de un phone sin límite
   const cargarMensajes = (phone: string) => {
     supabase.from('amat_messages')
-      .select('*')
+      .select('id,phone_number,body,direction,sender,created_at,media_url,media_type')
       .eq('phone_number', phone)
-      .order('created_at', {ascending: true})
-      .then(({data, error}) => {
+      .order('created_at', {ascending: false})
+      .limit(200)  // últimos 200 mensajes — suficiente para cualquier conversación
+      .then(({data}) => {
         if(data) {
+          // Revertir para mostrar de más viejo a más nuevo
+          const msgs = (data as Message[]).reverse()
+          setCurrentChatMsgs(msgs)
+          // Actualizar el array global sin re-mergear todo
           setMessages(prev => [
             ...prev.filter(m => m.phone_number !== phone),
-            ...data as Message[]
+            ...msgs
           ])
-          setCurrentChatMsgs(data as Message[])
         }
       })
   }
@@ -1176,20 +1191,28 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   })
   
   const currentLead=allLeads.find(l=>l.phone_number===selectedPhone)||baseLeads.find(l=>l.phone_number===selectedPhone)
+  // currentMsgs: priorizar currentChatMsgs (ya vienen ordenados de cargarMensajes)
+  // Solo hacer filter+sort como fallback si no hay currentChatMsgs del phone actual
   const currentMsgs = (
     currentChatMsgs.length > 0 && currentChatMsgs[0]?.phone_number === selectedPhone
-      ? currentChatMsgs
-      : messages.filter(m=>m.phone_number===selectedPhone)
-  ).sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())
+  )
+    ? currentChatMsgs  // ya están ordenados asc por cargarMensajes
+    : messages
+        .filter(m=>m.phone_number===selectedPhone)
+        .sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())
 
-  const stats={
+  // stats memoizado — no recalcular en cada render/keystroke
+  const stats = useMemo(()=>({
     inbound:  bandejaLeads.length,
     activos:  bandejaLeads.filter(l=>['contacted','new'].includes(l.status||'')).length,
-    sinResp:  [...new Set(messages.filter(m=>m.direction==='in').map(m=>m.phone_number))]
-      .filter(p=>bandejaLeads.find(l=>l.phone_number===p))
-      .filter(p=>!messages.find(m=>m.phone_number===p&&m.direction==='out'&&m.sender!=='bot')).length,
+    sinResp:  (() => {
+      const outPhones = new Set(messages.filter(m=>m.direction==='out'&&m.sender!=='bot').map(m=>m.phone_number))
+      return [...new Set(messages.filter(m=>m.direction==='in').map(m=>m.phone_number))]
+        .filter(p=>bandejaLeads.find(l=>l.phone_number===p))
+        .filter(p=>!outPhones.has(p)).length
+    })(),
     cerrados: cerradosHoyCount,
-  }
+  }),[bandejaLeads, messages, cerradosHoyCount])
 
   if(!mounted) return null
 
