@@ -942,7 +942,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     await cambiarEstado(lead, status, { notes })
   }
 
-  const LIMITE_BANDEJA = 20
+  const LIMITE_BANDEJA = 50
 
   const tomarConversacion = async (lead: LoanLead) => {
     if(!me) return
@@ -963,19 +963,26 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         .update({vendedor: me.username, estado:'pendiente', updated_at:new Date().toISOString()})
         .eq('phone', lead.phone_number)
     }
-    setSelectedPhone(lead.phone_number)
-    setVistaMode('mis_chats')
+    // Bajar contador PRIMERO — antes del cambio de vista para que el badge se actualice
     setColaTotal(t => Math.max(0, t - 1))
 
-    // Reemplazar el lead tomado con uno nuevo de la cola para mantener siempre ~50 visibles
+    // Sacar el lead tomado de la cola en memoria inmediatamente
+    setBotLeads(prev => prev.map(l =>
+      l.id === lead.id ? { ...l, assigned_to: me.username, status: 'contacted' } : l
+    ))
+
+    setSelectedPhone(lead.phone_number)
+    setVistaMode('mis_chats')
+
+    // Reemplazar con uno nuevo de la cola — excluir el lead recién tomado del conteo
     const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
     const colaActual = bandejaLeads.filter(l =>
+      l.id !== lead.id &&   // excluir el que acaba de tomar
       !l.assigned_to &&
       !EXCLUIDOS_COLA.includes(l.status||'') &&
       !l.archived
     )
-    // Buscar el siguiente que no esté ya en memoria
-    const idsEnMemoria = new Set(colaActual.map(l => l.id))
+    const idsEnMemoria = new Set([...colaActual.map(l => l.id), lead.id])
     supabase
       .from('amat_loan_leads')
       .select('*')
@@ -983,7 +990,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .eq('archived', false)
       .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
       .order('updated_at', { ascending: false })
-      .range(colaActual.length, colaActual.length)  // traer solo 1 para reemplazar
+      .range(colaActual.length, colaActual.length)
       .then(({ data }) => {
         if(data?.length) {
           const nuevo = data[0] as LoanLead
