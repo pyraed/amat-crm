@@ -254,6 +254,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [reporteLoading, setReporteLoading]         = useState(false)
   const [pipelineFlujoMap, setPipelineFlujoMap]     = useState<Record<string,string>>({})
   const [reporteMode, setReporteMode]               = useState<'ventas'|'cobranzas'>('ventas')
+  const [reportePeriodo, setReportePeriodo]           = useState('mes_actual')
+  const [reporteDesde, setReporteDesde]               = useState('')
+  const [reporteHasta, setReporteHasta]               = useState('')
   const [showVentaModal, setShowVentaModal]         = useState(false)
   const [ventaForm, setVentaForm]         = useState<any>({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
 
@@ -602,7 +605,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // useEffect con debounce — evita que múltiples dependencias disparen cargas simultáneas
   const consultasTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
   useEffect(()=>{
-    if(tab==='reportes') loadReportes()
+    if(tab==='reportes') loadReportes(reportePeriodo, reporteDesde, reporteHasta)
     if(tab==='consultas') {
       // Spinner inmediato — sin esto se ve un flash de los datos viejos durante el debounce
       setConsultasLoading(true)
@@ -626,20 +629,55 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
 
   // Cargar datos de reportes
-  const loadReportes = async () => {
+  const loadReportes = async (
+  periodo?: string,
+  desdeCustom?: string,
+  hastaCustom?: string
+) => {
   setReporteLoading(true)
+  const p = periodo ?? reportePeriodo
+
+  // Calcular rango de fechas según el período
+  const ahora = new Date()
+  let desde: string | null = null
+  let hasta: string | null = null
+
+  if (p === 'mes_actual') {
+    desde = new Date(ahora.getFullYear(), ahora.getMonth(), 1).toISOString()
+    hasta = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59).toISOString()
+  } else if (p === 'mes_pasado') {
+    desde = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1).toISOString()
+    hasta = new Date(ahora.getFullYear(), ahora.getMonth(), 0, 23, 59, 59).toISOString()
+  } else if (p === '3_meses') {
+    desde = new Date(ahora.getFullYear(), ahora.getMonth() - 2, 1).toISOString()
+    hasta = ahora.toISOString()
+  } else if (p === '6_meses') {
+    desde = new Date(ahora.getFullYear(), ahora.getMonth() - 5, 1).toISOString()
+    hasta = ahora.toISOString()
+  } else if (p === 'anio_actual') {
+    desde = new Date(ahora.getFullYear(), 0, 1).toISOString()
+    hasta = ahora.toISOString()
+  } else if (p === 'custom') {
+    desde = desdeCustom ? new Date(desdeCustom).toISOString() : null
+    hasta = hastaCustom ? new Date(hastaCustom + 'T23:59:59').toISOString() : null
+  }
+  // 'historico' → sin filtro de fecha
+
   let allData: any[] = []
   let from = 0
   let batches = 0
-  const MAX_BATCHES = 20 // tope: 20.000 leads máximo en reportes
+  const MAX_BATCHES = 20
 
   while (batches < MAX_BATCHES) {
-    const { data } = await supabase
+    let q = supabase
       .from('amat_loan_leads')
-      .select('id, status, reparticion, assigned_to, updated_at, phone_number')
+      .select('id, status, reparticion, assigned_to, updated_at, created_at, phone_number, entidad, linea, monto_solicitado, cant_cuotas, valor_cuota')
       .order('updated_at', { ascending: false })
       .range(from, from + 999)
+    if (desde) q = q.gte('updated_at', desde)
+    if (hasta) q = q.lte('updated_at', hasta)
 
+    const { data } = await q
     if (!data || data.length === 0) break
     allData = [...allData, ...data]
     if (data.length < 1000) break
@@ -1986,7 +2024,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         const rLeadsFinal  = modoR==='cobranzas' ? rLeadsCob : rLeadsVentas
         return (
         <div style={{flex:1,overflow:'auto',padding:'20px 24px',background:'#F8FAFC'}}>
-          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20,flexWrap:'wrap'}}>
             <span style={{fontWeight:700,fontSize:16,color:'#0F172A'}}>Reportes</span>
             {esAdminR && (
               <div style={{display:'flex',gap:4,background:'#F1F5F9',padding:3,borderRadius:8}}>
@@ -2001,6 +2039,19 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 ))}
               </div>
             )}
+            <div style={{display:'flex',gap:8,alignItems:'center',marginLeft:'auto',flexWrap:'wrap'}}>
+              <select value={reportePeriodo} onChange={e=>{
+                setReportePeriodo(e.target.value)
+                loadReportes(e.target.value)
+              }} style={{padding:'6px 10px',borderRadius:8,border:'1px solid #E2E8F0',fontSize:12,fontWeight:600,color:'#374151',cursor:'pointer',outline:'none'}}>
+                <option value="mes_actual">📅 Este mes</option>
+                <option value="mes_pasado">📅 Mes pasado</option>
+              </select>
+              <button onClick={()=>loadReportes(reportePeriodo,reporteDesde,reporteHasta)}
+                style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E2E8F0',background:'white',fontSize:12,fontWeight:600,cursor:'pointer',color:'#374151'}}>
+                ↻ Actualizar
+              </button>
+            </div>
           </div>
 
           <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:12,marginBottom:20}}>
@@ -2011,7 +2062,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               {label:'Contactados',val:rLeadsFinal.filter(l=>l.status==='contacted').length,color:'#06B6D4',icon:'◉',sub:'Conversaciones iniciadas'},
               {label:'Tasa resolución',val:rLeadsFinal.length>0?Math.round(rLeadsFinal.filter(l=>l.status==='resolved').length/rLeadsFinal.length*100)+'%':'0%',color:'#EC4899',icon:'%',sub:'Resueltos vs total'},
             ] : [
-              {label:'Total leads',val:rLeadsFinal.length,color:'#F59E0B',icon:'◈',sub:'Histórico total'},
+              {label:'Total leads',val:rLeadsFinal.length,color:'#F59E0B',icon:'◈',sub:reportePeriodo==='mes_actual'?'Este mes':reportePeriodo==='mes_pasado'?'Mes pasado':reportePeriodo==='historico'?'Histórico total':'Período seleccionado'},
               {label:'Cerrados',val:rLeadsFinal.filter(l=>l.status==='closed').length,color:'#10B981',icon:'✓',sub:'Operaciones concretadas'},
               {label:'Contactados',val:rLeadsFinal.filter(l=>l.status==='contacted').length,color:'#06B6D4',icon:'◉',sub:'Conversaciones iniciadas'},
               {label:'Sin contactar',val:rLeadsFinal.filter(l=>l.status==='new').length,color:'#F59E0B',icon:'·',sub:'Estado nuevo'},
@@ -2109,14 +2160,22 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               </div>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart layout="vertical"
-                  data={USERS.filter(u=>u.username!=='Nicolas').map(u=>({
-                    name:u.username,
-                    asignados:rLeadsFinal.filter(l=>l.assigned_to===u.username).length,
-                    cerrados:modoR==='cobranzas'
-                      ? rLeadsFinal.filter(l=>l.assigned_to===u.username&&l.status==='resolved').length
-                      : rLeadsFinal.filter(l=>l.assigned_to===u.username&&l.status==='closed').length,
-                    color:u.color,
-                  }))}
+                  data={USERS.filter(u=>u.username!=='Nicolas'&&u.role!=='Administrador').map(u=>{
+                    const leads = rLeadsFinal.filter(l=>l.assigned_to===u.username)
+                    const cerrados = modoR==='cobranzas'
+                      ? leads.filter(l=>l.status==='resolved').length
+                      : leads.filter(l=>l.status==='closed').length
+                    const montoCerrado = leads
+                      .filter(l=>l.status==='closed')
+                      .reduce((acc:number,l:any)=>(acc+(l.monto_solicitado||0)),0)
+                    return {
+                      name:u.username,
+                      asignados:leads.length,
+                      cerrados,
+                      montoCerrado,
+                      color:u.color,
+                    }
+                  }).filter(u=>u.asignados>0||u.cerrados>0)}
                   margin={{top:0,right:20,left:10,bottom:0}}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false}/>
                   <XAxis type="number" tick={{fontSize:11,fill:'#94A3B8'}} tickLine={false} axisLine={false} allowDecimals={false}/>
