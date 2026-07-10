@@ -1012,6 +1012,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
     setSelectedPhone(lead.phone_number)
     setVistaMode('mis_chats')
+    if(lead.phone_number) cargarMensajes(lead.phone_number)
 
     // Reemplazar con uno nuevo de la cola — excluir el lead recién tomado del conteo
     const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
