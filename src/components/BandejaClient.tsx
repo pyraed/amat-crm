@@ -860,7 +860,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           .is('assigned_to', null)
           .eq('archived', false)
           .in('status', ESTADOS_COLA)
-          .order('updated_at', { ascending: false })
+          .order('created_at', { ascending: true })
           .limit(50)
         if(colaLeads?.length) {
           setBotLeads(prev => {
@@ -1486,16 +1486,15 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
             <div style={{flex:1,overflowY:'auto'}}>
               {vistaMode==='cola'&&(()=>{
-                const todosEnCola = bandejaLeads.filter(l=>!l.assigned_to&&!l.archived&&['new','contacted'].includes(l.status||''))
-                console.log('[COLA RENDER] total sin filtro flujo:', todosEnCola.length, 'bandejaLeads total:', bandejaLeads.length)
                 let leads = bandejaLeads.filter(l=>{
                   if(l.assigned_to) return false
                   if(l.archived) return false
                   if(!['new','contacted'].includes(l.status||'')) return false
-                  const fl=flujoMap[l.phone_number||'']||'solicitud'
+                  // Si no hay flujo conocido, mostrar siempre (no descartar por falta de mensajes)
+                  const fl=flujoMap[l.phone_number||'']||null
                   if(me?.role==='Vendedor') return fl!=='cobranzas'
                   if(me?.role==='Cobranza') return fl==='cobranzas'
-                  if(me?.role==='Administrador') return fl!=='cobranzas'
+                  // Admin y sin rol: excluir solo si se sabe que es cobranzas
                   return fl!=='cobranzas'
                 })
                 if(bandejaSearch) leads=leads.filter(l=>(l.full_name||'').toLowerCase().includes(bandejaSearch.toLowerCase())||(l.phone_number||'').includes(bandejaSearch)||(l.dni||'').includes(bandejaSearch))
@@ -1536,23 +1535,18 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   {colaTotal > leads.length && (
                     <div style={{padding:'12px 16px',textAlign:'center'}}>
                       <button onClick={async()=>{
-                        const colaEnMemoria = bandejaLeads.filter(l=>!l.assigned_to&&!l.archived&&['new','contacted'].includes(l.status||''))
-                        const idsEnMemoria = new Set(colaEnMemoria.map(l=>l.id))
-                        const ultimo = colaEnMemoria.sort((a,b)=>new Date(a.updated_at).getTime()-new Date(b.updated_at).getTime())[0]
-                        console.log('[COLA] en memoria:', colaEnMemoria.length, 'ultimo updated_at:', ultimo?.updated_at)
-                        let q = supabase
+                        const idsEnMemoria = new Set(bandejaLeads.map(l=>l.id))
+                        // Offset = cuántos leads sin asignar hay en memoria
+                        const offset = bandejaLeads.filter(l=>!l.assigned_to&&!l.archived&&['new','contacted'].includes(l.status||'')).length
+                        const { data: mas } = await supabase
                           .from('amat_loan_leads').select('*')
                           .is('assigned_to', null)
                           .eq('archived', false)
                           .in('status', ['new','contacted'])
-                          .order('updated_at', { ascending: false })
-                          .limit(50)
-                        if(ultimo?.updated_at) q = q.lt('updated_at', ultimo.updated_at)
-                        const { data: mas, error: masError } = await q
-                        console.log('[COLA] resultado:', mas?.length, 'error:', masError)
+                          .order('created_at', { ascending: true })
+                          .range(offset, offset + 49)
                         if(mas?.length) {
                           const nuevos = (mas as LoanLead[]).filter(l=>!idsEnMemoria.has(l.id))
-                          console.log('[COLA] nuevos a agregar:', nuevos.length)
                           if(nuevos.length) setBotLeads(prev => [...prev, ...nuevos])
                         }
                       }} style={{padding:'8px 20px',borderRadius:8,border:'1px solid #FCD34D',background:'#FFFBEB',color:'#B45309',fontSize:12,fontWeight:600,cursor:'pointer'}}>
