@@ -1531,20 +1531,25 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     </div>
                   )
                   })}
-                  {(colaTotal > colaPage || leads.length > colaPage) && (
+                  {colaTotal > bandejaLeads.filter(l=>!l.assigned_to&&!l.archived).length && (
                     <div style={{padding:'12px 16px',textAlign:'center'}}>
                       <button onClick={async()=>{
-                        const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed','sin_respuesta']
+                        // Traer los siguientes 50 sin asignar — sin filtrar por status
+                        // para incluir también los closed/rejected que volvieron a escribir
+                        const idsEnMemoria = new Set(bandejaLeads.map(l=>l.id))
                         const { data: mas } = await supabase
                           .from('amat_loan_leads').select('*')
-                          .is('assigned_to', null).eq('archived', false)
-                          .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
+                          .is('assigned_to', null)
+                          .eq('archived', false)
                           .order('updated_at', { ascending: false })
                           .range(colaPage, colaPage + 49)
-                        if(mas?.length) setBotLeads(prev => { const m=[...prev]; (mas as LoanLead[]).forEach(l=>{ if(!m.find(x=>x.id===l.id)) m.push(l) }); return m })
+                        if(mas?.length) {
+                          const nuevos = (mas as LoanLead[]).filter(l=>!idsEnMemoria.has(l.id))
+                          if(nuevos.length) setBotLeads(prev => [...prev, ...nuevos])
+                        }
                         setColaPage(p => p + 50)
                       }} style={{padding:'8px 20px',borderRadius:8,border:'1px solid #FCD34D',background:'#FFFBEB',color:'#B45309',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                        Cargar 50 más ({Math.max(colaTotal, leads.length) - Math.min(colaPage, leads.length) > 0 ? (Math.max(colaTotal, leads.length) - colaPage).toLocaleString('es-AR') : 0} restantes)
+                        Cargar 50 más ({Math.max(0, colaTotal - bandejaLeads.filter(l=>!l.assigned_to&&!l.archived).length).toLocaleString('es-AR')} restantes)
                       </button>
                     </div>
                   )}
