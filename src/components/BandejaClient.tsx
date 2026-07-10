@@ -477,7 +477,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         seen.add(key)
         return true
       })
-      setBotLeads(unique)
+      setBotLeads(prev => {
+        const merged = [...unique]
+        prev.forEach(l => { if(!merged.find(x=>x.id===l.id)) merged.push(l) })
+        return merged
+      })
     })
 
     // Cargar flujos en lotes
@@ -814,22 +818,20 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
       // Cargar cola — primeros 50, se cargan más al hacer click en "Cargar más"
       ;(async () => {
-        const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
-        // Total real de la cola — count query, no trae datos
         supabase
           .from('amat_loan_leads')
           .select('id', { count: 'exact', head: true })
           .is('assigned_to', null)
           .eq('archived', false)
-          .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
+          .in('status', ['new','contacted'])
           .then(({ count }) => setColaTotal(count || 0))
         const { data: colaLeads } = await supabase
           .from('amat_loan_leads')
           .select('*')
           .is('assigned_to', null)
           .eq('archived', false)
-          .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
-          .order('updated_at', { ascending: false })
+          .in('status', ['new','contacted'])
+          .order('created_at', { ascending: true })
           .limit(50)
         if(colaLeads?.length) {
           setBotLeads(prev => {
@@ -1443,16 +1445,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             <div style={{flex:1,overflowY:'auto'}}>
               {vistaMode==='cola'&&(()=>{
                 let leads = bandejaLeads.filter(l=>{
-                  if(l.assigned_to||l.status==='finalizado') return false
-                  if(me?.role==='Vendedor'){
-                    const fl=flujoMap[l.phone_number||'']||'solicitud'
-                    return fl!=='cobranzas'
-                  }
-                  if(me?.role==='Cobranza'){
-                    const fl=flujoMap[l.phone_number||'']||'solicitud'
-                    return fl==='cobranzas'
-                  }
-                  return true
+                  if(l.assigned_to) return false
+                  if(l.archived) return false
+                  if(!['new','contacted'].includes(l.status||'')) return false
+                  const fl=flujoMap[l.phone_number||'']||'solicitud'
+                  if(me?.role==='Vendedor') return fl!=='cobranzas'
+                  if(me?.role==='Cobranza') return fl==='cobranzas'
+                  if(me?.role==='Administrador') return fl!=='cobranzas'
+                  return fl!=='cobranzas'
                 })
                 if(bandejaSearch) leads=leads.filter(l=>(l.full_name||'').toLowerCase().includes(bandejaSearch.toLowerCase())||(l.phone_number||'').includes(bandejaSearch)||(l.dni||'').includes(bandejaSearch))
                 if(leads.length===0) return (
@@ -1492,14 +1492,18 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   {(colaTotal > colaPage || leads.length > colaPage) && (
                     <div style={{padding:'12px 16px',textAlign:'center'}}>
                       <button onClick={async()=>{
-                        const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
+                        const offset = bandejaLeads.filter(l=>!l.assigned_to&&!l.archived&&['new','contacted'].includes(l.status||'')).length
+                        const idsEnMemoria = new Set(bandejaLeads.map(l=>l.id))
                         const { data: mas } = await supabase
                           .from('amat_loan_leads').select('*')
                           .is('assigned_to', null).eq('archived', false)
-                          .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
-                          .order('updated_at', { ascending: false })
-                          .range(colaPage, colaPage + 49)
-                        if(mas?.length) setBotLeads(prev => { const m=[...prev]; (mas as LoanLead[]).forEach(l=>{ if(!m.find(x=>x.id===l.id)) m.push(l) }); return m })
+                          .in('status', ['new','contacted'])
+                          .order('created_at', { ascending: true })
+                          .range(offset, offset + 49)
+                        if(mas?.length) {
+                          const nuevos = (mas as LoanLead[]).filter(l=>!idsEnMemoria.has(l.id))
+                          if(nuevos.length) setBotLeads(prev => [...prev, ...nuevos])
+                        }
                         setColaPage(p => p + 50)
                       }} style={{padding:'8px 20px',borderRadius:8,border:'1px solid #FCD34D',background:'#FFFBEB',color:'#B45309',fontSize:12,fontWeight:600,cursor:'pointer'}}>
                         Cargar 50 más ({Math.max(colaTotal, leads.length) - Math.min(colaPage, leads.length) > 0 ? (Math.max(colaTotal, leads.length) - colaPage).toLocaleString('es-AR') : 0} restantes)
