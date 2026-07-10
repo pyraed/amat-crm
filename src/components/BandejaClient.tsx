@@ -454,7 +454,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .then(({data})=>{ if(data) setCerradosHoyCount(data.length) })
 
     const phones=[...new Set(initialMessages.map(m=>m.phone_number))]
-    if(phones.length===0){ return } // no limpiar — puede haber leads de cola en memoria
+    console.log("[INIT MESSAGES] phones:", phones.length); if(phones.length===0){ console.log("[INIT MESSAGES] sin phones, no limpiando"); return }
 
     // Supabase tiene límite de ~1000 en .in() — hacemos lotes de 200
     const BATCH = 200
@@ -480,6 +480,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       setBotLeads(prev => {
         const merged = [...unique]
         prev.forEach(l => { if(!merged.find(x=>x.id===l.id)) merged.push(l) })
+        console.log("[INIT MESSAGES] merge: unique=", unique.length, "prev=", prev.length, "merged=", merged.length)
         return merged
       })
     })
@@ -833,12 +834,15 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           .in('status', ['new','contacted'])
           .order('created_at', { ascending: true })
           .limit(50)
+        console.log('[COLA CARGA] colaLeads recibidos:', colaLeads?.length)
         if(colaLeads?.length) {
           setBotLeads(prev => {
+            console.log('[COLA CARGA] botLeads antes del merge:', prev.length)
             const merged = [...prev]
             ;(colaLeads as LoanLead[]).forEach(lead => {
               if(!merged.find(l=>l.id===lead.id)) merged.push(lead)
             })
+            console.log('[COLA CARGA] botLeads despues del merge:', merged.length)
             return merged
           })
         }
@@ -1444,6 +1448,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
             <div style={{flex:1,overflowY:'auto'}}>
               {vistaMode==='cola'&&(()=>{
+                console.log('[COLA RENDER] bandejaLeads total:', bandejaLeads.length, 'sin asignar:', bandejaLeads.filter(l=>!l.assigned_to&&!l.archived&&['new','contacted'].includes(l.status||'')).length)
                 let leads = bandejaLeads.filter(l=>{
                   if(l.assigned_to) return false
                   if(l.archived) return false
