@@ -454,7 +454,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .then(({data})=>{ if(data) setCerradosHoyCount(data.length) })
 
     const phones=[...new Set(initialMessages.map(m=>m.phone_number))]
-    if(phones.length===0){ setBotLeads([]); return }
+    if(phones.length===0){ return } // no limpiar — puede haber leads de cola en memoria
 
     // Supabase tiene límite de ~1000 en .in() — hacemos lotes de 200
     const BATCH = 200
