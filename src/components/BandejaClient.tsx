@@ -1534,20 +1534,23 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   {colaTotal > leads.length && (
                     <div style={{padding:'12px 16px',textAlign:'center'}}>
                       <button onClick={async()=>{
-                        const enCola = bandejaLeads.filter(l=>!l.assigned_to&&!l.archived&&['new','contacted'].includes(l.status||'')).length
-                        const idsEnMemoria = new Set(bandejaLeads.map(l=>l.id))
-                        const { data: mas } = await supabase
+                        // Usar cursor por updated_at del último lead en memoria — no range
+                        const colaEnMemoria = bandejaLeads.filter(l=>!l.assigned_to&&!l.archived&&['new','contacted'].includes(l.status||''))
+                        const idsEnMemoria = new Set(colaEnMemoria.map(l=>l.id))
+                        const ultimo = colaEnMemoria.sort((a,b)=>new Date(a.updated_at).getTime()-new Date(b.updated_at).getTime())[0]
+                        let q = supabase
                           .from('amat_loan_leads').select('*')
                           .is('assigned_to', null)
                           .eq('archived', false)
                           .in('status', ['new','contacted'])
                           .order('updated_at', { ascending: false })
-                          .range(enCola, enCola + 49)
+                          .limit(50)
+                        if(ultimo?.updated_at) q = q.lt('updated_at', ultimo.updated_at)
+                        const { data: mas } = await q
                         if(mas?.length) {
                           const nuevos = (mas as LoanLead[]).filter(l=>!idsEnMemoria.has(l.id))
                           if(nuevos.length) setBotLeads(prev => [...prev, ...nuevos])
                         }
-                        setColaPage(p => p + 50)
                       }} style={{padding:'8px 20px',borderRadius:8,border:'1px solid #FCD34D',background:'#FFFBEB',color:'#B45309',fontSize:12,fontWeight:600,cursor:'pointer'}}>
                         Cargar 50 más ({Math.max(0, colaTotal - leads.length).toLocaleString('es-AR')} restantes)
                       </button>
