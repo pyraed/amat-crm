@@ -508,7 +508,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         seen.add(key)
         return true
       })
-      setBotLeads(unique)
+      // Mergear con los leads de cola que ya están en memoria (no pisarlos)
+      setBotLeads(prev => {
+        const merged = [...unique]
+        prev.forEach(l => {
+          if(!merged.find(x=>x.id===l.id)) merged.push(l)
+        })
+        return merged
+      })
     })
 
     // Cargar flujos en lotes
