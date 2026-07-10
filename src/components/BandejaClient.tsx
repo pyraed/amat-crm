@@ -454,7 +454,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .then(({data})=>{ if(data) setCerradosHoyCount(data.length) })
 
     const phones=[...new Set(initialMessages.map(m=>m.phone_number))]
-    console.log("[INIT MESSAGES] phones:", phones.length); if(phones.length===0){ console.log("[INIT MESSAGES] sin phones, no limpiando"); return }
+    ; if(phones.length===0){ ; return }
 
     // Supabase tiene límite de ~1000 en .in() — hacemos lotes de 200
     const BATCH = 200
@@ -480,8 +480,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       setBotLeads(prev => {
         const merged = [...unique]
         prev.forEach(l => { if(!merged.find(x=>x.id===l.id)) merged.push(l) })
-        console.log("[INIT MESSAGES] merge: unique=", unique.length, "prev=", prev.length, "merged=", merged.length)
-        return merged
+                return merged
       })
     })
 
@@ -797,52 +796,40 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         if(allMsgs.length) setMessages(allMsgs)
       })()
 
-      // Cargar leads asignados al usuario — independiente de mensajes
-      if(me) {
-        const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved']
-        supabase.from('amat_loan_leads')
-          .select('*')
-          .eq('assigned_to', me.username)
-          .eq('archived', false)
-          .not('status', 'in', `(${EXCLUIDOS.map(e=>`"${e}"`).join(',')})`)
-          .order('updated_at', { ascending: false })
-          .then(({data})=>{
-            if(data) setBotLeads(prev => {
-              const merged = [...prev]
-              ;(data as LoanLead[]).forEach(lead => {
-                if(!merged.find(l=>l.id===lead.id)) merged.push(lead)
-              })
-              return merged
-            })
-          })
-      }
-
-      // Cargar cola — primeros 50, se cargan más al hacer click en "Cargar más"
+      // Cargar leads asignados + cola en un solo async para evitar race conditions
       ;(async () => {
-        supabase
-          .from('amat_loan_leads')
+        // Count de cola (no bloquea)
+        supabase.from('amat_loan_leads')
           .select('id', { count: 'exact', head: true })
-          .is('assigned_to', null)
-          .eq('archived', false)
+          .is('assigned_to', null).eq('archived', false)
           .in('status', ['new','contacted'])
           .then(({ count }) => setColaTotal(count || 0))
-        const { data: colaLeads } = await supabase
-          .from('amat_loan_leads')
-          .select('*')
-          .is('assigned_to', null)
-          .eq('archived', false)
-          .in('status', ['new','contacted'])
-          .order('created_at', { ascending: true })
-          .limit(50)
-        console.log('[COLA CARGA] colaLeads recibidos:', colaLeads?.length)
-        if(colaLeads?.length) {
+
+        // Cargar en paralelo: leads asignados + cola
+        const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved']
+        const [asignadosRes, colaRes] = await Promise.all([
+          me ? supabase.from('amat_loan_leads').select('*')
+            .eq('assigned_to', me.username).eq('archived', false)
+            .not('status', 'in', `(${EXCLUIDOS.map(e=>`${e}`).join(',')})`)
+            .order('updated_at', { ascending: false })
+            : Promise.resolve({ data: [] }),
+          supabase.from('amat_loan_leads').select('*')
+            .is('assigned_to', null).eq('archived', false)
+            .in('status', ['new','contacted'])
+            .order('created_at', { ascending: true })
+            .limit(50)
+        ])
+
+        // Un solo setBotLeads con todos los resultados
+        const asignados = (asignadosRes.data || []) as LoanLead[]
+        const cola = (colaRes.data || []) as LoanLead[]
+        const todos = [...asignados, ...cola]
+        if(todos.length) {
           setBotLeads(prev => {
-            console.log('[COLA CARGA] botLeads antes del merge:', prev.length)
             const merged = [...prev]
-            ;(colaLeads as LoanLead[]).forEach(lead => {
+            todos.forEach(lead => {
               if(!merged.find(l=>l.id===lead.id)) merged.push(lead)
             })
-            console.log('[COLA CARGA] botLeads despues del merge:', merged.length)
             return merged
           })
         }
@@ -1448,7 +1435,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
             <div style={{flex:1,overflowY:'auto'}}>
               {vistaMode==='cola'&&(()=>{
-                console.log('[COLA RENDER] bandejaLeads total:', bandejaLeads.length, 'sin asignar:', bandejaLeads.filter(l=>!l.assigned_to&&!l.archived&&['new','contacted'].includes(l.status||'')).length)
+                ).length)
                 let leads = bandejaLeads.filter(l=>{
                   if(l.assigned_to) return false
                   if(l.archived) return false
