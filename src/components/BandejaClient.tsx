@@ -1534,10 +1534,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   {colaTotal > leads.length && (
                     <div style={{padding:'12px 16px',textAlign:'center'}}>
                       <button onClick={async()=>{
-                        // Usar cursor por updated_at del último lead en memoria — no range
                         const colaEnMemoria = bandejaLeads.filter(l=>!l.assigned_to&&!l.archived&&['new','contacted'].includes(l.status||''))
                         const idsEnMemoria = new Set(colaEnMemoria.map(l=>l.id))
                         const ultimo = colaEnMemoria.sort((a,b)=>new Date(a.updated_at).getTime()-new Date(b.updated_at).getTime())[0]
+                        console.log('[COLA] en memoria:', colaEnMemoria.length, 'ultimo updated_at:', ultimo?.updated_at)
                         let q = supabase
                           .from('amat_loan_leads').select('*')
                           .is('assigned_to', null)
@@ -1546,9 +1546,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                           .order('updated_at', { ascending: false })
                           .limit(50)
                         if(ultimo?.updated_at) q = q.lt('updated_at', ultimo.updated_at)
-                        const { data: mas } = await q
+                        const { data: mas, error: masError } = await q
+                        console.log('[COLA] resultado:', mas?.length, 'error:', masError)
                         if(mas?.length) {
                           const nuevos = (mas as LoanLead[]).filter(l=>!idsEnMemoria.has(l.id))
+                          console.log('[COLA] nuevos a agregar:', nuevos.length)
                           if(nuevos.length) setBotLeads(prev => [...prev, ...nuevos])
                         }
                       }} style={{padding:'8px 20px',borderRadius:8,border:'1px solid #FCD34D',background:'#FFFBEB',color:'#B45309',fontSize:12,fontWeight:600,cursor:'pointer'}}>
