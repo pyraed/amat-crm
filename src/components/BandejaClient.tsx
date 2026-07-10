@@ -245,6 +245,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [cola, setCola]                   = useState<LoanLead[]>([])
   const [colaPage, setColaPage]           = useState(50)
   const [colaTotal, setColaTotal]         = useState(0)
+  const [colaLeadsState, setColaLeadsState] = useState<LoanLead[]>([])
   const [consultasTotal, setConsultasTotal] = useState(0)
   const [showFinalizarModal, setShowFinalizarModal] = useState(false)
   const [finalizarEstado, setFinalizarEstado]       = useState('')
@@ -820,18 +821,20 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             .limit(50)
         ])
 
-        // Un solo setBotLeads con todos los resultados
+        // Leads asignados van a botLeads, cola va a colaLeadsState (estado independiente)
         const asignados = (asignadosRes.data || []) as LoanLead[]
         const cola = (colaRes.data || []) as LoanLead[]
-        const todos = [...asignados, ...cola]
-        if(todos.length) {
+        if(asignados.length) {
           setBotLeads(prev => {
             const merged = [...prev]
-            todos.forEach(lead => {
+            asignados.forEach(lead => {
               if(!merged.find(l=>l.id===lead.id)) merged.push(lead)
             })
             return merged
           })
+        }
+        if(cola.length) {
+          setColaLeadsState(cola)
         }
       })()
     }
@@ -996,6 +999,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
     // Bajar contador PRIMERO — antes del cambio de vista para que el badge se actualice
     setColaTotal(t => Math.max(0, t - 1))
+    setColaLeadsState(prev => prev.filter(l => l.id !== lead.id))
 
     // Sacar el lead tomado de la cola en memoria inmediatamente
     setBotLeads(prev => prev.map(l =>
@@ -1435,10 +1439,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
             <div style={{flex:1,overflowY:'auto'}}>
               {vistaMode==='cola'&&(()=>{
-                let leads = bandejaLeads.filter(l=>{
-                  if(l.assigned_to) return false
-                  if(l.archived) return false
-                  if(!['new','contacted'].includes(l.status||'')) return false
+                let leads = colaLeadsState.filter(l=>{
                   const fl=flujoMap[l.phone_number||'']||'solicitud'
                   if(me?.role==='Vendedor') return fl!=='cobranzas'
                   if(me?.role==='Cobranza') return fl==='cobranzas'
@@ -1480,24 +1481,23 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     </div>
                   )
                   })}
-                  {(colaTotal > colaPage || leads.length > colaPage) && (
+                  {colaTotal > colaLeadsState.length && (
                     <div style={{padding:'12px 16px',textAlign:'center'}}>
                       <button onClick={async()=>{
-                        const offset = bandejaLeads.filter(l=>!l.assigned_to&&!l.archived&&['new','contacted'].includes(l.status||'')).length
-                        const idsEnMemoria = new Set(bandejaLeads.map(l=>l.id))
+                        const idsEnMemoria = new Set(colaLeadsState.map(l=>l.id))
                         const { data: mas } = await supabase
                           .from('amat_loan_leads').select('*')
                           .is('assigned_to', null).eq('archived', false)
                           .in('status', ['new','contacted'])
                           .order('created_at', { ascending: true })
-                          .range(offset, offset + 49)
+                          .range(colaLeadsState.length, colaLeadsState.length + 49)
                         if(mas?.length) {
                           const nuevos = (mas as LoanLead[]).filter(l=>!idsEnMemoria.has(l.id))
-                          if(nuevos.length) setBotLeads(prev => [...prev, ...nuevos])
+                          if(nuevos.length) setColaLeadsState(prev => [...prev, ...nuevos])
                         }
                         setColaPage(p => p + 50)
                       }} style={{padding:'8px 20px',borderRadius:8,border:'1px solid #FCD34D',background:'#FFFBEB',color:'#B45309',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                        Cargar 50 más ({Math.max(colaTotal, leads.length) - Math.min(colaPage, leads.length) > 0 ? (Math.max(colaTotal, leads.length) - colaPage).toLocaleString('es-AR') : 0} restantes)
+                        Cargar 50 más ({Math.max(0, colaTotal - colaLeadsState.length).toLocaleString('es-AR')} restantes)
                       </button>
                     </div>
                   )}
