@@ -1486,6 +1486,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
             <div style={{flex:1,overflowY:'auto'}}>
               {vistaMode==='cola'&&(()=>{
+                const todosEnCola = bandejaLeads.filter(l=>!l.assigned_to&&!l.archived&&['new','contacted'].includes(l.status||''))
+                console.log('[COLA RENDER] total sin filtro flujo:', todosEnCola.length, 'bandejaLeads total:', bandejaLeads.length)
                 let leads = bandejaLeads.filter(l=>{
                   if(l.assigned_to) return false
                   if(l.archived) return false
