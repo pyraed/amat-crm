@@ -845,21 +845,18 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
       // Cargar cola — primeros 50, se cargan más al hacer click en "Cargar más"
       ;(async () => {
-        const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed','sin_respuesta']
-        // Total real de la cola — count query, no trae datos
+        // Count real — solo assigned_to null + archived false
         supabase
           .from('amat_loan_leads')
           .select('id', { count: 'exact', head: true })
           .is('assigned_to', null)
           .eq('archived', false)
-          .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
           .then(({ count }) => setColaTotal(count || 0))
         const { data: colaLeads } = await supabase
           .from('amat_loan_leads')
           .select('*')
           .is('assigned_to', null)
           .eq('archived', false)
-          .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
           .order('updated_at', { ascending: false })
           .limit(50)
         if(colaLeads?.length) {
@@ -1044,11 +1041,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setVistaMode('mis_chats')
 
     // Reemplazar con uno nuevo de la cola — excluir el lead recién tomado del conteo
-    const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed','sin_respuesta']
     const colaActual = bandejaLeads.filter(l =>
-      l.id !== lead.id &&   // excluir el que acaba de tomar
+      l.id !== lead.id &&
       !l.assigned_to &&
-      !EXCLUIDOS_COLA.includes(l.status||'') &&
       !l.archived
     )
     const idsEnMemoria = new Set([...colaActual.map(l => l.id), lead.id])
@@ -1057,7 +1052,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .select('*')
       .is('assigned_to', null)
       .eq('archived', false)
-      .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
       .order('updated_at', { ascending: false })
       .range(colaActual.length, colaActual.length)
       .then(({ data }) => {
@@ -1464,14 +1458,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               </div>
               {me?.role==='Administrador' && (
                 <div style={{display:'flex',gap:4}}>
-                  {(['all','solicitud','cobranzas'] as const).map(f=>(
-                    <button key={f} onClick={()=>setBandejaFlujo(f)} style={{
+                  {(['all','solicitud'] as const).map(f=>(
+                    <button key={f} onClick={()=>setBandejaFlujo(f as any)} style={{
                       flex:1,padding:'4px 6px',borderRadius:6,border:'1px solid',fontSize:10.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',
                       background:bandejaFlujo===f?'#1E293B':'white',
                       color:bandejaFlujo===f?'white':'#64748B',
                       borderColor:bandejaFlujo===f?'#1E293B':'#E2E8F0',
                     }}>
-                      {f==='all'?'Todos':f==='solicitud'?'💼 Ventas':'🔔 Cobr.'}
+                      {f==='all'?'Todos':'💼 Ventas'}
                     </button>
                   ))}
                 </div>
@@ -1488,13 +1482,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             <div style={{flex:1,overflowY:'auto'}}>
               {vistaMode==='cola'&&(()=>{
                 let leads = bandejaLeads.filter(l=>{
-                  if(l.assigned_to||l.status==='finalizado') return false
+                  if(l.assigned_to) return false
+                  if(l.archived) return false
+                  if(l.status==='finalizado') return false
                   const fl=flujoMap[l.phone_number||'']||'solicitud'
                   if(me?.role==='Vendedor') return fl!=='cobranzas'
                   if(me?.role==='Cobranza') return fl==='cobranzas'
-                  // Admin: aplicar filtro manual
-                  if(bandejaFlujo!=='all') return fl===bandejaFlujo
-                  return true
+                  if(me?.role==='Administrador') return fl!=='cobranzas'
+                  return fl!=='cobranzas'
                 })
                 if(bandejaSearch) leads=leads.filter(l=>(l.full_name||'').toLowerCase().includes(bandejaSearch.toLowerCase())||(l.phone_number||'').includes(bandejaSearch)||(l.dni||'').includes(bandejaSearch))
                 if(leads.length===0) return (
@@ -1562,9 +1557,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   const fl=flujoMap[l.phone_number||'']||'solicitud'
                   if(me?.role==='Vendedor') return fl!=='cobranzas'
                   if(me?.role==='Cobranza') return fl==='cobranzas'
-                  // Admin: aplicar filtro manual
-                  if(bandejaFlujo!=='all') return fl===bandejaFlujo
-                  return true
+                  if(me?.role==='Administrador') return fl!=='cobranzas'
+                  return fl!=='cobranzas'
                 })
                 if(bandejaSearch) leads=leads.filter(l=>(l.full_name||'').toLowerCase().includes(bandejaSearch.toLowerCase())||(l.phone_number||'').includes(bandejaSearch)||(l.dni||'').includes(bandejaSearch))
                 if(leads.length===0) return (
