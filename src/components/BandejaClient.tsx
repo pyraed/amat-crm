@@ -39,15 +39,12 @@ const USERS: SysUser[] = [
 // Ventas:    pendiente (new/contacted) → vendido (closed) / rechazado (rejected) / no interesado (not_interested)
 // Cobranzas: pendiente (new/contacted) → resuelto (resolved) / no resuelto (unresolved)
 // Todo estado final implica archived: true — un lead archivado nunca vuelve a bandeja/cola.
-const ESTADOS_FINALES = ['closed','rejected','not_interested','resolved','unresolved','sin_respuesta']
-const ESTADOS_RESET_AL_ESCRIBIR = ['not_interested','sin_respuesta']   // vuelven a pendiente
-const ESTADOS_CONSERVAR_AL_ESCRIBIR = ['closed','rejected','resolved','unresolved'] // entran a cola SIN cambiar estado
+const ESTADOS_FINALES = ['closed','rejected','not_interested','resolved','unresolved']
 
 const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:string;desc:string}> = {
   new:           { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En cola, sin tomar' },
   contacted:     { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En bandeja del operador' },
   not_interested:{ label:'No interesado',  color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere la oferta' },
-  sin_respuesta: { label:'Sin respuesta',  color:'#94A3B8', bg:'#F1F5F9', text:'#475569', desc:'No contestó los mensajes' },
   rejected:      { label:'Rechazado',      color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No cumple requisitos' },
   closed:        { label:'Vendido',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
   // legacy — solo para mostrar registros históricos, no seleccionables
@@ -57,7 +54,7 @@ const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:strin
 }
 
 // Opciones seleccionables en el modal Cambiar estado — por flujo, sin duplicados
-const OPCIONES_VENTAS    = ['closed','rejected','not_interested','sin_respuesta'] as const
+const OPCIONES_VENTAS    = ['closed','rejected','not_interested'] as const
 const OPCIONES_COBRANZAS = ['resolved','unresolved'] as const
 
 // Mapeo canónico único: status de amat_loan_leads → estado de amat_consultas
@@ -68,7 +65,6 @@ const STATUS_A_CONSULTA: Record<string,string> = {
   resolved:       'resuelto',
   rejected:       'cerrado_rechazado',
   not_interested: 'cerrado_no_interesado',
-  sin_respuesta:  'cerrado',
   unresolved:     'cerrado',
   finalizado:     'cerrado',
 }
@@ -244,7 +240,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [bandejaStatus, setBandejaStatus] = useState('all')
   const [soloNoLeidos, setSoloNoLeidos]   = useState(false)
   const [vistaMode, setVistaMode]         = useState<'cola'|'mis_chats'>('cola')
-  const [bandejaFlujo, setBandejaFlujo]   = useState<'all'|'solicitud'|'cobranzas'>('all')
   // Mapa phone → flujo (solicitud|cobranzas) cargado de amat_consultas
   const [flujoMap, setFlujoMap]           = useState<Record<string,string>>({})
   const [cola, setCola]                   = useState<LoanLead[]>([])
@@ -384,52 +379,26 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           if(!prev.find(l=>l.phone_number===msg.phone_number)){
             supabase.from('amat_loan_leads').select('*').eq('phone_number',msg.phone_number).single()
               .then(({data})=>{
-                if(!data) return
-                const lead = data as LoanLead
-                const status = (lead.status || '') as string
-
-                if(ESTADOS_RESET_AL_ESCRIBIR.includes(status)) {
-                  // sin_respuesta / not_interested → resetear a pendiente
-                  supabase.from('amat_loan_leads')
-                    .update({ status:'new', archived:false, assigned_to:undefined as any, updated_at:new Date().toISOString() })
-                    .eq('id', lead.id)
-                    .then(()=>{
-                      const r = {...lead, status:'new', archived:false, assigned_to:undefined as any}
-                      setBotLeads(p2=>p2.find(l=>l.id===lead.id)?p2:[r as LoanLead,...p2])
-                    })
-                  if(lead.phone_number) {
-                    supabase.from('amat_consultas')
-                      .update({ estado:'pendiente', updated_at:new Date().toISOString() })
-                      .eq('phone', lead.phone_number)
-                  }
-                  return
-                }
-
-                if(ESTADOS_CONSERVAR_AL_ESCRIBIR.includes(status)) {
-                  // closed / rejected → entrar a cola sin cambiar estado
-                  supabase.from('amat_loan_leads')
-                    .update({ archived:false, updated_at:new Date().toISOString() })
-                    .eq('id', lead.id)
-                    .then(()=>{
-                      setBotLeads(p2=>p2.find(l=>l.id===lead.id)?p2:[{...lead,archived:false} as LoanLead,...p2])
-                      setColaTotal(t=>t+1)
-                    })
-                  return
-                }
-
-                // Lead activo normal
-                if((lead as any).archived) return
-                setBotLeads(p2=>{
-                  if(p2.find(l=>l.phone_number===lead.phone_number)) return p2
-                  return [lead,...p2]
-                })
-                supabase.from('amat_consultas')
-                  .select('phone,flujo')
-                  .eq('phone', msg.phone_number)
-                  .single()
-                  .then(({data:cdata})=>{
-                    if(cdata?.phone) setFlujoMap(prev=>({...prev,[cdata.phone]:cdata.flujo||'solicitud'}))
+                if(data) {
+                  // No reinsertar si está archivado — única condición, imposible de desincronizar
+                  // (todo estado final implica archived: true vía cambiarEstado)
+                  if((data as any).archived || ESTADOS_FINALES.includes((data as LoanLead).status||'')) return
+                  setBotLeads(p2 => {
+                    // Verificar de nuevo con el estado más fresco para evitar duplicados
+                    if(p2.find(l => l.phone_number === (data as LoanLead).phone_number)) return p2
+                    return [data as LoanLead, ...p2]
                   })
+                  // Cargar el flujo de este phone y actualizar flujoMap
+                  supabase.from('amat_consultas')
+                    .select('phone,flujo')
+                    .eq('phone', msg.phone_number)
+                    .single()
+                    .then(({data:cdata})=>{
+                      if(cdata?.phone) {
+                        setFlujoMap(prev=>({...prev,[cdata.phone]:cdata.flujo||'solicitud'}))
+                      }
+                    })
+                }
               })
           }
           return prev
@@ -508,14 +477,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         seen.add(key)
         return true
       })
-      // Mergear con los leads de cola que ya están en memoria (no pisarlos)
-      setBotLeads(prev => {
-        const merged = [...unique]
-        prev.forEach(l => {
-          if(!merged.find(x=>x.id===l.id)) merged.push(l)
-        })
-        return merged
-      })
+      setBotLeads(unique)
     })
 
     // Cargar flujos en lotes
@@ -600,7 +562,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
     // Deduplicar con Set — O(n) en vez de O(n²)
     const phonesConConsulta = new Set((data||[]).map((c:any) => c.phone).filter(Boolean))
-    const statusMap: Record<string,string> = { new:'pendiente', contacted:'pendiente', closed:'resuelto', resolved:'resuelto', rejected:'cerrado_rechazado', not_interested:'cerrado_no_interesado', sin_respuesta:'cerrado', unresolved:'cerrado', finalizado:'cerrado' }
+    const statusMap: Record<string,string> = { new:'pendiente', contacted:'pendiente', closed:'resuelto', resolved:'resuelto', rejected:'cerrado_rechazado', not_interested:'cerrado_no_interesado', unresolved:'cerrado', finalizado:'cerrado' }
 
     const sinConsulta = (leadsData||[])
       .filter((l:any) => l.phone_number && !phonesConConsulta.has(l.phone_number))
@@ -613,7 +575,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         flujo: flujoMap[l.phone_number||'']||'solicitud',
         prestacion: null, afiliado: null,
         vendedor: l.assigned_to, situacion: null,
-        estado: statusMap[l.status||''] || 'pendiente', // nunca mostrar valor en inglés
+        estado: statusMap[l.status||''] || l.status,
         created_at: l.created_at,
         _esLeadSinConsulta: true,
       }))
@@ -852,22 +814,22 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
       // Cargar cola — primeros 50, se cargan más al hacer click en "Cargar más"
       ;(async () => {
-        // Count + carga de cola: leads nuevos sin asignar
-        const ESTADOS_COLA = ['new','contacted']
+        const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
+        // Total real de la cola — count query, no trae datos
         supabase
           .from('amat_loan_leads')
           .select('id', { count: 'exact', head: true })
           .is('assigned_to', null)
           .eq('archived', false)
-          .in('status', ESTADOS_COLA)
+          .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
           .then(({ count }) => setColaTotal(count || 0))
         const { data: colaLeads } = await supabase
           .from('amat_loan_leads')
           .select('*')
           .is('assigned_to', null)
           .eq('archived', false)
-          .in('status', ESTADOS_COLA)
-          .order('created_at', { ascending: true })
+          .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
+          .order('updated_at', { ascending: false })
           .limit(50)
         if(colaLeads?.length) {
           setBotLeads(prev => {
@@ -1025,7 +987,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     // Verificar límite de 20 conversaciones activas
     const misActivas = bandejaLeads.filter(l =>
       l.assigned_to === me.username &&
-      !['closed','rejected','not_interested','resolved','unresolved','finalizado','sin_respuesta'].includes(l.status||'')
+      !['closed','rejected','not_interested','resolved','unresolved','finalizado'].includes(l.status||'')
     ).length
     if(misActivas >= LIMITE_BANDEJA) {
       alert(`Tenés ${misActivas} conversaciones activas. El límite es ${LIMITE_BANDEJA}. Cerrá alguna antes de tomar una nueva.`)
@@ -1051,11 +1013,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setVistaMode('mis_chats')
 
     // Reemplazar con uno nuevo de la cola — excluir el lead recién tomado del conteo
+    const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
     const colaActual = bandejaLeads.filter(l =>
-      l.id !== lead.id &&
+      l.id !== lead.id &&   // excluir el que acaba de tomar
       !l.assigned_to &&
-      !l.archived &&
-      ['new','contacted'].includes(l.status||'')
+      !EXCLUIDOS_COLA.includes(l.status||'') &&
+      !l.archived
     )
     const idsEnMemoria = new Set([...colaActual.map(l => l.id), lead.id])
     supabase
@@ -1063,7 +1026,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .select('*')
       .is('assigned_to', null)
       .eq('archived', false)
-      .in('status', ['new','contacted'])
+      .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
       .order('updated_at', { ascending: false })
       .range(colaActual.length, colaActual.length)
       .then(({ data }) => {
@@ -1249,7 +1212,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // Bandeja: solo leads con conversación (mensajes)
   const phonesConMensajes=[...new Set(messages.map(m=>m.phone_number))]
-  const ESTADOS_FINALES_BANDEJA = ['finalizado','rejected','not_interested','resolved','unresolved','sin_respuesta']
+  const ESTADOS_FINALES_BANDEJA = ['finalizado','rejected','not_interested','resolved','unresolved']
   const bandejaLeads=allLeads.filter(l=>{
     if(!l.phone_number) return false
     // Leads asignados al usuario siempre aparecen aunque sus mensajes no estén en el batch
@@ -1463,25 +1426,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='mis_chats'?'white':'transparent',color:vistaMode==='mis_chats'?'#0F172A':'#64748B',boxShadow:vistaMode==='mis_chats'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
                   onClick={()=>setVistaMode('mis_chats')}>
                   💬 Mis chats {(()=>{
-                    const n = bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado','sin_respuesta'].includes(l.status||'')).length
+                    const n = bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado'].includes(l.status||'')).length
                     return n>0?<span style={{background:'#3B82F6',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:3}}>{n}</span>:null
                   })()}
                 </button>
               </div>
-              {me?.role==='Administrador' && (
-                <div style={{display:'flex',gap:4}}>
-                  {(['all','solicitud'] as const).map(f=>(
-                    <button key={f} onClick={()=>setBandejaFlujo(f as any)} style={{
-                      flex:1,padding:'4px 6px',borderRadius:6,border:'1px solid',fontSize:10.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',
-                      background:bandejaFlujo===f?'#1E293B':'white',
-                      color:bandejaFlujo===f?'white':'#64748B',
-                      borderColor:bandejaFlujo===f?'#1E293B':'#E2E8F0',
-                    }}>
-                      {f==='all'?'Todos':'💼 Ventas'}
-                    </button>
-                  ))}
-                </div>
-              )}
               <div style={{position:'relative'}}>
                 <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'#94A3B8',fontSize:13,pointerEvents:'none'}}>🔍</span>
                 <input className="si" placeholder="Buscar..." value={bandejaSearch} onChange={e=>setBandejaSearch(e.target.value)}/>
@@ -1494,15 +1443,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             <div style={{flex:1,overflowY:'auto'}}>
               {vistaMode==='cola'&&(()=>{
                 let leads = bandejaLeads.filter(l=>{
-                  if(l.assigned_to) return false
-                  if(l.archived) return false
-                  if(!['new','contacted'].includes(l.status||'')) return false
-                  // Si no hay flujo conocido, mostrar siempre (no descartar por falta de mensajes)
-                  const fl=flujoMap[l.phone_number||'']||null
-                  if(me?.role==='Vendedor') return fl!=='cobranzas'
-                  if(me?.role==='Cobranza') return fl==='cobranzas'
-                  // Admin y sin rol: excluir solo si se sabe que es cobranzas
-                  return fl!=='cobranzas'
+                  if(l.assigned_to||l.status==='finalizado') return false
+                  if(me?.role==='Vendedor'){
+                    const fl=flujoMap[l.phone_number||'']||'solicitud'
+                    return fl!=='cobranzas'
+                  }
+                  if(me?.role==='Cobranza'){
+                    const fl=flujoMap[l.phone_number||'']||'solicitud'
+                    return fl==='cobranzas'
+                  }
+                  return true
                 })
                 if(bandejaSearch) leads=leads.filter(l=>(l.full_name||'').toLowerCase().includes(bandejaSearch.toLowerCase())||(l.phone_number||'').includes(bandejaSearch)||(l.dni||'').includes(bandejaSearch))
                 if(leads.length===0) return (
@@ -1539,25 +1489,20 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     </div>
                   )
                   })}
-                  {colaTotal > leads.length && (
+                  {(colaTotal > colaPage || leads.length > colaPage) && (
                     <div style={{padding:'12px 16px',textAlign:'center'}}>
                       <button onClick={async()=>{
-                        const idsEnMemoria = new Set(bandejaLeads.map(l=>l.id))
-                        // Offset = cuántos leads sin asignar hay en memoria
-                        const offset = bandejaLeads.filter(l=>!l.assigned_to&&!l.archived&&['new','contacted'].includes(l.status||'')).length
+                        const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
                         const { data: mas } = await supabase
                           .from('amat_loan_leads').select('*')
-                          .is('assigned_to', null)
-                          .eq('archived', false)
-                          .in('status', ['new','contacted'])
-                          .order('created_at', { ascending: true })
-                          .range(offset, offset + 49)
-                        if(mas?.length) {
-                          const nuevos = (mas as LoanLead[]).filter(l=>!idsEnMemoria.has(l.id))
-                          if(nuevos.length) setBotLeads(prev => [...prev, ...nuevos])
-                        }
+                          .is('assigned_to', null).eq('archived', false)
+                          .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
+                          .order('updated_at', { ascending: false })
+                          .range(colaPage, colaPage + 49)
+                        if(mas?.length) setBotLeads(prev => { const m=[...prev]; (mas as LoanLead[]).forEach(l=>{ if(!m.find(x=>x.id===l.id)) m.push(l) }); return m })
+                        setColaPage(p => p + 50)
                       }} style={{padding:'8px 20px',borderRadius:8,border:'1px solid #FCD34D',background:'#FFFBEB',color:'#B45309',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                        Cargar 50 más ({Math.max(0, colaTotal - leads.length).toLocaleString('es-AR')} restantes)
+                        Cargar 50 más ({Math.max(colaTotal, leads.length) - Math.min(colaPage, leads.length) > 0 ? (Math.max(colaTotal, leads.length) - colaPage).toLocaleString('es-AR') : 0} restantes)
                       </button>
                     </div>
                   )}
@@ -1567,11 +1512,15 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               {vistaMode==='mis_chats'&&(()=>{
                 let leads = bandejaLeads.filter(l=>{
                   if(l.assigned_to!==me?.username||l.status==='finalizado') return false
-                  const fl=flujoMap[l.phone_number||'']||'solicitud'
-                  if(me?.role==='Vendedor') return fl!=='cobranzas'
-                  if(me?.role==='Cobranza') return fl==='cobranzas'
-                  if(me?.role==='Administrador') return fl!=='cobranzas'
-                  return fl!=='cobranzas'
+                  if(me?.role==='Vendedor'){
+                    const fl=flujoMap[l.phone_number||'']||'solicitud'
+                    return fl!=='cobranzas'
+                  }
+                  if(me?.role==='Cobranza'){
+                    const fl=flujoMap[l.phone_number||'']||'solicitud'
+                    return fl==='cobranzas'
+                  }
+                  return true
                 })
                 if(bandejaSearch) leads=leads.filter(l=>(l.full_name||'').toLowerCase().includes(bandejaSearch.toLowerCase())||(l.phone_number||'').includes(bandejaSearch)||(l.dni||'').includes(bandejaSearch))
                 if(leads.length===0) return (
@@ -1629,7 +1578,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   </div>
                   <div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap'}}>
                     {!currentLead.assigned_to && (()=>{
-                      const misActivas = bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado','sin_respuesta'].includes(l.status||'')).length
+                      const misActivas = bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado'].includes(l.status||'')).length
                       const lleno = misActivas >= LIMITE_BANDEJA
                       return (
                         <button onClick={()=>tomarConversacion(currentLead)} style={{
@@ -1944,11 +1893,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             <select className="fsel" value={cEstado} onChange={e=>setCEstado(e.target.value)}>
               <option value="all">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
-              <option value="cerrado">Sin respuesta</option>
               <option value="resuelto">Vendido</option>
               <option value="cerrado_rechazado">Rechazado</option>
               <option value="cerrado_no_interesado">No interesado</option>
-              <option value="resuelto_cob">Resuelto (cobranzas)</option>
             </select>
             <select className="fsel" value={cRep} onChange={e=>setCRep(e.target.value)}>
               <option value="all">Todas las reparticiones</option>
@@ -1989,20 +1936,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                       pendiente:           {bg:'#FFFBEB',text:'#92400E'},
                       en_proceso:          {bg:'#FFFBEB',text:'#92400E'},
                       resuelto:            {bg:'#ECFDF5',text:'#065F46'},
-                      cerrado:             {bg:'#F1F5F9',text:'#475569'},
+                      cerrado:             {bg:'#F8FAFC',text:'#475569'},
                       cerrado_rechazado:   {bg:'#FEF2F2',text:'#DC2626'},
                       cerrado_no_interesado:{bg:'#F5F3FF',text:'#6D28D9'},
                       rejected:            {bg:'#FEF2F2',text:'#991B1B'},
                       not_interested:      {bg:'#F9FAFB',text:'#374151'},
-                      sin_respuesta:       {bg:'#F1F5F9',text:'#475569'},
-                      // valores inglés por si hay datos viejos en DB
-                      closed:              {bg:'#ECFDF5',text:'#065F46'},
-                      rejected:            {bg:'#FEF2F2',text:'#991B1B'},
-                      not_interested:      {bg:'#F9FAFB',text:'#374151'},
-                      resolved:            {bg:'#ECFDF5',text:'#065F46'},
-                      unresolved:          {bg:'#FEF2F2',text:'#991B1B'},
-                      new:                 {bg:'#FFFBEB',text:'#92400E'},
-                      contacted:           {bg:'#FFFBEB',text:'#92400E'},
                     }
                     const ec = estadoColors[c.estado] || estadoColors.pendiente
                     return (
@@ -2026,18 +1964,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:ec.bg,color:ec.text}}>
-                            {(()=>{
-                              const MAP: Record<string,string> = {
-                                nuevo:'Pendiente', pendiente:'Pendiente', en_proceso:'Pendiente',
-                                new:'Pendiente', contacted:'Pendiente', finalizado:'Cerrado',
-                                resuelto:'Vendido', closed:'Vendido', resolved:'Resuelto',
-                                cerrado:'Sin respuesta', sin_respuesta:'Sin respuesta',
-                                cerrado_rechazado:'Rechazado', rejected:'Rechazado',
-                                cerrado_no_interesado:'No interesado', not_interested:'No interesado',
-                                no_interesado:'No interesado', unresolved:'No resuelto', no_resuelto:'No resuelto',
-                              }
-                              return MAP[c.estado] || 'Pendiente'
-                            })()}
+                            {({'nuevo':'Pendiente','pendiente':'Pendiente','en_proceso':'Pendiente','resuelto':'Vendido','cerrado':'Cerrado','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto'} as any)[c.estado]||c.estado}
                           </span>
                         </td>
                         <td>
@@ -2562,14 +2489,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               <div>
                 <label className="fl">Estado</label>
                 <select className="fs" value={editForm.status||'new'} onChange={e=>setEditForm(f=>({...f,status:e.target.value as any}))}>
-                  <option value="new">Pendiente (cola)</option>
-                  <option value="contacted">Pendiente (en bandeja)</option>
-                  <option value="sin_respuesta">Sin respuesta</option>
-                  <option value="closed">Vendido</option>
-                  <option value="rejected">Rechazado</option>
-                  <option value="not_interested">No interesado</option>
-                  <option value="resolved">Resuelto (cobranzas)</option>
-                  <option value="unresolved">No resuelto (cobranzas)</option>
+                  <option value="new">Pendiente</option>
+              <option value="contacted">En bandeja</option>
+              <option value="closed">Vendido</option>
+              <option value="rejected">Rechazado</option>
+              <option value="not_interested">No interesado</option>
                 </select>
               </div>
               <div>
@@ -2875,7 +2799,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     <option value="resuelto">Vendido</option>
                     <option value="cerrado_rechazado">Rechazado</option>
                     <option value="cerrado_no_interesado">No interesado</option>
-                    <option value="cerrado">Sin respuesta</option>
                   </>)}
                 </select>
               </div>
@@ -2915,7 +2838,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   const CONSULTA_A_STATUS: Record<string,string> = {
                     pendiente:              'contacted',
                     resuelto:               esCob ? 'resolved' : 'closed',
-                    cerrado:                esCob ? 'unresolved' : 'sin_respuesta',
+                    cerrado:                esCob ? 'unresolved' : 'not_interested',
                     cerrado_rechazado:      'rejected',
                     cerrado_no_interesado:  'not_interested',
                   }
