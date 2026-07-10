@@ -1435,7 +1435,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
             <div style={{flex:1,overflowY:'auto'}}>
               {vistaMode==='cola'&&(()=>{
-                ).length)
                 let leads = bandejaLeads.filter(l=>{
                   if(l.assigned_to) return false
                   if(l.archived) return false
