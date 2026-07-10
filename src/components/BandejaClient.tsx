@@ -39,12 +39,13 @@ const USERS: SysUser[] = [
 // Ventas:    pendiente (new/contacted) → vendido (closed) / rechazado (rejected) / no interesado (not_interested)
 // Cobranzas: pendiente (new/contacted) → resuelto (resolved) / no resuelto (unresolved)
 // Todo estado final implica archived: true — un lead archivado nunca vuelve a bandeja/cola.
-const ESTADOS_FINALES = ['closed','rejected','not_interested','resolved','unresolved']
+const ESTADOS_FINALES = ['closed','rejected','not_interested','resolved','unresolved','sin_respuesta']
 
 const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:string;desc:string}> = {
   new:           { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En cola, sin tomar' },
   contacted:     { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En bandeja del operador' },
   not_interested:{ label:'No interesado',  color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere la oferta' },
+  sin_respuesta: { label:'Sin respuesta',  color:'#94A3B8', bg:'#F1F5F9', text:'#475569', desc:'No contestó los mensajes' },
   rejected:      { label:'Rechazado',      color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No cumple requisitos' },
   closed:        { label:'Vendido',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
   // legacy — solo para mostrar registros históricos, no seleccionables
@@ -54,7 +55,7 @@ const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:strin
 }
 
 // Opciones seleccionables en el modal Cambiar estado — por flujo, sin duplicados
-const OPCIONES_VENTAS    = ['closed','rejected','not_interested'] as const
+const OPCIONES_VENTAS    = ['closed','rejected','not_interested','sin_respuesta'] as const
 const OPCIONES_COBRANZAS = ['resolved','unresolved'] as const
 
 // Mapeo canónico único: status de amat_loan_leads → estado de amat_consultas
@@ -65,6 +66,7 @@ const STATUS_A_CONSULTA: Record<string,string> = {
   resolved:       'resuelto',
   rejected:       'cerrado_rechazado',
   not_interested: 'cerrado_no_interesado',
+  sin_respuesta:  'cerrado',
   unresolved:     'cerrado',
   finalizado:     'cerrado',
 }
@@ -567,7 +569,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
     // Deduplicar con Set — O(n) en vez de O(n²)
     const phonesConConsulta = new Set((data||[]).map((c:any) => c.phone).filter(Boolean))
-    const statusMap: Record<string,string> = { new:'pendiente', contacted:'pendiente', closed:'resuelto', resolved:'resuelto', rejected:'cerrado_rechazado', not_interested:'cerrado_no_interesado', unresolved:'cerrado', finalizado:'cerrado' }
+    const statusMap: Record<string,string> = { new:'pendiente', contacted:'pendiente', closed:'resuelto', resolved:'resuelto', rejected:'cerrado_rechazado', not_interested:'cerrado_no_interesado', sin_respuesta:'cerrado', unresolved:'cerrado', finalizado:'cerrado' }
 
     const sinConsulta = (leadsData||[])
       .filter((l:any) => l.phone_number && !phonesConConsulta.has(l.phone_number))
@@ -983,7 +985,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     // Verificar límite de 20 conversaciones activas
     const misActivas = bandejaLeads.filter(l =>
       l.assigned_to === me.username &&
-      !['closed','rejected','not_interested','resolved','unresolved','finalizado'].includes(l.status||'')
+      !['closed','rejected','not_interested','resolved','unresolved','finalizado','sin_respuesta'].includes(l.status||'')
     ).length
     if(misActivas >= LIMITE_BANDEJA) {
       alert(`Tenés ${misActivas} conversaciones activas. El límite es ${LIMITE_BANDEJA}. Cerrá alguna antes de tomar una nueva.`)
@@ -1001,10 +1003,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setColaTotal(t => Math.max(0, t - 1))
     setColaLeadsState(prev => prev.filter(l => l.id !== lead.id))
 
-    // Sacar el lead tomado de la cola en memoria inmediatamente
-    setBotLeads(prev => prev.map(l =>
-      l.id === lead.id ? { ...l, assigned_to: me.username, status: 'contacted' } : l
-    ))
+    // Actualizar en botLeads — si ya está, actualizar; si no, agregar
+    setBotLeads(prev => {
+      const existe = prev.find(l => l.id === lead.id)
+      if(existe) return prev.map(l => l.id === lead.id ? { ...l, assigned_to: me.username, status: 'contacted' } : l)
+      return [...prev, { ...lead, assigned_to: me.username, status: 'contacted' }]
+    })
 
     setSelectedPhone(lead.phone_number)
     setVistaMode('mis_chats')
@@ -1209,7 +1213,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // Bandeja: solo leads con conversación (mensajes)
   const phonesConMensajes=[...new Set(messages.map(m=>m.phone_number))]
-  const ESTADOS_FINALES_BANDEJA = ['finalizado','rejected','not_interested','resolved','unresolved']
+  const ESTADOS_FINALES_BANDEJA = ['finalizado','rejected','not_interested','resolved','unresolved','sin_respuesta']
   const bandejaLeads=allLeads.filter(l=>{
     if(!l.phone_number) return false
     // Leads asignados al usuario siempre aparecen aunque sus mensajes no estén en el batch
@@ -1423,7 +1427,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='mis_chats'?'white':'transparent',color:vistaMode==='mis_chats'?'#0F172A':'#64748B',boxShadow:vistaMode==='mis_chats'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
                   onClick={()=>setVistaMode('mis_chats')}>
                   💬 Mis chats {(()=>{
-                    const n = bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado'].includes(l.status||'')).length
+                    const n = bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado','sin_respuesta'].includes(l.status||'')).length
                     return n>0?<span style={{background:'#3B82F6',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:3}}>{n}</span>:null
                   })()}
                 </button>
@@ -1459,11 +1463,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   {leadsVisibles.map(lead=>{
                   return (
                     <div key={lead.phone_number??lead.id} style={{display:'flex',gap:10,padding:'12px 14px',borderBottom:'1px solid #F1F5F9',cursor:'pointer',alignItems:'flex-start',background:'#FFFBEB',borderLeft:'3px solid #F59E0B'}}
-                      onClick={()=>{
-                        if(lead.phone_number) cargarMensajes(lead.phone_number)
-                        setSelectedPhone(lead.phone_number)
-                        setBotLeads(prev => prev.find(l=>l.id===lead.id) ? prev : [lead, ...prev])
-                      }}>
+                      onClick={()=>tomarConversacion(lead)}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:'#FFFBEB',color:'#B45309'}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
@@ -1573,7 +1573,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   </div>
                   <div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap'}}>
                     {!currentLead.assigned_to && (()=>{
-                      const misActivas = bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado'].includes(l.status||'')).length
+                      const misActivas = bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado','sin_respuesta'].includes(l.status||'')).length
                       const lleno = misActivas >= LIMITE_BANDEJA
                       return (
                         <button onClick={()=>tomarConversacion(currentLead)} style={{
@@ -1787,6 +1787,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               <option value="closed">Vendido</option>
               <option value="rejected">Rechazado</option>
               <option value="not_interested">No interesado</option>
+                  <option value="sin_respuesta">Sin respuesta</option>
               <option value="resolved">Resuelto (cobranzas)</option>
               <option value="unresolved">No resuelto (cobranzas)</option>
             </select>
@@ -1959,7 +1960,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:ec.bg,color:ec.text}}>
-                            {({'nuevo':'Pendiente','pendiente':'Pendiente','en_proceso':'Pendiente','resuelto':'Vendido','cerrado':'Cerrado','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto'} as any)[c.estado]||c.estado}
+                            {({'nuevo':'Pendiente','pendiente':'Pendiente','en_proceso':'Pendiente','resuelto':'Vendido','cerrado':'Cerrado','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto','sin_respuesta':'Sin respuesta'} as any)[c.estado]||c.estado}
                           </span>
                         </td>
                         <td>
