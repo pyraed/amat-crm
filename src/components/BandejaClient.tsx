@@ -249,6 +249,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [colaTotal, setColaTotal]         = useState(0)
   const [colaLeadsState, setColaLeadsState] = useState<LoanLead[]>([])
   const [colaMenu, setColaMenu]           = useState<LoanLead|null>(null)
+  const [colaMenuRef, setColaMenuRef]     = useState<{x:number,y:number}|null>(null)
   const [consultasTotal, setConsultasTotal] = useState(0)
   const [showFinalizarModal, setShowFinalizarModal] = useState(false)
   const [finalizarEstado, setFinalizarEstado]       = useState('')
@@ -1495,7 +1496,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                   {leadsVisibles.map(lead=>{
                   return (
                     <div key={lead.phone_number??lead.id} style={{display:'flex',gap:10,padding:'12px 14px',borderBottom:'1px solid #F1F5F9',cursor:'pointer',alignItems:'flex-start',background:'#FFFBEB',borderLeft:'3px solid #F59E0B'}}
-                      onClick={()=>{ if(me?.username==='Nicolas') { setColaMenu(lead) } else tomarConversacion(lead) }}>
+                      onClick={(e)=>{ if(me?.username==='Nicolas') { const r=(e.currentTarget as HTMLElement).getBoundingClientRect(); setColaMenuRef({x:r.right+4,y:r.top}); setColaMenu(lead) } else tomarConversacion(lead) }}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:'#FFFBEB',color:'#B45309'}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
@@ -1513,29 +1514,35 @@ Este límite protege el número de WhatsApp de la empresa.`)
                     </div>
                   )
                   })}
-                  {/* Menu contextual para Nicolas */}
-                  {colaMenu && me?.username==='Nicolas' && (
-                    <div style={{position:'fixed',inset:0,zIndex:100}} onClick={()=>setColaMenu(null)}>
+                  {/* Dropdown discreto para Nicolas — aparece pegado al item */}
+                  {colaMenu && colaMenuRef && me?.username==='Nicolas' && (
+                    <div style={{position:'fixed',inset:0,zIndex:100,background:'transparent'}} onClick={()=>{setColaMenu(null);setColaMenuRef(null)}}>
                       <div style={{
                         position:'fixed',
-                        top:'50%',left:'50%',transform:'translate(-50%,-50%)',
-                        background:'white',borderRadius:14,boxShadow:'0 8px 32px rgba(0,0,0,.18)',
-                        padding:'8px',minWidth:220,zIndex:101,
+                        top: Math.min(colaMenuRef.y, window.innerHeight-100),
+                        left: Math.min(colaMenuRef.x, window.innerWidth-200),
+                        background:'white',borderRadius:8,
+                        boxShadow:'0 4px 16px rgba(0,0,0,.12)',
+                        border:'1px solid #E2E8F0',
+                        padding:'4px',minWidth:180,zIndex:101,
                       }} onClick={e=>e.stopPropagation()}>
-                        <div style={{padding:'8px 12px',fontSize:12,fontWeight:700,color:'#94A3B8',borderBottom:'1px solid #F1F5F9',marginBottom:4}}>
-                          {colaMenu.full_name || colaMenu.phone_number}
-                        </div>
                         <button onClick={()=>{
-                          if(colaMenu.phone_number) cargarMensajes(colaMenu.phone_number)
+                          setCurrentChatMsgs([])
                           setSelectedPhone(colaMenu.phone_number)
-                          setColaMenu(null)
-                        }} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 12px',border:'none',background:'none',cursor:'pointer',borderRadius:8,fontSize:13,color:'#0F172A',fontWeight:500,fontFamily:'inherit',textAlign:'left'}}>
+                          if(colaMenu.phone_number) cargarMensajes(colaMenu.phone_number)
+                          setBotLeads(prev => prev.find(l=>l.id===colaMenu.id) ? prev : [colaMenu,...prev])
+                          setColaMenu(null); setColaMenuRef(null)
+                        }} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'8px 10px',border:'none',background:'none',cursor:'pointer',borderRadius:6,fontSize:12,color:'#0F172A',fontWeight:500,fontFamily:'inherit',textAlign:'left'}}
+                          onMouseEnter={e=>(e.currentTarget.style.background='#F8FAFC')}
+                          onMouseLeave={e=>(e.currentTarget.style.background='none')}>
                           👁️ Vista previa
                         </button>
                         <button onClick={()=>{
                           tomarConversacion(colaMenu)
-                          setColaMenu(null)
-                        }} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 12px',border:'none',background:'none',cursor:'pointer',borderRadius:8,fontSize:13,color:'#0F172A',fontWeight:500,fontFamily:'inherit',textAlign:'left'}}>
+                          setColaMenu(null); setColaMenuRef(null)
+                        }} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'8px 10px',border:'none',background:'none',cursor:'pointer',borderRadius:6,fontSize:12,color:'#0F172A',fontWeight:500,fontFamily:'inherit',textAlign:'left'}}
+                          onMouseEnter={e=>(e.currentTarget.style.background='#F8FAFC')}
+                          onMouseLeave={e=>(e.currentTarget.style.background='none')}>
                           ✋ Tomar conversación
                         </button>
                       </div>
