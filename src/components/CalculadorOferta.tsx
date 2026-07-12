@@ -82,6 +82,7 @@ const DOCS_HABERES: Record<string, string[]> = {
   spb:       ['DNI frente y dorso','Certificado de Afectación','Comprobante de Servicio','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
   educacion: ['DNI frente y dorso','Certificado de Afectación','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
   salud:     ['DNI frente y dorso','Certificado de Afectación','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
+  ejercito:  ['DNI frente y dorso','Certificado de Afectación','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
 }
 const DOCS_AYUDA = ['DNI frente y dorso','Servicio','Datero completo','Recibo','Selfie con DNI en mano','CBU','Movimientos']
 const DOCS_BAPRO = ['DNI frente y dorso','Servicio','Datero completo','Recibo','Selfie con DNI en mano','CBU','Movimientos','Foto tarjeta de débito (frente y dorso)']
@@ -106,6 +107,7 @@ function generarMensaje(params: {
                linea === 'ayuda' ? DOCS_AYUDA :
                (DOCS_HABERES[reparticion] || DOCS_HABERES['educacion'])
   const entLabel = entidad === 'dos_agosto' ? 'DOS DE AGOSTO' : 'AMAT'
+  const lineaLabel = linea === 'nacion' ? 'NACIÓN EX 14/12' : linea === 'bapro' ? 'BAPRO' : linea === 'ayuda' ? 'AYUDA ECONÓMICA' : 'HABERES'
   const repLabel = reparticion.charAt(0).toUpperCase() + reparticion.slice(1)
 
   if (linea === 'bapro') {
@@ -131,6 +133,7 @@ const LINEAS = [
   { value: 'haberes', label: 'Haberes' },
   { value: 'ayuda',   label: 'Ayuda' },
   { value: 'bapro',   label: 'BAPRO' },
+  { value: 'nacion',  label: 'Nación ex 14/12' },
 ]
 
 const REPS_AMAT = [
@@ -138,6 +141,7 @@ const REPS_AMAT = [
   { value:'spb',       label:'SPB' },
   { value:'educacion', label:'Educación' },
   { value:'salud',     label:'Salud' },
+  { value:'ejercito',  label:'Ejército Argentino' },
 ]
 
 const REPS_DOS_AGOSTO = [
@@ -150,6 +154,15 @@ const REPS_DOS_AGOSTO = [
 const CUOTAS_HABERES  = [6, 12, 18, 24]
 const CUOTAS_AYUDA    = [24]
 const CUOTAS_BAPRO    = [12]
+
+// Grilla Ejército Argentino — capital real (columna MONTO), cuotas 12/18/24
+const TABLA_EJERCITO: Record<number, Record<number, number>> = {
+  12: {80000:12553.59, 120000:18830.38, 160000:25107.18, 200000:31383.97, 240000:37660.76, 280000:43937.56, 320000:50214.35, 360000:56491.15, 400000:62767.94, 440000:69044.73, 480000:75321.53, 520000:81598.32, 560000:87875.12, 600000:94151.91, 640000:100428.7, 680000:106705.5, 720000:112982.29, 760000:119259.09, 800000:125535.88, 840000:131812.67, 880000:138089.47, 920000:144366.26, 960000:150643.06, 1000000:156919.85, 1040000:163196.64, 1080000:169473.44, 1120000:175750.23, 1160000:182027.03, 1200000:188303.82},
+  18: {80000:9902.12, 120000:14853.18, 160000:19804.24, 200000:24755.3, 240000:29706.36, 280000:34657.42, 320000:39608.48, 360000:44559.54, 400000:49510.6, 440000:54461.66, 480000:59412.72, 520000:64363.78, 560000:69314.84, 600000:74265.9, 640000:79216.96, 680000:84168.02, 720000:89119.08, 760000:94070.14, 800000:99021.2, 840000:103972.26, 880000:108923.32, 920000:113874.38, 960000:118825.44, 1000000:123776.5, 1040000:128727.56, 1080000:133678.62, 1120000:138629.68, 1160000:143580.74, 1200000:148531.8},
+  24: {80000:8677.16, 120000:13015.73, 160000:17354.31, 200000:21692.89, 240000:26031.47, 280000:30370.05, 320000:34708.63, 360000:39047.20, 400000:43385.78, 440000:47724.36, 480000:52062.94, 520000:56401.52, 560000:60740.09, 600000:65078.67, 640000:69417.25, 680000:73755.83, 720000:78094.41, 760000:82432.99, 800000:86771.56, 840000:91110.14, 880000:95448.72, 920000:99787.30, 960000:104125.88, 1000000:108464.46, 1040000:112803.03, 1080000:117141.61, 1120000:121480.19, 1160000:125818.77, 1200000:130157.35},
+}
+// Montos del Ejército (columna MONTO = capital real que se financia)
+const MONTOS_EJERCITO = [80000,120000,160000,200000,240000,280000,320000,360000,400000,440000,480000,520000,560000,600000,640000,680000,720000,760000,800000,840000,880000,920000,960000,1000000,1040000,1080000,1120000,1160000,1200000]
 
 const MONTOS_HABERES = [30000,40000,50000,60000,70000,80000,90000,100000,110000,120000,130000,140000,150000,160000,170000,180000,190000,200000,210000,220000,230000,240000,250000,260000,270000,280000,290000,300000,310000,320000,330000,340000,350000,360000,370000,380000,390000,400000,410000,420000,430000,440000,450000,460000,470000,480000,490000,500000,510000,520000,530000,540000,550000,560000,570000,580000,590000,600000,610000,620000,630000,640000,650000,660000,670000,680000,690000,700000,710000,720000,730000,740000,750000,760000,770000,780000,790000,800000,810000,820000,830000,840000,850000,860000,870000,880000,890000,900000,910000,920000,930000,940000,950000,960000,970000,980000,990000,1000000,1050000,1100000,1150000,1200000,1250000,1300000,1350000,1400000,1450000,1500000]
 const MONTOS_AYUDA_AMAT: Record<string,number> = { educacion: 200000, salud: 100000 }
@@ -172,20 +185,21 @@ export default function CalculadorOferta({ contactName, onSendMessage, onClose }
 
   const entColor = ENTIDADES.find(e => e.value === entidad)?.color || '#B45309'
   const repsDisp = entidad === 'dos_agosto' ? REPS_DOS_AGOSTO : REPS_AMAT
-  const cuotasDisp = linea === 'bapro' ? CUOTAS_BAPRO : linea === 'ayuda' ? CUOTAS_AYUDA : CUOTAS_HABERES
-  const montosDisp = linea === 'bapro' ? MONTOS_BAPRO : linea === 'ayuda' ? [MONTOS_AYUDA_AMAT[reparticion] || 200000] : MONTOS_HABERES
+  const cuotasDisp = linea === 'bapro' ? CUOTAS_BAPRO : linea === 'ayuda' ? CUOTAS_AYUDA : linea === 'nacion' ? [12,18,24] : CUOTAS_HABERES
+  const montosDisp = linea === 'bapro' ? MONTOS_BAPRO : linea === 'ayuda' ? [MONTOS_AYUDA_AMAT[reparticion] || 200000] : linea === 'nacion' ? MONTOS_EJERCITO : reparticion === 'ejercito' ? MONTOS_EJERCITO : MONTOS_HABERES
 
   const handleEntidad = (e: string) => {
     setEntidad(e); setResultado(null); setCopied(false)
-    if (e === 'dos_agosto' && linea === 'bapro') setLinea('haberes')
+    if (e === 'dos_agosto' && (linea === 'bapro' || linea === 'nacion')) setLinea('haberes')
   }
 
   const handleLinea = (l: string) => {
     setLinea(l); setResultado(null); setCopied(false)
-    const newCuotas = l === 'bapro' ? 12 : l === 'ayuda' ? 24 : 24
+    const newCuotas = l === 'bapro' ? 12 : 24
     setCuotas(newCuotas)
     if (l === 'ayuda') setMonto(MONTOS_AYUDA_AMAT[reparticion] || 200000)
     if (l === 'bapro') setMonto(200000)
+    if (l === 'nacion') setMonto(200000)
   }
 
   const handleRep = (r: string) => {
@@ -198,9 +212,14 @@ export default function CalculadorOferta({ contactName, onSendMessage, onClose }
     let montoCalc = monto
 
     if (linea === 'haberes') {
-      vc = TABLAS[cuotas]?.[monto] || 0
-      ;[cs, med, farm] = calcularMembresia(entidad, reparticion, monto)
-      total = vc + cs + med + farm
+      if (reparticion === 'ejercito') {
+        vc = TABLA_EJERCITO[cuotas]?.[monto] || 0
+        total = vc  // Ejército: solo valor cuota, sin membresía
+      } else {
+        vc = TABLAS[cuotas]?.[monto] || 0
+        ;[cs, med, farm] = calcularMembresia(entidad, reparticion, monto)
+        total = vc + cs + med + farm
+      }
 
     } else if (linea === 'ayuda') {
       if (entidad === 'amat') {
@@ -209,6 +228,9 @@ export default function CalculadorOferta({ contactName, onSendMessage, onClose }
       }
       total = vc
 
+    } else if (linea === 'nacion') {
+      vc = TABLA_EJERCITO[cuotas]?.[monto] || 0
+      total = vc  // Nación ex 14/12: solo valor cuota
     } else if (linea === 'bapro') {
       vc = TABLA_BAPRO[monto] || 0
       ;[cs] = calcularMembresia(entidad, reparticion, monto)
@@ -258,7 +280,7 @@ export default function CalculadorOferta({ contactName, onSendMessage, onClose }
     >
       {items.map(m => (
         <option key={m} value={m}>
-          {'$' + (m >= 1000000 ? (m/1000000).toFixed(m%1000000===0?0:1)+'M' : m.toLocaleString('es-AR'))}
+          {'$' + m.toLocaleString('es-AR')}
         </option>
       ))}
     </select>

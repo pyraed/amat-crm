@@ -24,12 +24,12 @@ const USERS: SysUser[] = [
   { id:'3',  username:'Valentin', password:'Mutual2026',   displayName:'Valentin', role:'Vendedor',      initials:'VA', color:'#D97706' },
   { id:'4',  username:'Juan',     password:'Mutual2026',   displayName:'Juan',     role:'Vendedor',      initials:'JU', color:'#F59E0B' },
   { id:'5',  username:'Eliseo',   password:'Mutual2026',   displayName:'Eliseo',   role:'Vendedor',      initials:'EL', color:'#10B981' },
-  { id:'6',  username:'Mauro',    password:'Mutual2026',   displayName:'Mauro',    role:'Vendedor',      initials:'MA', color:'#3B82F6' },
+  { id:'6',  username:'Maxi',     password:'Mutual2026',   displayName:'Maxi',     role:'Vendedor',      initials:'MX', color:'#3B82F6' },
   { id:'7',  username:'Facundo',  password:'Mutual2026',   displayName:'Facundo',  role:'Vendedor',      initials:'FA', color:'#8B5CF6' },
   { id:'8',  username:'Emanuel',  password:'Mutual2026',   displayName:'Emanuel',  role:'Cobranza',      initials:'EM', color:'#7C3AED' },
   { id:'10', username:'Matias',   password:'Mutual2026',   displayName:'Matias',   role:'Vendedor',      initials:'MT', color:'#0EA5E9' },
   { id:'11', username:'Gonzalo',  password:'Mutual2026',   displayName:'Gonzalo',  role:'Vendedor',      initials:'GO', color:'#06B6D4' },
-  { id:'12', username:'Mariano',  password:'Mutual2026',   displayName:'Mariano',  role:'Vendedor',      initials:'MR', color:'#EC4899' },
+  { id:'12', username:'Mariano',  password:'Mutual2026',   displayName:'Mariano',  role:'Administrador', initials:'MR', color:'#EC4899' },
 ]
 
 // ─────────────────────────────────────────────
@@ -1464,7 +1464,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   {leadsVisibles.map(lead=>{
                   return (
                     <div key={lead.phone_number??lead.id} style={{display:'flex',gap:10,padding:'12px 14px',borderBottom:'1px solid #F1F5F9',cursor:'pointer',alignItems:'flex-start',background:'#FFFBEB',borderLeft:'3px solid #F59E0B'}}
-                      onClick={()=>tomarConversacion(lead)}>
+                      onClick={()=>{ if(me?.username==='Nicolas') { if(lead.phone_number) cargarMensajes(lead.phone_number); setSelectedPhone(lead.phone_number); setBotLeads(prev=>prev.find(l=>l.id===lead.id)?prev:[lead,...prev]) } else tomarConversacion(lead) }}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:'#FFFBEB',color:'#B45309'}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
@@ -1573,7 +1573,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     </div>
                   </div>
                   <div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap'}}>
-                    {!currentLead.assigned_to && (()=>{
+                    {!currentLead.assigned_to && me?.username!=='Nicolas' && (()=>{
                       const misActivas = bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado','sin_respuesta'].includes(l.status||'')).length
                       const lleno = misActivas >= LIMITE_BANDEJA
                       return (
@@ -1890,6 +1890,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             <select className="fsel" value={cEstado} onChange={e=>setCEstado(e.target.value)}>
               <option value="all">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
+              <option value="cerrado">Sin respuesta</option>
               <option value="resuelto">Vendido</option>
               <option value="cerrado_rechazado">Rechazado</option>
               <option value="cerrado_no_interesado">No interesado</option>
@@ -1938,6 +1939,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                       cerrado_no_interesado:{bg:'#F5F3FF',text:'#6D28D9'},
                       rejected:            {bg:'#FEF2F2',text:'#991B1B'},
                       not_interested:      {bg:'#F9FAFB',text:'#374151'},
+                      sin_respuesta:       {bg:'#F1F5F9',text:'#475569'},
+                      cerrado:             {bg:'#F1F5F9',text:'#475569'},
                     }
                     const ec = estadoColors[c.estado] || estadoColors.pendiente
                     return (
@@ -1961,7 +1964,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:ec.bg,color:ec.text}}>
-                            {({'nuevo':'Pendiente','pendiente':'Pendiente','en_proceso':'Pendiente','resuelto':'Vendido','cerrado':'Cerrado','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto','sin_respuesta':'Sin respuesta'} as any)[c.estado]||c.estado}
+                            {({'nuevo':'Pendiente','pendiente':'Pendiente','en_proceso':'Pendiente','resuelto':'Vendido','cerrado':'Sin respuesta','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto','sin_respuesta':'Sin respuesta'} as any)[c.estado]||c.estado}
                           </span>
                         </td>
                         <td>
@@ -2796,6 +2799,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     <option value="resuelto">Vendido</option>
                     <option value="cerrado_rechazado">Rechazado</option>
                     <option value="cerrado_no_interesado">No interesado</option>
+                    <option value="cerrado">Sin respuesta</option>
                   </>)}
                 </select>
               </div>
