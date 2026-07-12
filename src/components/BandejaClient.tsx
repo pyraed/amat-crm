@@ -415,7 +415,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const ch=supabase.channel('rt-leads')
       .on('postgres_changes',{event:'*',schema:'public',table:'amat_loan_leads'},p=>{
         const updated = p.new as LoanLead
-        const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved']
+        const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved','sin_respuesta','closed']
         if(p.eventType==='UPDATE'){
           if(EXCLUIDOS.includes(updated.status||'') || (updated as any).archived){
             setBotLeads(prev=>prev.filter(l=>l.id!==updated.id))
@@ -424,7 +424,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           }
           setBaseLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
         } else if(p.eventType==='INSERT'){
-          if(!EXCLUIDOS.includes(updated.status||'') && !(updated as any).archived) setBotLeads(prev=>[updated,...prev])
+          // Solo agregar a cola si es new/contacted y no archivado
+          if(['new','contacted'].includes(updated.status||'') && !(updated as any).archived && !updated.assigned_to) {
+            setColaLeadsState(prev => prev.find(l=>l.id===updated.id) ? prev : [updated as LoanLead, ...prev])
+            setColaTotal(t => t + 1)
+          }
         }
       }).subscribe()
     return ()=>{ supabase.removeChannel(ch) }
@@ -893,8 +897,35 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
+  const LIMITE_PLANTILLA_HORAS = 24
+
+  const puedeEnviarPlantilla = async (phone: string): Promise<{ok:boolean, horasRestantes?:number}> => {
+    const desde = new Date(Date.now() - LIMITE_PLANTILLA_HORAS * 60 * 60 * 1000).toISOString()
+    const { data } = await supabase
+      .from('amat_campanas')
+      .select('fecha')
+      .eq('telefono', phone)
+      .gte('fecha', desde)
+      .order('fecha', { ascending: false })
+      .limit(1)
+    if(data?.length) {
+      const horasPasadas = (Date.now() - new Date(data[0].fecha).getTime()) / (1000 * 60 * 60)
+      return { ok: false, horasRestantes: Math.ceil(LIMITE_PLANTILLA_HORAS - horasPasadas) }
+    }
+    return { ok: true }
+  }
+
   const sendTemplate=async(template:'recontacto'|'primer_contacto_esp'|'ayuda_economica')=>{
     if(!selectedPhone||!me) return
+    const check = await puedeEnviarPlantilla(selectedPhone)
+    if(!check.ok) {
+      alert(`🚫 No se puede enviar la plantilla.
+
+Ya se le envió una plantilla a este número en las últimas ${LIMITE_PLANTILLA_HORAS} horas. Podrás volver a enviarle en aprox. ${check.horasRestantes}hs.
+
+Este límite protege el número de WhatsApp de la empresa.`)
+      return
+    }
     setSending(true)
     try {
       const controller = new AbortController()
@@ -1015,7 +1046,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(lead.phone_number) cargarMensajes(lead.phone_number)
 
     // Reemplazar con uno nuevo de la cola — excluir el lead recién tomado del conteo
-    const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed']
+    const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed','sin_respuesta']
     const colaActual = bandejaLeads.filter(l =>
       l.id !== lead.id &&   // excluir el que acaba de tomar
       !l.assigned_to &&
@@ -1071,9 +1102,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   const finalizarConversacion = async (nota?: string) => {
     if(!currentLead) return
-    const statusFinal = ESTADOS_FINALES.includes(currentLead.status||'')
-      ? currentLead.status!
-      : (finalizarEstado || 'not_interested')
+    // Usar el estado elegido en el modal, o el actual si ya es final
+    const statusFinal = finalizarEstado || (ESTADOS_FINALES.includes(currentLead.status||'') ? currentLead.status! : 'not_interested')
     await cambiarEstado(currentLead, statusFinal, { situacion: nota })
     setShowFinalizarModal(false)
     setFinalizarEstado('')
@@ -1464,7 +1494,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   {leadsVisibles.map(lead=>{
                   return (
                     <div key={lead.phone_number??lead.id} style={{display:'flex',gap:10,padding:'12px 14px',borderBottom:'1px solid #F1F5F9',cursor:'pointer',alignItems:'flex-start',background:'#FFFBEB',borderLeft:'3px solid #F59E0B'}}
-                      onClick={()=>{ if(me?.username==='Nicolas') { if(lead.phone_number) cargarMensajes(lead.phone_number); setSelectedPhone(lead.phone_number); setBotLeads(prev=>prev.find(l=>l.id===lead.id)?prev:[lead,...prev]) } else tomarConversacion(lead) }}>
+                      onClick={()=>{ if(me?.username==='Nicolas') { if(lead.phone_number) cargarMensajes(lead.phone_number); setSelectedPhone(lead.phone_number) } else tomarConversacion(lead) }}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:'#FFFBEB',color:'#B45309'}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
@@ -1507,6 +1537,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
               {vistaMode==='mis_chats'&&(()=>{
                 let leads = bandejaLeads.filter(l=>{
+                  if(me?.username==='Nicolas') return false // Nicolas solo ve la cola
                   if(l.assigned_to!==me?.username||l.status==='finalizado') return false
                   if(me?.role==='Vendedor'){
                     const fl=flujoMap[l.phone_number||'']||'solicitud'
@@ -1788,7 +1819,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               <option value="closed">Vendido</option>
               <option value="rejected">Rechazado</option>
               <option value="not_interested">No interesado</option>
-                  <option value="sin_respuesta">Sin respuesta</option>
+              <option value="sin_respuesta">Sin respuesta</option>
               <option value="resolved">Resuelto (cobranzas)</option>
               <option value="unresolved">No resuelto (cobranzas)</option>
             </select>
