@@ -248,6 +248,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [colaPage, setColaPage]           = useState(50)
   const [colaTotal, setColaTotal]         = useState(0)
   const [colaLeadsState, setColaLeadsState] = useState<LoanLead[]>([])
+  const [colaMenu, setColaMenu]           = useState<LoanLead|null>(null)
   const [consultasTotal, setConsultasTotal] = useState(0)
   const [showFinalizarModal, setShowFinalizarModal] = useState(false)
   const [finalizarEstado, setFinalizarEstado]       = useState('')
@@ -1458,7 +1459,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                 <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='mis_chats'?'white':'transparent',color:vistaMode==='mis_chats'?'#0F172A':'#64748B',boxShadow:vistaMode==='mis_chats'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
                   onClick={()=>setVistaMode('mis_chats')}>
                   💬 Mis chats {(()=>{
-                    const n = me?.username==='Nicolas' ? 0 : bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado','sin_respuesta'].includes(l.status||'')).length
+                    const n = bandejaLeads.filter(l=>l.assigned_to===me?.username&&!['closed','rejected','not_interested','resolved','unresolved','finalizado','sin_respuesta'].includes(l.status||'')).length
                     return n>0?<span style={{background:'#3B82F6',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:3}}>{n}</span>:null
                   })()}
                 </button>
@@ -1494,7 +1495,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                   {leadsVisibles.map(lead=>{
                   return (
                     <div key={lead.phone_number??lead.id} style={{display:'flex',gap:10,padding:'12px 14px',borderBottom:'1px solid #F1F5F9',cursor:'pointer',alignItems:'flex-start',background:'#FFFBEB',borderLeft:'3px solid #F59E0B'}}
-                      onClick={()=>{ if(me?.username==='Nicolas') { if(lead.phone_number) cargarMensajes(lead.phone_number); setSelectedPhone(lead.phone_number) } else tomarConversacion(lead) }}>
+                      onClick={()=>{ if(me?.username==='Nicolas') { setColaMenu(lead) } else tomarConversacion(lead) }}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:'#FFFBEB',color:'#B45309'}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
@@ -1512,6 +1513,35 @@ Este límite protege el número de WhatsApp de la empresa.`)
                     </div>
                   )
                   })}
+                  {/* Menu contextual para Nicolas */}
+                  {colaMenu && me?.username==='Nicolas' && (
+                    <div style={{position:'fixed',inset:0,zIndex:100}} onClick={()=>setColaMenu(null)}>
+                      <div style={{
+                        position:'fixed',
+                        top:'50%',left:'50%',transform:'translate(-50%,-50%)',
+                        background:'white',borderRadius:14,boxShadow:'0 8px 32px rgba(0,0,0,.18)',
+                        padding:'8px',minWidth:220,zIndex:101,
+                      }} onClick={e=>e.stopPropagation()}>
+                        <div style={{padding:'8px 12px',fontSize:12,fontWeight:700,color:'#94A3B8',borderBottom:'1px solid #F1F5F9',marginBottom:4}}>
+                          {colaMenu.full_name || colaMenu.phone_number}
+                        </div>
+                        <button onClick={()=>{
+                          if(colaMenu.phone_number) cargarMensajes(colaMenu.phone_number)
+                          setSelectedPhone(colaMenu.phone_number)
+                          setColaMenu(null)
+                        }} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 12px',border:'none',background:'none',cursor:'pointer',borderRadius:8,fontSize:13,color:'#0F172A',fontWeight:500,fontFamily:'inherit',textAlign:'left'}}>
+                          👁️ Vista previa
+                        </button>
+                        <button onClick={()=>{
+                          tomarConversacion(colaMenu)
+                          setColaMenu(null)
+                        }} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 12px',border:'none',background:'none',cursor:'pointer',borderRadius:8,fontSize:13,color:'#0F172A',fontWeight:500,fontFamily:'inherit',textAlign:'left'}}>
+                          ✋ Tomar conversación
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {colaTotal > colaLeadsState.length && (
                     <div style={{padding:'12px 16px',textAlign:'center'}}>
                       <button onClick={async()=>{
@@ -1537,7 +1567,6 @@ Este límite protege el número de WhatsApp de la empresa.`)
 
               {vistaMode==='mis_chats'&&(()=>{
                 let leads = bandejaLeads.filter(l=>{
-                  if(me?.username==='Nicolas') return false // Nicolas solo ve la cola
                   if(l.assigned_to!==me?.username||l.status==='finalizado') return false
                   if(me?.role==='Vendedor'){
                     const fl=flujoMap[l.phone_number||'']||'solicitud'
