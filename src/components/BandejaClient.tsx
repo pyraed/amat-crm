@@ -30,6 +30,9 @@ const USERS: SysUser[] = [
   { id:'10', username:'Matias',   password:'Mutual2026',   displayName:'Matias',   role:'Vendedor',      initials:'MT', color:'#0EA5E9' },
   { id:'11', username:'Gonzalo',  password:'Mutual2026',   displayName:'Gonzalo',  role:'Vendedor',      initials:'GO', color:'#06B6D4' },
   { id:'12', username:'Mariano',  password:'Mutual2026',   displayName:'Mariano',  role:'Administrador', initials:'MR', color:'#EC4899' },
+  { id:'13', username:'VENTAS_MG1', password:'Mg2026', displayName:'Ventas MG1', role:'Vendedor', initials:'M1', color:'#F97316' },
+  { id:'14', username:'VENTAS_MG2', password:'Mg2026', displayName:'Ventas MG2', role:'Vendedor', initials:'M2', color:'#84CC16' },
+  { id:'15', username:'VENTAS_MG3', password:'Mg2026', displayName:'Ventas MG3', role:'Vendedor', initials:'M3', color:'#06B6D4' },
 ]
 
 // ─────────────────────────────────────────────
@@ -842,6 +845,19 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           })
         }
         if(cola.length) {
+          // Cargar flujo de cada lead de la cola para poder filtrar correctamente
+          const phonesCol = cola.map((l:LoanLead)=>l.phone_number).filter(Boolean) as string[]
+          if(phonesCol.length) {
+            const BATCH = 200
+            const chunks = Array.from({length:Math.ceil(phonesCol.length/BATCH)},(_,i)=>phonesCol.slice(i*BATCH,(i+1)*BATCH))
+            Promise.all(chunks.map(chunk=>
+              supabase.from('amat_consultas').select('phone,flujo').in('phone',chunk).then(({data})=>data||[])
+            )).then(results=>{
+              const flujoMapCola: Record<string,string> = {}
+              results.flat().forEach((r:any)=>{ if(r.phone) flujoMapCola[r.phone]=r.flujo||'solicitud' })
+              setFlujoMap(prev=>({...prev,...flujoMapCola}))
+            })
+          }
           setColaLeadsState(cola)
         }
       })()
@@ -1455,7 +1471,16 @@ Este límite protege el número de WhatsApp de la empresa.`)
               <div style={{display:'flex',gap:4,background:'#F1F5F9',padding:3,borderRadius:8}}>
                 <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='cola'?'white':'transparent',color:vistaMode==='cola'?'#0F172A':'#64748B',boxShadow:vistaMode==='cola'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
                   onClick={()=>{setVistaMode('cola');setSelectedPhone(null)}}>
-                  📥 Cola {colaTotal>0&&<span style={{background:'#F59E0B',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:3}}>{colaTotal.toLocaleString('es-AR')}</span>}
+                  📥 Cola {(()=>{
+                    const n = colaLeadsState.filter(l=>{
+                      const fl=flujoMap[l.phone_number||'']||'solicitud'
+                      if(me?.role==='Vendedor') return fl!=='cobranzas'
+                      if(me?.role==='Cobranza') return fl==='cobranzas'
+                      return true
+                    }).length
+                    const total = n > 0 ? n : 0
+                    return total>0&&<span style={{background:'#F59E0B',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:3}}>{total}</span>
+                  })()}
                 </button>
                 <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='mis_chats'?'white':'transparent',color:vistaMode==='mis_chats'?'#0F172A':'#64748B',boxShadow:vistaMode==='mis_chats'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
                   onClick={()=>setVistaMode('mis_chats')}>
