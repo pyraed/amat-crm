@@ -45,7 +45,7 @@ const USERS: SysUser[] = [
 const ESTADOS_FINALES = ['closed','rejected','not_interested','resolved','unresolved','sin_respuesta']
 
 const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:string;desc:string}> = {
-  new:           { label:'Cola',           color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En cola, sin tomar' },
+  new:           { label:'COLA',           color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En cola, sin tomar' },
   contacted:     { label:'Pendiente',      color:'#3B82F6', bg:'#EFF6FF', text:'#1D4ED8', desc:'En bandeja del operador' },
   not_interested:{ label:'No interesado',  color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere la oferta' },
   sin_respuesta: { label:'Sin respuesta',  color:'#94A3B8', bg:'#F1F5F9', text:'#475569', desc:'No contestó los mensajes' },
@@ -2064,7 +2064,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
 
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:ec.bg,color:ec.text}}>
-                            {({'nuevo':'Cola','new':'Cola','pendiente':'Pendiente','en_proceso':'Pendiente','contactado':'Contactado','contacted':'Pendiente','resuelto':'Vendido','cerrado':'Sin respuesta','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto','sin_respuesta':'Sin respuesta'} as any)[c.estado]||c.estado}
+                            {({'nuevo':'COLA','new':'COLA','pendiente':'Pendiente','en_proceso':'Pendiente','contactado':'Contactado','contacted':'Pendiente','resuelto':'Vendido','cerrado':'Sin respuesta','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto','sin_respuesta':'Sin respuesta'} as any)[c.estado]||c.estado}
                           </span>
                         </td>
                         <td>
