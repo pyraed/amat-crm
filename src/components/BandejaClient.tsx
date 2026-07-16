@@ -45,8 +45,8 @@ const USERS: SysUser[] = [
 const ESTADOS_FINALES = ['closed','rejected','not_interested','resolved','unresolved','sin_respuesta']
 
 const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:string;desc:string}> = {
-  new:           { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En cola, sin tomar' },
-  contacted:     { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En bandeja del operador' },
+  new:           { label:'Cola',           color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En cola, sin tomar' },
+  contacted:     { label:'Pendiente',      color:'#3B82F6', bg:'#EFF6FF', text:'#1D4ED8', desc:'En bandeja del operador' },
   not_interested:{ label:'No interesado',  color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere la oferta' },
   sin_respuesta: { label:'Sin respuesta',  color:'#94A3B8', bg:'#F1F5F9', text:'#475569', desc:'No contestó los mensajes' },
   contactado:    { label:'Contactado',     color:'#3B82F6', bg:'#EFF6FF', text:'#1D4ED8', desc:'Respondió, en conversación activa' },
@@ -581,7 +581,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
     // Deduplicar con Set — O(n) en vez de O(n²)
     const phonesConConsulta = new Set((data||[]).map((c:any) => c.phone).filter(Boolean))
-    const statusMap: Record<string,string> = { new:'pendiente', contacted:'pendiente', contactado:'contactado', closed:'resuelto', resolved:'resuelto', rejected:'cerrado_rechazado', not_interested:'cerrado_no_interesado', sin_respuesta:'cerrado', unresolved:'cerrado', finalizado:'cerrado' }
+    const statusMap: Record<string,string> = { new:'cola', contacted:'pendiente', contactado:'contactado', closed:'resuelto', resolved:'resuelto', rejected:'cerrado_rechazado', not_interested:'cerrado_no_interesado', sin_respuesta:'cerrado', unresolved:'cerrado', finalizado:'cerrado' }
 
     const sinConsulta = (leadsData||[])
       .filter((l:any) => l.phone_number && !phonesConConsulta.has(l.phone_number))
@@ -1537,7 +1537,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                           )})()}
                         </div>
                         <div style={{fontSize:11,color:'#94A3B8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.reparticion||lead.phone_number||'—'}</div>
-                        <div style={{marginTop:4,fontSize:10.5,color:'#B45309',fontWeight:600}}>👁️ Click para ver · ✋ Tomar antes de responder</div>
+                        <div style={{marginTop:4,fontSize:10.5,color:'#B45309',fontWeight:600}}>🟡 En cola · Click para tomar</div>
                       </div>
                     </div>
                   )
@@ -1878,8 +1878,8 @@ Este límite protege el número de WhatsApp de la empresa.`)
             <select className="fsel" value={baseStatus} onChange={e=>{setBaseStatus(e.target.value);setBasePage(0)}}>
               <option value="all">Todos los estados</option>
               <option value="pendiente">Pendiente (new + contacted)</option>
-              <option value="new">Sin tomar (cola)</option>
-              <option value="contacted">En bandeja</option>
+              <option value="new">Cola</option>
+              <option value="contacted">Pendiente</option>
               <option value="contactado">Contactado</option>
               <option value="closed">Vendido</option>
               <option value="rejected">Rechazado</option>
@@ -1985,6 +1985,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
             </select>
             <select className="fsel" value={cEstado} onChange={e=>setCEstado(e.target.value)}>
               <option value="all">Todos los estados</option>
+              <option value="cola">Cola</option>
               <option value="pendiente">Pendiente</option>
               <option value="contactado">Contactado</option>
               <option value="cerrado">Sin respuesta</option>
@@ -2038,6 +2039,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                       not_interested:      {bg:'#F9FAFB',text:'#374151'},
                       sin_respuesta:       {bg:'#F1F5F9',text:'#475569'},
                       contactado:          {bg:'#EFF6FF',text:'#1D4ED8'},
+                      cola:                {bg:'#FFFBEB',text:'#92400E'},
                       cerrado:             {bg:'#F1F5F9',text:'#475569'},
                     }
                     const ec = estadoColors[c.estado] || estadoColors.pendiente
@@ -2062,7 +2064,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
 
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:ec.bg,color:ec.text}}>
-                            {({'nuevo':'Pendiente','pendiente':'Pendiente','en_proceso':'Pendiente','contactado':'Contactado','resuelto':'Vendido','cerrado':'Sin respuesta','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto','sin_respuesta':'Sin respuesta'} as any)[c.estado]||c.estado}
+                            {({'nuevo':'Cola','new':'Cola','pendiente':'Pendiente','en_proceso':'Pendiente','contactado':'Contactado','contacted':'Pendiente','resuelto':'Vendido','cerrado':'Sin respuesta','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto','sin_respuesta':'Sin respuesta'} as any)[c.estado]||c.estado}
                           </span>
                         </td>
                         <td>
