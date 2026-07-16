@@ -49,6 +49,7 @@ const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:strin
   contacted:     { label:'Pendiente',      color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En bandeja del operador' },
   not_interested:{ label:'No interesado',  color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere la oferta' },
   sin_respuesta: { label:'Sin respuesta',  color:'#94A3B8', bg:'#F1F5F9', text:'#475569', desc:'No contestó los mensajes' },
+  contactado:    { label:'Contactado',     color:'#3B82F6', bg:'#EFF6FF', text:'#1D4ED8', desc:'Respondió, en conversación activa' },
   rejected:      { label:'Rechazado',      color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No cumple requisitos' },
   closed:        { label:'Vendido',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
   // legacy — solo para mostrar registros históricos, no seleccionables
@@ -59,6 +60,7 @@ const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:strin
 
 // Opciones seleccionables en el modal Cambiar estado — por flujo, sin duplicados
 const OPCIONES_VENTAS    = ['closed','rejected','not_interested','sin_respuesta'] as const
+const OPCIONES_VENTAS_INTERMEDIOS = ['contactado'] as const
 const OPCIONES_COBRANZAS = ['resolved','unresolved'] as const
 
 // Mapeo canónico único: status de amat_loan_leads → estado de amat_consultas
@@ -70,6 +72,7 @@ const STATUS_A_CONSULTA: Record<string,string> = {
   rejected:       'cerrado_rechazado',
   not_interested: 'cerrado_no_interesado',
   sin_respuesta:  'cerrado',
+  contactado:     'pendiente',
   unresolved:     'cerrado',
   finalizado:     'cerrado',
 }
@@ -578,7 +581,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
     // Deduplicar con Set — O(n) en vez de O(n²)
     const phonesConConsulta = new Set((data||[]).map((c:any) => c.phone).filter(Boolean))
-    const statusMap: Record<string,string> = { new:'pendiente', contacted:'pendiente', closed:'resuelto', resolved:'resuelto', rejected:'cerrado_rechazado', not_interested:'cerrado_no_interesado', sin_respuesta:'cerrado', unresolved:'cerrado', finalizado:'cerrado' }
+    const statusMap: Record<string,string> = { new:'pendiente', contacted:'pendiente', contactado:'contactado', closed:'resuelto', resolved:'resuelto', rejected:'cerrado_rechazado', not_interested:'cerrado_no_interesado', sin_respuesta:'cerrado', unresolved:'cerrado', finalizado:'cerrado' }
 
     const sinConsulta = (leadsData||[])
       .filter((l:any) => l.phone_number && !phonesConConsulta.has(l.phone_number))
@@ -1877,6 +1880,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
               <option value="pendiente">Pendiente (new + contacted)</option>
               <option value="new">Sin tomar (cola)</option>
               <option value="contacted">En bandeja</option>
+              <option value="contactado">Contactado</option>
               <option value="closed">Vendido</option>
               <option value="rejected">Rechazado</option>
               <option value="not_interested">No interesado</option>
@@ -1982,6 +1986,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
             <select className="fsel" value={cEstado} onChange={e=>setCEstado(e.target.value)}>
               <option value="all">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
+              <option value="contactado">Contactado</option>
               <option value="cerrado">Sin respuesta</option>
               <option value="resuelto">Vendido</option>
               <option value="cerrado_rechazado">Rechazado</option>
@@ -2032,6 +2037,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                       rejected:            {bg:'#FEF2F2',text:'#991B1B'},
                       not_interested:      {bg:'#F9FAFB',text:'#374151'},
                       sin_respuesta:       {bg:'#F1F5F9',text:'#475569'},
+                      contactado:          {bg:'#EFF6FF',text:'#1D4ED8'},
                       cerrado:             {bg:'#F1F5F9',text:'#475569'},
                     }
                     const ec = estadoColors[c.estado] || estadoColors.pendiente
@@ -2056,7 +2062,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
 
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:ec.bg,color:ec.text}}>
-                            {({'nuevo':'Pendiente','pendiente':'Pendiente','en_proceso':'Pendiente','resuelto':'Vendido','cerrado':'Sin respuesta','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto','sin_respuesta':'Sin respuesta'} as any)[c.estado]||c.estado}
+                            {({'nuevo':'Pendiente','pendiente':'Pendiente','en_proceso':'Pendiente','contactado':'Contactado','resuelto':'Vendido','cerrado':'Sin respuesta','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto','sin_respuesta':'Sin respuesta'} as any)[c.estado]||c.estado}
                           </span>
                         </td>
                         <td>
@@ -2433,8 +2439,8 @@ Este límite protege el número de WhatsApp de la empresa.`)
         <div className="movo" onClick={()=>setShowStatusModal(false)}>
           <div className="mod" onClick={e=>e.stopPropagation()}>
             <h3>Cambiar estado</h3>
-            {(flujoMap[currentLead.phone_number||'']==='cobranzas' ? OPCIONES_COBRANZAS : OPCIONES_VENTAS)
-              .map(k => [k, getEstadosFor(currentLead.phone_number)[k]] as [string, typeof LEAD_STATUS[keyof typeof LEAD_STATUS]])
+            {[...(flujoMap[currentLead.phone_number||'']==='cobranzas' ? OPCIONES_COBRANZAS : []), ...OPCIONES_VENTAS_INTERMEDIOS, ...(flujoMap[currentLead.phone_number||'']==='cobranzas' ? [] : OPCIONES_VENTAS)]
+              .map(k => [k, LEAD_STATUS[k] || COBRANZA_STATUS[k]] as [string, typeof LEAD_STATUS[keyof typeof LEAD_STATUS]])
               .filter(([,v])=>v)
               .map(([k,v])=>{
                 const esCobranza = flujoMap[currentLead.phone_number||'']==='cobranzas'
@@ -2583,6 +2589,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                 <select className="fs" value={editForm.status||'new'} onChange={e=>setEditForm(f=>({...f,status:e.target.value as any}))}>
                   <option value="new">Pendiente</option>
               <option value="contacted">En bandeja</option>
+              <option value="contactado">Contactado</option>
               <option value="closed">Vendido</option>
               <option value="rejected">Rechazado</option>
               <option value="not_interested">No interesado</option>
@@ -2884,6 +2891,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                 <label className="fl">Estado</label>
                 <select className="fs" value={consultaEdit.estado} onChange={e=>setConsultaEdit((f:any)=>({...f,estado:e.target.value}))}>
                   <option value="pendiente">Pendiente</option>
+                  <option value="contactado">Contactado</option>
                   {consultaSelected.flujo==='cobranzas' ? (<>
                     <option value="resuelto">Resuelto</option>
                     <option value="cerrado">No resuelto</option>
@@ -2930,6 +2938,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                   const esCob = consultaSelected.flujo === 'cobranzas'
                   const CONSULTA_A_STATUS: Record<string,string> = {
                     pendiente:              'contacted',
+                    contactado:             'contactado',
                     resuelto:               esCob ? 'resolved' : 'closed',
                     cerrado:                esCob ? 'unresolved' : 'not_interested',
                     cerrado_rechazado:      'rejected',
