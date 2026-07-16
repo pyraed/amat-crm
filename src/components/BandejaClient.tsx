@@ -558,7 +558,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .limit(500)
     if (search)           q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
     if (flujo !== 'all')  q = q.eq('flujo', flujo)
-    if (estado !== 'all') q = q.eq('estado', estado)
+    if (estado === 'cola') {
+      // Cola = leads new sin asignar en amat_consultas tienen estado 'pendiente' o 'cola'
+      q = q.in('estado', ['cola', 'pendiente'])
+    } else if (estado === 'pendiente') {
+      q = q.eq('estado', 'pendiente')
+    } else if (estado !== 'all') {
+      q = q.eq('estado', estado)
+    }
     if (rep !== 'all')    q = q.ilike('reparticion_label', rep)
 
     // Query de leads sin consulta — paralela, SIEMPRE con el mismo límite
@@ -1985,8 +1992,8 @@ Este límite protege el número de WhatsApp de la empresa.`)
             </select>
             <select className="fsel" value={cEstado} onChange={e=>setCEstado(e.target.value)}>
               <option value="all">Todos los estados</option>
-              <option value="cola">Cola</option>
-              <option value="pendiente">Pendiente</option>
+              <option value="cola">COLA (sin tomar)</option>
+              <option value="pendiente">Pendiente (en bandeja)</option>
               <option value="contactado">Contactado</option>
               <option value="cerrado">Sin respuesta</option>
               <option value="resuelto">Vendido</option>
