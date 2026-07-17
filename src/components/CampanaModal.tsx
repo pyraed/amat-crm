@@ -59,7 +59,7 @@ export default function CampanaModal({ onClose }: Props) {
   // Filtros de segmento
   const [filterRep, setFilterRep]     = useState('all')
   const [filterBanco, setFilterBanco] = useState('all')
-  const [filterStatus, setFilterStatus] = useState('new')
+  const [filterStatus, setFilterStatus] = useState('all')
   const [filterTel, setFilterTel]     = useState<'con' | 'all'>('con')
   const [filterAssigned, setFilterAssigned] = useState('all')
   const [limitCount, setLimitCount]   = useState('500')
@@ -555,12 +555,14 @@ export default function CampanaModal({ onClose }: Props) {
                   <div>
                     <label style={s.label}>Estado actual</label>
                     <select style={s.select} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                      <option value="new">Nuevo</option>
-                      <option value="contacted">Contactado</option>
+                      <option value="all">Todos los estados</option>
+                      <option value="new">Cola (sin tomar)</option>
+                      <option value="contacted">Pendiente (en bandeja)</option>
+                      <option value="contactado">Contactado</option>
+                      <option value="sin_respuesta">Sin respuesta</option>
                       <option value="not_interested">No interesado</option>
                       <option value="rejected">Rechazado</option>
-                      <option value="closed">Cerrado</option>
-                      <option value="all">Todos los estados</option>
+                      <option value="closed">Vendido</option>
                     </select>
                   </div>
                   <div>
@@ -719,7 +721,7 @@ export default function CampanaModal({ onClose }: Props) {
                           <td style={{ padding:'7px 12px', color:'#64748B', fontFamily:"'DM Mono',monospace", fontSize:12 }}>{c.phone_number || <span style={{color:'#CBD5E1'}}>Sin tel.</span>}</td>
                           <td style={{ padding:'7px 12px', color:'#64748B', fontSize:12 }}>{c.reparticion || '—'}</td>
                           <td style={{ padding:'7px 12px' }}><span style={{ fontSize:11, padding:'2px 7px', borderRadius:99, background:'#FFFBEB', color:'#B45309', fontWeight:600, fontFamily:"'DM Mono',monospace" }}>
-                            {({'new':'Nuevo','contacted':'Contactado','not_interested':'No interesado','rejected':'Rechazado','closed':'Cerrado'} as Record<string,string>)[c.status] || c.status}
+                            {({'new':'Cola','contacted':'Pendiente','contactado':'Contactado','sin_respuesta':'Sin respuesta','not_interested':'No interesado','rejected':'Rechazado','closed':'Vendido'} as Record<string,string>)[c.status] || c.status}
                           </span></td>
                         </tr>
                       ))}
