@@ -1688,14 +1688,15 @@ Este límite protege el número de WhatsApp de la empresa.`)
                           <option value="cobranzas">🔔 Cobranzas</option>
                         </select>
                       ) : (
-                        <span
+                        <button
                           onClick={()=>setEditandoFlujo(true)}
-                          title="Click para cambiar flujo"
-                          style={{fontSize:10,padding:'1px 7px',borderRadius:99,fontWeight:700,cursor:'pointer',
+                          title="Cambiar flujo"
+                          style={{fontSize:11,padding:'3px 10px',borderRadius:99,fontWeight:700,cursor:'pointer',border:'none',
                             background:flujoMap[currentLead.phone_number||'']==='cobranzas'?'#F5F3FF':'#EFF6FF',
-                            color:flujoMap[currentLead.phone_number||'']==='cobranzas'?'#6D28D9':'#1D4ED8'}}>
-                          {getFlujoLabel(currentLead.phone_number)} ▾
-                        </span>
+                            color:flujoMap[currentLead.phone_number||'']==='cobranzas'?'#6D28D9':'#1D4ED8',
+                            display:'flex',alignItems:'center',gap:4,fontFamily:'inherit'}}>
+                          {getFlujoLabel(currentLead.phone_number)} <span style={{fontSize:9}}>▼</span>
+                        </button>
                       )}
                       {currentLead.assigned_to&&<span>· 👤 {currentLead.assigned_to}</span>}
                     </div>
