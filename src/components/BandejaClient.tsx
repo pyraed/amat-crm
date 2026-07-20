@@ -253,6 +253,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [colaTotal, setColaTotal]         = useState(0)
   const [colaLeadsState, setColaLeadsState] = useState<LoanLead[]>([])
   const [colaMenu, setColaMenu]           = useState<LoanLead|null>(null)
+  const [editandoFlujo, setEditandoFlujo]   = useState(false)
   const [colaMenuRef, setColaMenuRef]     = useState<{x:number,y:number}|null>(null)
   const [consultasTotal, setConsultasTotal] = useState(0)
   const [showFinalizarModal, setShowFinalizarModal] = useState(false)
@@ -1017,12 +1018,14 @@ Este límite protege el número de WhatsApp de la empresa.`)
       if(selectedPhone === lead.phone_number) setSelectedPhone(null)
     } else {
       setBotLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
+      // Actualizar también en colaLeadsState si estaba ahí
+      setColaLeadsState(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
     }
   }
 
   // Compatibilidad con llamadas existentes
   const updateStatus = async (id: number, status: string, notes?: string) => {
-    const lead = bandejaLeads.find(l=>l.id===id) || baseLeads.find(l=>l.id===id)
+    const lead = bandejaLeads.find(l=>l.id===id) || colaLeadsState.find(l=>l.id===id) || baseLeads.find(l=>l.id===id)
     if(!lead) {
       // Lead no está en memoria — actualizar directo en DB con la misma lógica
       const esFinal = ESTADOS_FINALES.includes(status)
@@ -1292,7 +1295,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
   })
   
-  const currentLead=allLeads.find(l=>l.phone_number===selectedPhone)||baseLeads.find(l=>l.phone_number===selectedPhone)
+  const currentLead=allLeads.find(l=>l.phone_number===selectedPhone)||colaLeadsState.find(l=>l.phone_number===selectedPhone)||baseLeads.find(l=>l.phone_number===selectedPhone)
   // currentMsgs: priorizar currentChatMsgs (ya vienen ordenados de cargarMensajes)
   // Solo hacer filter+sort como fallback si no hay currentChatMsgs del phone actual
   const currentMsgs = (
@@ -1665,9 +1668,32 @@ Este límite protege el número de WhatsApp de la empresa.`)
                     <div style={{fontSize:12,color:'#64748B',display:'flex',gap:8,flexWrap:'wrap'}}>
                       <span className="mono">📱 {selectedPhone}</span>
                       {currentLead.reparticion&&<span>· {currentLead.reparticion}</span>}
-                      <span style={{fontSize:10,padding:'1px 7px',borderRadius:99,fontWeight:700,background:flujoMap[currentLead.phone_number||'']==='cobranzas'?'#F5F3FF':'#EFF6FF',color:flujoMap[currentLead.phone_number||'']==='cobranzas'?'#6D28D9':'#1D4ED8'}}>
-                        {getFlujoLabel(currentLead.phone_number)}
-                      </span>
+                      {editandoFlujo ? (
+                        <select autoFocus
+                          defaultValue={flujoMap[currentLead.phone_number||'']||'solicitud'}
+                          onBlur={()=>setEditandoFlujo(false)}
+                          onChange={async e=>{
+                            const nuevoFlujo = e.target.value
+                            setFlujoMap(prev=>({...prev,[currentLead.phone_number||'']:nuevoFlujo}))
+                            await supabase.from('amat_consultas')
+                              .update({flujo:nuevoFlujo, updated_at:new Date().toISOString()})
+                              .eq('phone', currentLead.phone_number||'')
+                            setEditandoFlujo(false)
+                          }}
+                          style={{fontSize:10,padding:'1px 4px',borderRadius:6,border:'1px solid #E2E8F0',fontFamily:'inherit',fontWeight:700}}>
+                          <option value="solicitud">💼 Ventas</option>
+                          <option value="cobranzas">🔔 Cobranzas</option>
+                        </select>
+                      ) : (
+                        <span
+                          onClick={()=>setEditandoFlujo(true)}
+                          title="Click para cambiar flujo"
+                          style={{fontSize:10,padding:'1px 7px',borderRadius:99,fontWeight:700,cursor:'pointer',
+                            background:flujoMap[currentLead.phone_number||'']==='cobranzas'?'#F5F3FF':'#EFF6FF',
+                            color:flujoMap[currentLead.phone_number||'']==='cobranzas'?'#6D28D9':'#1D4ED8'}}>
+                          {getFlujoLabel(currentLead.phone_number)} ▾
+                        </span>
+                      )}
                       {currentLead.assigned_to&&<span>· 👤 {currentLead.assigned_to}</span>}
                     </div>
                   </div>
