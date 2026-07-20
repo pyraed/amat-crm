@@ -1272,7 +1272,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
 
   // Bandeja: solo leads con conversación (mensajes)
   const phonesConMensajes=[...new Set(messages.map(m=>m.phone_number))]
-  const ESTADOS_FINALES_BANDEJA = ['finalizado','rejected','not_interested','resolved','unresolved','sin_respuesta']
+  const ESTADOS_FINALES_BANDEJA = ['finalizado','closed','rejected','not_interested','resolved','unresolved','sin_respuesta']
   const bandejaLeads=allLeads.filter(l=>{
     if(!l.phone_number) return false
     // Leads asignados al usuario siempre aparecen aunque sus mensajes no estén en el batch
@@ -1675,6 +1675,9 @@ Este límite protege el número de WhatsApp de la empresa.`)
                           onChange={async e=>{
                             const nuevoFlujo = e.target.value
                             setFlujoMap(prev=>({...prev,[currentLead.phone_number||'']:nuevoFlujo}))
+                            // También actualizar botLeads y colaLeadsState para que el cambio persista
+                            setBotLeads(prev=>prev.map(l=>l.phone_number===currentLead.phone_number?{...l,_flujo:nuevoFlujo}:l))
+                            setColaLeadsState(prev=>prev.map(l=>l.phone_number===currentLead.phone_number?{...l,_flujo:nuevoFlujo}:l))
                             await supabase.from('amat_consultas')
                               .update({flujo:nuevoFlujo, updated_at:new Date().toISOString()})
                               .eq('phone', currentLead.phone_number||'')
@@ -2058,19 +2061,25 @@ Este límite protege el número de WhatsApp de la empresa.`)
                 <tbody>
                   {consultas.map(c=>{
                     const estadoColors: Record<string,{bg:string,text:string}> = {
+                      // Estados de amat_consultas
+                      cola:                {bg:'#FFFBEB',text:'#92400E'},
                       nuevo:               {bg:'#FFFBEB',text:'#92400E'},
-                      pendiente:           {bg:'#FFFBEB',text:'#92400E'},
-                      en_proceso:          {bg:'#FFFBEB',text:'#92400E'},
+                      pendiente:           {bg:'#EFF6FF',text:'#1D4ED8'},
+                      en_proceso:          {bg:'#EFF6FF',text:'#1D4ED8'},
+                      contactado:          {bg:'#DBEAFE',text:'#1E40AF'},
                       resuelto:            {bg:'#ECFDF5',text:'#065F46'},
-                      cerrado:             {bg:'#F8FAFC',text:'#475569'},
+                      cerrado:             {bg:'#F1F5F9',text:'#475569'},
                       cerrado_rechazado:   {bg:'#FEF2F2',text:'#DC2626'},
                       cerrado_no_interesado:{bg:'#F5F3FF',text:'#6D28D9'},
+                      // Valores inglés por si vienen de amat_loan_leads
+                      new:                 {bg:'#FFFBEB',text:'#92400E'},
+                      contacted:           {bg:'#EFF6FF',text:'#1D4ED8'},
+                      closed:              {bg:'#ECFDF5',text:'#065F46'},
+                      resolved:            {bg:'#ECFDF5',text:'#065F46'},
                       rejected:            {bg:'#FEF2F2',text:'#991B1B'},
                       not_interested:      {bg:'#F9FAFB',text:'#374151'},
                       sin_respuesta:       {bg:'#F1F5F9',text:'#475569'},
-                      contactado:          {bg:'#EFF6FF',text:'#1D4ED8'},
-                      cola:                {bg:'#FFFBEB',text:'#92400E'},
-                      cerrado:             {bg:'#F1F5F9',text:'#475569'},
+                      unresolved:          {bg:'#FEF2F2',text:'#991B1B'},
                     }
                     const ec = estadoColors[c.estado] || estadoColors.pendiente
                     return (
@@ -2094,7 +2103,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
 
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:ec.bg,color:ec.text}}>
-                            {({'nuevo':'Cola','new':'Cola','cola':'Cola','pendiente':'Pendiente','en_proceso':'Pendiente','contactado':'Contactado','contacted':'Pendiente','resuelto':'Vendido','cerrado':'Sin respuesta','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto','sin_respuesta':'Sin respuesta'} as any)[c.estado]||c.estado}
+                            {({'nuevo':'Cola','new':'Cola','cola':'Cola','pendiente':'Pendiente','en_proceso':'Pendiente','contactado':'Contactado','contacted':'Pendiente','closed':'Vendido','resolved':'Resuelto','resuelto':'Vendido','cerrado':'Sin respuesta','cerrado_rechazado':'Rechazado','cerrado_no_interesado':'No interesado','rejected':'Rechazado','not_interested':'No interesado','no_interesado':'No interesado','no_resuelto':'No resuelto','unresolved':'No resuelto','sin_respuesta':'Sin respuesta'} as any)[c.estado]||c.estado}
                           </span>
                         </td>
                         <td>
