@@ -82,7 +82,9 @@ const DOCS_HABERES: Record<string, string[]> = {
   spb:       ['DNI frente y dorso','Certificado de Afectación','Comprobante de Servicio','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
   educacion: ['DNI frente y dorso','Certificado de Afectación','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
   salud:     ['DNI frente y dorso','Certificado de Afectación','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
-  ejercito:  ['DNI frente y dorso','Certificado de Afectación','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
+  ejercito:    ['DNI frente y dorso','Certificado de Afectación','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
+  gendarmeria: ['DNI frente y dorso','Certificado de Afectación','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
+  fuerzas:     ['DNI frente y dorso','Certificado de Afectación','Último Recibo de Sueldo','Selfie con DNI en mano','Constancia de CBU'],
 }
 const DOCS_AYUDA = ['DNI frente y dorso','Servicio','Datero completo','Recibo','Selfie con DNI en mano','CBU','Movimientos']
 const DOCS_BAPRO = ['DNI frente y dorso','Servicio','Datero completo','Recibo','Selfie con DNI en mano','CBU','Movimientos','Foto tarjeta de débito (frente y dorso)']
@@ -108,7 +110,16 @@ function generarMensaje(params: {
                (DOCS_HABERES[reparticion] || DOCS_HABERES['educacion'])
   const entLabel = entidad === 'dos_agosto' ? 'DOS DE AGOSTO' : 'AMAT'
   const lineaLabel = linea === 'nacion' ? 'NACIÓN EX 14/12' : linea === 'bapro' ? 'BAPRO' : linea === 'ayuda' ? 'AYUDA ECONÓMICA' : 'HABERES'
-  const repLabel = reparticion.charAt(0).toUpperCase() + reparticion.slice(1)
+  const REP_LABELS: Record<string,string> = {
+    policia:   'Policía',
+    spb:       'Servicio Penitenciario',
+    educacion: 'Educación',
+    salud:     'Salud',
+    ejercito:  'Ejército Argentino',
+    gendarmeria: 'Gendarmería',
+    fuerzas:   'Fuerzas Armadas',
+  }
+  const repLabel = REP_LABELS[reparticion] || (reparticion.charAt(0).toUpperCase() + reparticion.slice(1))
 
   if (linea === 'bapro') {
     return `${saludo}OFERTA BAPRO — AMAT\n\n✅ Ayuda económica pre-aprobada por descuento en haberes:\n\nMonto: ${fmt(monto)}\nPlan: ${cuotas} cuotas de ${fmt(total)}\n\n📋 DOCUMENTACIÓN REQUERIDA:\n${docs.map(d => `• ${d}`).join('\n')}\n\n🧾 FORMULARIO ONLINE:\n${link}`
@@ -137,11 +148,13 @@ const LINEAS = [
 ]
 
 const REPS_AMAT = [
-  { value:'policia',   label:'Policía' },
-  { value:'spb',       label:'SPB' },
-  { value:'educacion', label:'Educación' },
-  { value:'salud',     label:'Salud' },
-  { value:'ejercito',  label:'Ejército Argentino' },
+  { value:'policia',     label:'Policía' },
+  { value:'spb',         label:'SPB' },
+  { value:'educacion',   label:'Educación' },
+  { value:'salud',       label:'Salud' },
+  { value:'ejercito',    label:'Ejército Argentino' },
+  { value:'gendarmeria', label:'Gendarmería' },
+  { value:'fuerzas',     label:'Fuerzas Armadas' },
 ]
 
 const REPS_DOS_AGOSTO = [
@@ -185,8 +198,8 @@ export default function CalculadorOferta({ contactName, onSendMessage, onClose }
 
   const entColor = ENTIDADES.find(e => e.value === entidad)?.color || '#B45309'
   const repsDisp = entidad === 'dos_agosto' ? REPS_DOS_AGOSTO : REPS_AMAT
-  const cuotasDisp = linea === 'bapro' ? CUOTAS_BAPRO : linea === 'ayuda' ? CUOTAS_AYUDA : linea === 'nacion' ? [12,18,24] : CUOTAS_HABERES
-  const montosDisp = linea === 'bapro' ? MONTOS_BAPRO : linea === 'ayuda' ? [MONTOS_AYUDA_AMAT[reparticion] || 200000] : linea === 'nacion' ? MONTOS_EJERCITO : reparticion === 'ejercito' ? MONTOS_EJERCITO : MONTOS_HABERES
+  const cuotasDisp = linea === 'bapro' ? CUOTAS_BAPRO : linea === 'ayuda' ? CUOTAS_AYUDA : (linea === 'nacion' || ['ejercito','gendarmeria','fuerzas'].includes(reparticion)) ? [12,18,24] : CUOTAS_HABERES
+  const montosDisp = linea === 'bapro' ? MONTOS_BAPRO : linea === 'ayuda' ? [MONTOS_AYUDA_AMAT[reparticion] || 200000] : linea === 'nacion' ? MONTOS_EJERCITO : ['ejercito','gendarmeria','fuerzas'].includes(reparticion) ? MONTOS_EJERCITO : MONTOS_HABERES
 
   const handleEntidad = (e: string) => {
     setEntidad(e); setResultado(null); setCopied(false)
@@ -212,9 +225,9 @@ export default function CalculadorOferta({ contactName, onSendMessage, onClose }
     let montoCalc = monto
 
     if (linea === 'haberes') {
-      if (reparticion === 'ejercito') {
+      if (['ejercito','gendarmeria','fuerzas'].includes(reparticion)) {
         vc = TABLA_EJERCITO[cuotas]?.[monto] || 0
-        total = vc  // Ejército: solo valor cuota, sin membresía
+        total = vc  // Ejército/Gendarmería/FF.AA.: solo valor cuota, sin membresía
       } else {
         vc = TABLAS[cuotas]?.[monto] || 0
         ;[cs, med, farm] = calcularMembresia(entidad, reparticion, monto)

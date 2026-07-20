@@ -65,14 +65,14 @@ const OPCIONES_COBRANZAS = ['resolved','unresolved'] as const
 
 // Mapeo canónico único: status de amat_loan_leads → estado de amat_consultas
 const STATUS_A_CONSULTA: Record<string,string> = {
-  new:            'pendiente',
+  new:            'cola',
   contacted:      'pendiente',
+  contactado:     'contactado',
   closed:         'resuelto',
   resolved:       'resuelto',
   rejected:       'cerrado_rechazado',
   not_interested: 'cerrado_no_interesado',
   sin_respuesta:  'cerrado',
-  contactado:     'pendiente',
   unresolved:     'cerrado',
   finalizado:     'cerrado',
 }
@@ -103,9 +103,7 @@ const REPARTICIONES = [
   'EJERCITO ARGENTINO',
   'GENDARMERIA',
   'FUERZAS ARMADAS',
-  'Ministerio de Salud',
-  'Servicio Penitenciario bonaerense',
-  'Ministerio de Educacion'
+  'OTRA REPARTICION',
 ]
 
 const BANCOS = [
@@ -762,9 +760,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
     let q=supabase.from('amat_loan_leads').select('id,phone_number,full_name,dni,reparticion,bank,status,assigned_to,created_at,updated_at,archived,email',{count:'exact'})
     if(search)           q=q.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
-    if(rep!=='all')      q=q.eq('reparticion',rep)
+    if(rep!=='all')      q=q.ilike('reparticion',rep)
     if(banco!=='all')    q=q.eq('bank',banco)
-    if(status==='pendiente') q=q.in('status',['new','contacted','finalizado'])
+    if(status==='pendiente') q=q.in('status',['new','contacted'])
     else if(status!=='all') q=q.eq('status',status)
     if(tel==='con')      q=q.not('phone_number','is',null)
     if(tel==='sin')      q=q.is('phone_number',null)
