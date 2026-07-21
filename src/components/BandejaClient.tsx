@@ -3114,30 +3114,39 @@ Este límite protege el número de WhatsApp de la empresa.`)
             </div>
             <div style={{display:'flex',gap:8,paddingTop:14,borderTop:'1px solid #F1F5F9'}}>
               <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={async()=>{
-                // Si es lead sin consulta (id empieza con 'lead_') → INSERT, sino UPDATE
+                // 1. Guardar consulta — INSERT o UPDATE según corresponda
+                let resConsulta
                 if(String(consultaSelected.id).startsWith('lead_')) {
-                  await supabase.from('amat_consultas').insert({
-                    phone:            consultaSelected.phone,
-                    nombre_apellido:  consultaSelected.nombre_apellido,
-                    dni:              consultaSelected.dni,
-                    reparticion_label:consultaSelected.reparticion_label,
-                    flujo:            consultaSelected.flujo||'solicitud',
-                    vendedor:         consultaEdit.vendedor,
-                    situacion:        consultaEdit.situacion,
-                    estado:           consultaEdit.estado,
-                    created_at:       new Date().toISOString(),
-                    updated_at:       new Date().toISOString()
-                  })
+                  resConsulta = await safeRun('gestionar:insert', () =>
+                    supabase.from('amat_consultas').insert({
+                      phone:            consultaSelected.phone,
+                      nombre_apellido:  consultaSelected.nombre_apellido,
+                      dni:              consultaSelected.dni,
+                      reparticion_label:consultaSelected.reparticion_label,
+                      flujo:            consultaSelected.flujo||'solicitud',
+                      vendedor:         consultaEdit.vendedor,
+                      situacion:        consultaEdit.situacion,
+                      estado:           consultaEdit.estado,
+                      created_at:       new Date().toISOString(),
+                      updated_at:       new Date().toISOString()
+                    })
+                  )
                 } else {
-                  await supabase.from('amat_consultas').update({
-                    vendedor:  consultaEdit.vendedor,
-                    situacion: consultaEdit.situacion,
-                    estado:    consultaEdit.estado,
-                    updated_at:new Date().toISOString()
-                  }).eq('id',consultaSelected.id)
+                  resConsulta = await safeRun('gestionar:update', () =>
+                    supabase.from('amat_consultas').update({
+                      vendedor:  consultaEdit.vendedor,
+                      situacion: consultaEdit.situacion,
+                      estado:    consultaEdit.estado,
+                      updated_at:new Date().toISOString()
+                    }).eq('id',consultaSelected.id)
+                  )
+                }
+                if(!resConsulta.ok) {
+                  alert('❌ No se pudo guardar la consulta. Intentá de nuevo.')
+                  return
                 }
 
-                // Sincronizar amat_loan_leads con el estado elegido — mapeo inverso canónico
+                // 2. Sincronizar amat_loan_leads con el estado elegido
                 if(consultaSelected.phone) {
                   const esCob = consultaSelected.flujo === 'cobranzas'
                   const CONSULTA_A_STATUS: Record<string,string> = {
@@ -3151,40 +3160,46 @@ Este límite protege el número de WhatsApp de la empresa.`)
                   const nuevoStatus = CONSULTA_A_STATUS[consultaEdit.estado] || 'contacted'
                   const esFinal = ESTADOS_FINALES.includes(nuevoStatus)
 
-                  const {data: existingLead} = await supabase
-                    .from('amat_loan_leads')
-                    .select('id,archived,assigned_to,status')
-                    .eq('phone_number', consultaSelected.phone)
-                    .single()
+                  const resLead = await safeQuery('gestionar:getLead', () =>
+                    supabase.from('amat_loan_leads')
+                      .select('id,archived,assigned_to,status')
+                      .eq('phone_number', consultaSelected.phone)
+                      .single()
+                  )
 
-                  if(existingLead) {
+                  if(resLead.ok && resLead.data) {
+                    const existingLead = resLead.data as any
                     const updateData: any = {
                       status:      nuevoStatus,
                       updated_at:  new Date().toISOString(),
                     }
                     if(esFinal) {
-                      // Estado final: archivar SIEMPRE, salir de bandeja/cola
                       updateData.archived = true
                     } else {
-                      // Pendiente: activo, asignar vendedor si se eligió
                       updateData.archived = false
                       if(consultaEdit.vendedor) updateData.assigned_to = consultaEdit.vendedor
                     }
-                    await supabase.from('amat_loan_leads').update(updateData).eq('id', existingLead.id)
 
-                    if(esFinal) {
-                      // Sacar de memoria — no debe aparecer más en bandeja/cola
-                      setBotLeads(prev => prev.filter(l => l.id !== existingLead.id))
-                      if(selectedPhone === consultaSelected.phone) setSelectedPhone(null)
-                    } else if(consultaEdit.vendedor) {
-                      // Activo con vendedor: reflejar en bandeja
-                      setBotLeads(prev => {
-                        const exists = prev.find(l=>l.id===existingLead.id)
-                        if(exists) return prev.map(l=>l.id===existingLead.id?{...l,...updateData}:l)
-                        supabase.from('amat_loan_leads').select('*').eq('id',existingLead.id).single()
-                          .then(({data})=>{ if(data) setBotLeads(p=>p.find(x=>x.id===(data as any).id)?p:[data as any,...p]) })
-                        return prev
-                      })
+                    const resUpdate = await safeRun('gestionar:updateLead', () =>
+                      supabase.from('amat_loan_leads').update(updateData).eq('id', existingLead.id)
+                    )
+
+                    if(resUpdate.ok) {
+                      // UI solo después de confirmar todas las ops en DB
+                      if(esFinal) {
+                        setBotLeads(prev => prev.filter(l => l.id !== existingLead.id))
+                        if(selectedPhone === consultaSelected.phone) setSelectedPhone(null)
+                      } else if(consultaEdit.vendedor) {
+                        setBotLeads(prev => {
+                          const exists = prev.find(l=>l.id===existingLead.id)
+                          if(exists) return prev.map(l=>l.id===existingLead.id?{...l,...updateData}:l)
+                          supabase.from('amat_loan_leads').select('*').eq('id',existingLead.id).single()
+                            .then(({data})=>{ if(data) setBotLeads(p=>p.find(x=>x.id===(data as any).id)?p:[data as any,...p]) })
+                          return prev
+                        })
+                      }
+                    } else {
+                      console.warn('[gestionar] Consulta guardada pero lead no sincronizado:', consultaSelected.phone)
                     }
                   }
                 }
