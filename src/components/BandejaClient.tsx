@@ -413,9 +413,19 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved','sin_respuesta','closed']
         if(p.eventType==='UPDATE'){
           if(EXCLUIDOS.includes(updated.status||'') || (updated as any).archived){
-            setBotLeads(prev=>prev.filter(l=>l.id!==updated.id))
+            // Solo sacar si realmente estaba en la lista — evita operaciones innecesarias
+            setBotLeads(prev=>{
+              const existe = prev.find(l=>l.id===updated.id)
+              if(!existe) return prev
+              return prev.filter(l=>l.id!==updated.id)
+            })
           } else {
-            setBotLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
+            // Solo actualizar si ya estaba — nunca agregar leads nuevos por este camino
+            setBotLeads(prev=>{
+              const existe = prev.find(l=>l.id===updated.id)
+              if(!existe) return prev
+              return prev.map(l=>l.id===updated.id?updated:l)
+            })
           }
           setBaseLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
         } else if(p.eventType==='INSERT'){
@@ -805,7 +815,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           .then(({ count }) => setColaTotal(count || 0))
 
         // Cargar en paralelo: leads asignados + cola
-        const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved']
+        // EXCLUIDOS debe coincidir exactamente con la lista del realtime para evitar
+        // que leads cargados aquí sean borrados por el primer UPDATE que llegue
+        const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved','sin_respuesta','closed']
         const [asignadosRes, colaRes] = await Promise.all([
           me ? supabase.from('amat_loan_leads').select('*')
             .eq('assigned_to', me.username).eq('archived', false)
