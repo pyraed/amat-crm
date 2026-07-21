@@ -390,24 +390,41 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             supabase.from('amat_loan_leads').select('*').eq('phone_number',msg.phone_number).single()
               .then(({data})=>{
                 if(data) {
-                  // No reinsertar si está archivado — única condición, imposible de desincronizar
-                  // (todo estado final implica archived: true vía cambiarEstado)
-                  if((data as any).archived || ESTADOS_FINALES.includes((data as LoanLead).status||'')) return
-                  setBotLeads(p2 => {
-                    // Verificar de nuevo con el estado más fresco para evitar duplicados
-                    if(p2.find(l => l.phone_number === (data as LoanLead).phone_number)) return p2
-                    return [data as LoanLead, ...p2]
-                  })
-                  // Cargar el flujo de este phone y actualizar flujoMap
-                  supabase.from('amat_consultas')
-                    .select('phone,flujo')
-                    .eq('phone', msg.phone_number)
-                    .single()
-                    .then(({data:cdata})=>{
-                      if(cdata?.phone) {
-                        setFlujoMap(prev=>({...prev,[cdata.phone]:cdata.flujo||'solicitud'}))
-                      }
-                    })
+                  const lead = data as LoanLead
+                  const status = (lead.status || '') as string
+
+                  // Reactivación cuando la persona vuelve a escribir:
+                  // - closed (vendido) → entra a cola SIN cambiar estado
+                  // - todos los demás estados finales → resetear a new y volver a cola
+                  if(ESTADOS_FINALES.includes(status)) {
+                    // Vendido y Rechazado: NO se reactivan nunca
+                    if(status === 'closed' || status === 'rejected') return
+
+                    // not_interested, sin_respuesta, unresolved → resetear a new y volver a cola
+                    supabase.from('amat_loan_leads')
+                      .update({ status:'new', archived:false, assigned_to:undefined as any, updated_at:new Date().toISOString() })
+                      .eq('id', lead.id)
+                      .then(()=>{
+                        const r = {...lead, status:'new', archived:false, assigned_to:undefined as any}
+                        setColaLeadsState(p2=>p2.find(l=>l.id===lead.id)?p2:[r as LoanLead,...p2])
+                        setColaTotal(t=>t+1)
+                      })
+                    if(lead.phone_number) {
+                      supabase.from('amat_consultas')
+                        .update({ estado:'cola', updated_at:new Date().toISOString() })
+                        .eq('phone', lead.phone_number)
+                    }
+                    supabase.from('amat_consultas').select('phone,flujo').eq('phone',msg.phone_number).single()
+                      .then(({data:cdata})=>{ if(cdata?.phone) setFlujoMap(prev=>({...prev,[cdata.phone]:cdata.flujo||'solicitud'})) })
+                    return
+                  }
+
+                  // Lead activo normal — agregar a cola si no está ya
+                  if((lead as any).archived) return
+                  setColaLeadsState(p2=>p2.find(l=>l.phone_number===lead.phone_number)?p2:[lead,...p2])
+                  setColaTotal(t=>t+1)
+                  supabase.from('amat_consultas').select('phone,flujo').eq('phone',msg.phone_number).single()
+                    .then(({data:cdata})=>{ if(cdata?.phone) setFlujoMap(prev=>({...prev,[cdata.phone]:cdata.flujo||'solicitud'})) })
                 }
               })
           }
