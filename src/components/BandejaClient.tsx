@@ -314,6 +314,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [baseStatus, setBaseStatus]       = useState('all')
   const [baseTel, setBaseTel]             = useState<'all'|'con'|'sin'>('all')
   const [baseAssigned, setBaseAssigned]   = useState('all')
+  const [baseFlujo, setBaseFlujo]         = useState('all')
 
   // Modales
   const [showStatusModal, setShowStatusModal]     = useState(false)
@@ -623,6 +624,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       q = q.eq('estado', 'cola')
     } else if (estado === 'pendiente') {
       q = q.eq('estado', 'pendiente')
+    } else if (estado === 'resuelto_cob') {
+      // Resuelto cobranzas → en amat_consultas se guarda como 'resuelto' con flujo cobranzas
+      q = q.eq('estado', 'resuelto').eq('flujo', 'cobranzas')
+    } else if (estado === 'cerrado_cob') {
+      // No resuelto cobranzas → en amat_consultas se guarda como 'cerrado' con flujo cobranzas
+      q = q.eq('estado', 'cerrado').eq('flujo', 'cobranzas')
     } else if (estado !== 'all') {
       q = q.eq('estado', estado)
     }
@@ -857,10 +864,25 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     try {
       const {data, count, error} = await q
       if(error) throw error
-      // Si llegó una carga más nueva mientras esperábamos, descartar esta respuesta
       if(seq !== loadBaseSeq.current) return
-      setBaseLeads((data as LoanLead[])||[])
+      const leads = (data as LoanLead[])||[]
+      setBaseLeads(leads)
       setBaseTotal(count||0)
+
+      // Cargar flujo de los leads de esta página para mostrar la columna Flujo
+      const phones = leads.map(l=>l.phone_number).filter(Boolean) as string[]
+      if(phones.length) {
+        const BATCH = 200
+        const chunks = Array.from({length:Math.ceil(phones.length/BATCH)},(_,i)=>phones.slice(i*BATCH,(i+1)*BATCH))
+        Promise.all(chunks.map(chunk=>
+          supabase.from('amat_consultas').select('phone,flujo').in('phone',chunk).then(({data})=>data||[])
+        )).then(results=>{
+          if(seq !== loadBaseSeq.current) return
+          const map: Record<string,string> = {}
+          results.flat().forEach((r:any)=>{ if(r.phone) map[r.phone]=r.flujo||'solicitud' })
+          setFlujoMap(prev=>({...prev,...map}))
+        })
+      }
     } catch(e: any) {
       if(seq !== loadBaseSeq.current) return
       console.error('[loadBase] Error Supabase:', e)
@@ -2041,6 +2063,11 @@ Este límite protege el número de WhatsApp de la empresa.`)
             <button style={{padding:'7px 14px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#18181B,#3F3F46)',color:'white',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(24,24,27,0.3)',transition:'all .15s',whiteSpace:'nowrap'}} onClick={()=>setShowCampana(true)}>
               📣 Campaña WhatsApp
             </button>
+            <select className="fsel" value={baseFlujo} onChange={e=>{setBaseFlujo(e.target.value);setBasePage(0)}}>
+              <option value="all">Todos los flujos</option>
+              <option value="solicitud">Solicitud</option>
+              <option value="cobranzas">Cobranzas</option>
+            </select>
             <select className="fsel" value={baseRep} onChange={e=>{setBaseRep(e.target.value);setBasePage(0)}}>
               <option value="all">Todas las reparticiones</option>
               {REPARTICIONES.map(r=><option key={r} value={r}>{r}</option>)}
@@ -2072,8 +2099,8 @@ Este límite protege el número de WhatsApp de la empresa.`)
               <option value="sin">Sin asignar</option>
               {USERS.map(u=><option key={u.id} value={u.username}>{u.username}</option>)}
             </select>
-            {(baseSearch||baseRep!=='all'||baseBanco!=='all'||baseStatus!=='all'||baseTel!=='all'||baseAssigned!=='all')&&(
-              <button className="btn" onClick={()=>{setBaseSearch('');setBaseSearchInput('');setBaseRep('all');setBaseBanco('all');setBaseStatus('all');setBaseTel('all');setBaseAssigned('all');setBasePage(0)}}>✕ Limpiar</button>
+            {(baseSearch||baseRep!=='all'||baseBanco!=='all'||baseStatus!=='all'||baseTel!=='all'||baseAssigned!=='all'||baseFlujo!=='all')&&(
+              <button className="btn" onClick={()=>{setBaseSearch('');setBaseSearchInput('');setBaseRep('all');setBaseBanco('all');setBaseStatus('all');setBaseTel('all');setBaseAssigned('all');setBaseFlujo('all');setBasePage(0)}}>✕ Limpiar</button>
             )}
             <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',whiteSpace:'nowrap'}}>{baseTotal.toLocaleString()} contacto{baseTotal!==1?'s':''}</span>
           </div>
@@ -2086,10 +2113,14 @@ Este límite protege el número de WhatsApp de la empresa.`)
             ):(
               <table className="tbl" style={{width:'100%',borderCollapse:'collapse'}}>
                 <thead><tr>
-                  <th>Fecha</th><th>Hora</th><th>DNI</th><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Repartición</th><th>Banco</th><th>Estado</th><th>Asignado</th><th>Acciones</th>
+                  <th>Fecha</th><th>Hora</th><th>DNI</th><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Repartición</th><th>Flujo</th><th>Banco</th><th>Estado</th><th>Asignado</th><th>Acciones</th>
                 </tr></thead>
                 <tbody>
-                  {baseLeads.map(lead=>{
+                  {baseLeads.filter(lead=>{
+                    if(baseFlujo==='all') return true
+                    const fl = flujoMap[lead.phone_number||''] || 'solicitud'
+                    return fl === baseFlujo
+                  }).map(lead=>{
                     const s=sc(lead.status)
                     return (
                       <tr key={lead.id}>
@@ -2107,7 +2138,14 @@ Este límite protege el número de WhatsApp de la empresa.`)
                             : <span style={{color:'#CBD5E1',fontSize:11}}>Sin teléfono</span>}
                         </td>
                         <td style={{fontSize:12,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#64748B'}}>{lead.email||<span style={{color:'#CBD5E1'}}>—</span>}</td>
-                        <td style={{fontSize:12,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.reparticion||'—'}</td>
+                        <td style={{fontSize:12,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.reparticion?.toUpperCase()||'—'}</td>
+                        <td>
+                          {(()=>{ const fl=flujoMap[lead.phone_number||'']||null; return fl ? (
+                            <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:fl==='cobranzas'?'#F5F3FF':'#EFF6FF',color:fl==='cobranzas'?'#5B21B6':'#1D4ED8'}}>
+                              {fl==='cobranzas'?'Cobranzas':'Solicitud'}
+                            </span>
+                          ) : <span style={{color:'#CBD5E1',fontSize:11}}>—</span> })()}
+                        </td>
                         <td style={{fontSize:12}}>{lead.bank||'—'}</td>
                         <td><span className="pill" style={{background:s.bg,color:s.text}}>{s.label}</span></td>
                         <td style={{fontSize:12,color:'#64748B'}}>{lead.assigned_to||<span style={{color:'#CBD5E1'}}>—</span>}</td>
@@ -2128,7 +2166,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                       </tr>
                     )
                   })}
-                  {baseLeads.length===0&&<tr><td colSpan={10} style={{textAlign:'center',padding:48,color:'#94A3B8'}}>Sin resultados</td></tr>}
+                  {baseLeads.length===0&&<tr><td colSpan={11} style={{textAlign:'center',padding:48,color:'#94A3B8'}}>Sin resultados</td></tr>}
                 </tbody>
               </table>
             )}
@@ -2165,13 +2203,15 @@ Este límite protege el número de WhatsApp de la empresa.`)
             </select>
             <select className="fsel" value={cEstado} onChange={e=>setCEstado(e.target.value)}>
               <option value="all">Todos los estados</option>
-              <option value="cola">Cola (sin tomar)</option>
-              <option value="pendiente">Pendiente (en bandeja)</option>
+              <option value="cola">Cola</option>
+              <option value="pendiente">Pendiente</option>
               <option value="contactado">Contactado</option>
               <option value="cerrado">Sin respuesta</option>
               <option value="resuelto">Vendido</option>
               <option value="cerrado_rechazado">Rechazado</option>
               <option value="cerrado_no_interesado">No interesado</option>
+              <option value="resuelto_cob">Resuelto (cobranzas)</option>
+              <option value="cerrado_cob">No resuelto (cobranzas)</option>
             </select>
             <select className="fsel" value={cRep} onChange={e=>setCRep(e.target.value)}>
               <option value="all">Todas las reparticiones</option>
@@ -2240,7 +2280,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                         <td style={{fontWeight:600,color:'#0F172A',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre_apellido||'—'}</td>
                         <td style={{fontFamily:"'DM Mono',monospace",fontSize:12,color:'#64748B'}}>{c.dni||'—'}</td>
                         <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{c.phone||'—'}</td>
-                        <td style={{fontSize:12,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.reparticion_label||'—'}</td>
+                        <td style={{fontSize:12,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.reparticion_label?.toUpperCase()||'—'}</td>
                         <td>
                           <span style={{fontSize:11,padding:'2px 8px',borderRadius:99,fontWeight:600,fontFamily:"'DM Mono',monospace",background:c.flujo==='cobranzas'?'#F5F3FF':'#EFF6FF',color:c.flujo==='cobranzas'?'#5B21B6':'#1D4ED8'}}>
                             {c.flujo==='cobranzas'?'Cobranzas':'Solicitud'}
