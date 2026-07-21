@@ -853,8 +853,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(search)           q=q.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
     if(rep!=='all')      q=q.ilike('reparticion',rep)
     if(banco!=='all')    q=q.eq('bank',banco)
-    if(status==='pendiente') q=q.in('status',['new','contacted'])
-    else if(status!=='all') q=q.eq('status',status)
+    if(status!=='all') q=q.eq('status',status)
     if(tel==='con')      q=q.not('phone_number','is',null).neq('phone_number','')
     if(tel==='sin')      q=q.or('phone_number.is.null,phone_number.eq.')
     if(assigned==='sin') q=q.is('assigned_to',null)
@@ -2078,14 +2077,13 @@ Este límite protege el número de WhatsApp de la empresa.`)
             </select>
             <select className="fsel" value={baseStatus} onChange={e=>{setBaseStatus(e.target.value);setBasePage(0)}}>
               <option value="all">Todos los estados</option>
-              <option value="pendiente">Pendiente (new + contacted)</option>
               <option value="new">Cola</option>
               <option value="contacted">Pendiente</option>
               <option value="contactado">Contactado</option>
+              <option value="sin_respuesta">Sin respuesta</option>
               <option value="closed">Vendido</option>
               <option value="rejected">Rechazado</option>
               <option value="not_interested">No interesado</option>
-              <option value="sin_respuesta">Sin respuesta</option>
               <option value="resolved">Resuelto (cobranzas)</option>
               <option value="unresolved">No resuelto (cobranzas)</option>
             </select>
