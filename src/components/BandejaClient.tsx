@@ -144,29 +144,6 @@ type Tab = 'bandeja' | 'consultas' | 'base' | 'reportes'
 // ─────────────────────────────────────────────
 //  MENSAJES DE EJEMPLO (simulados del bot)
 // ─────────────────────────────────────────────
-const BOT_CONVERSATIONS = [
-  {
-    phone:'5492214001001', name:'RODRIGUEZ CARLOS ALBERTO', dni:'28441902',
-    reparticion:'MINISTERIO DE SEGURIDAD', bank:'BANCO PROVINCIA',
-    status:'interested' as const,
-    msgs:[
-      {dir:'in',body:'Hola buenas tardes',time:-90},
-      {dir:'out',body:'Hola! Soy Arturito el Asistente Virtual de Asociación Mutual Amarilla de Trabajadores. Ofrecemos Ayudas Economicas por recibo de sueldo y debito automatico a Empleados Publicos de la Provincia de Buenos Aires.\n\nEn que podemos ayudarte hoy?\n\n1- Solicitar una Ayuda Economica\n2- Informacion sobre descuentos en mi recibo y/o movimientos bancarios, estados de cuentas y cancelaciones',sender:'bot',time:-89},
-      {dir:'in',body:'1',time:-88},
-      {dir:'out',body:'Perfecto. Trabaja en alguna de las siguientes reparticiones?\n\n1- Ministerio de Seguridad\n2- Ministerio de Salud\n3- Ministerio de Educacion\n4- Servicio Penitenciario bonaerense\n5- Otra Repartición',sender:'bot',time:-87},
-      {dir:'in',body:'1',time:-86},
-      {dir:'out',body:'Perfecto. Ahora decime tu DNI (sin puntos).',sender:'bot',time:-85},
-      {dir:'in',body:'28441902',time:-84},
-      {dir:'out',body:'Gracias. Ahora pasame tu APELLIDO Y NOMBRE completo.',sender:'bot',time:-83},
-      {dir:'in',body:'Rodriguez Carlos Alberto',time:-82},
-      {dir:'out',body:'Perfecto. Ahora ingresa tu CORREO ELECTRONICO.',sender:'bot',time:-81},
-      {dir:'in',body:'carlos.rodriguez@gmail.com',time:-80},
-      {dir:'out',body:'Revisa tus datos antes de confirmar:\n\nSolicitud: Ayuda Economica\nReparticion: Ministerio de Seguridad\nDNI: 28441902\nNombre: Rodriguez Carlos Alberto\nEmail: carlos.rodriguez@gmail.com\n\nLos datos son correctos?\n1- Confirmar\n2- Cancelar',sender:'bot',time:-79},
-      {dir:'in',body:'1',time:-78},
-      {dir:'out',body:'Solicitud registrada exitosamente! En breve un asesor se pondra en contacto con vos. Muchas gracias!',sender:'bot',time:-77},
-    ]
-  },
-]
 
 // ── Grilla AMAT para calcular valor de cuota ──────────────
 const TABLAS_CUOTA: Record<number, Record<number,number>> = {
@@ -192,7 +169,6 @@ function calcularCuotaAMAT(entidad: string, linea: string, reparticion: string, 
   return vc + cs + med
 }
 
-const MONTOS_DISP = [50000,100000,150000,200000,250000,300000,350000,400000,450000,500000,600000,700000,800000,900000,1000000,1200000,1500000]
 
 export default function BandejaClient({ initialLeads, initialMessages }: Props) {
   // AUTH
@@ -204,7 +180,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [attempts, setAttempts]           = useState(0)
   const [locked, setLocked]               = useState(false)
   const [countdown, setCountdown]         = useState(0)
-  const [showCreds, setShowCreds]         = useState(false)
   const [rememberMe, setRememberMe]       = useState(false)
 
   // DATA — consultas (llegadas del bot)
@@ -217,7 +192,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // Filtros consultas
   const [cFlujo, setCFlujo]     = useState('all')
   const [cEstado, setCEstado]   = useState('all')
-  const [cDiasSinCampana, setCDiasSinCampana] = useState('all')
   const [cOrden, setCOrden]     = useState<'desc'|'asc'>('desc')
   const [campanas, setCampanas]   = useState<Record<string,string>>({})
   const [cRep, setCRep]         = useState('all')
@@ -243,12 +217,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // Filtros bandeja
   const [bandejaSearch, setBandejaSearch] = useState('')
-  const [bandejaStatus, setBandejaStatus] = useState('all')
   const [soloNoLeidos, setSoloNoLeidos]   = useState(false)
   const [vistaMode, setVistaMode]         = useState<'cola'|'mis_chats'>('cola')
   // Mapa phone → flujo (solicitud|cobranzas) cargado de amat_consultas
   const [flujoMap, setFlujoMap]           = useState<Record<string,string>>({})
-  const [cola, setCola]                   = useState<LoanLead[]>([])
   const [colaPage, setColaPage]           = useState(50)
   const [colaTotal, setColaTotal]         = useState(0)
   const [colaLeadsState, setColaLeadsState] = useState<LoanLead[]>([])
@@ -261,7 +233,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [finalizarNota, setFinalizarNota]           = useState('')
   const [cerradosHoyCount, setCerradosHoyCount]     = useState(0)
   const [reporteLeads, setReporteLeads]             = useState<LoanLead[]>([])
-  const [reporteLoading, setReporteLoading]         = useState(false)
   const [pipelineFlujoMap, setPipelineFlujoMap]     = useState<Record<string,string>>({})
   const [reporteMode, setReporteMode]               = useState<'ventas'|'cobranzas'>('ventas')
   const [reportePeriodo, setReportePeriodo]           = useState('mes_actual')
@@ -531,13 +502,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     })
   },[initialMessages])
 
-  // Cargar cola según rol del usuario logueado
-  const loadCola = (user: typeof me, leads: LoanLead[]) => {
-    if(!user) return
-    let disponibles = leads.filter(l => !l.assigned_to && l.status !== 'finalizado')
-    setCola(disponibles)
-  }
-
   // ─────────────────────────────────────────────
   //  CARGAR CONSULTAS desde amat_consultas
   // ─────────────────────────────────────────────
@@ -675,7 +639,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   desdeCustom?: string,
   hastaCustom?: string
 ) => {
-  setReporteLoading(true)
   const p = periodo ?? reportePeriodo
 
   // Calcular rango de fechas según el período
@@ -746,7 +709,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     results.flat().forEach((r: any) => { if (r.phone) map[r.phone] = r.flujo || 'solicitud' })
     setPipelineFlujoMap(map)
   }
-  setReporteLoading(false)
 }
 
   // Cargar base paginada
@@ -782,8 +744,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(banco!=='all')    q=q.eq('bank',banco)
     if(status==='pendiente') q=q.in('status',['new','contacted'])
     else if(status!=='all') q=q.eq('status',status)
-    if(tel==='con')      q=q.not('phone_number','is',null)
-    if(tel==='sin')      q=q.is('phone_number',null)
+    if(tel==='con')      q=q.not('phone_number','is',null).neq('phone_number','')
+    if(tel==='sin')      q=q.or('phone_number.is.null,phone_number.eq.')
     if(assigned==='sin') q=q.is('assigned_to',null)
     else if(assigned!=='all') q=q.eq('assigned_to',assigned)
     q=q.order('updated_at',{ascending:false}).range(page*PAGE_SIZE,(page+1)*PAGE_SIZE-1)
@@ -1297,7 +1259,6 @@ Este límite protege el número de WhatsApp de la empresa.`)
     if(ESTADOS_FINALES_BANDEJA.includes(l.status||'')) return false
     const q=bandejaSearch.toLowerCase()
     const m=!q||(l.full_name||'').toLowerCase().includes(q)||(l.phone_number||'').includes(q)||(l.dni||'').includes(q)
-    const s=bandejaStatus==='all'||l.status===bandejaStatus
     if(soloNoLeidos) {
       const hasUnread = messages.some(msg =>
         msg.phone_number === l.phone_number &&
@@ -1306,7 +1267,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
       )
       if(!hasUnread) return false
     }
-    return m&&s
+    return m
   }).sort((a, b) => {
     // Usar updated_at del lead para evitar iterar mensajes en cada sort
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
@@ -1733,14 +1694,14 @@ Este límite protege el número de WhatsApp de la empresa.`)
                         </button>
                       )
                     })()}
-                    <button className="btn" onClick={()=>setShowStatusModal(true)}>
+                    <button className="btn" onClick={()=>{ if(!currentLead.assigned_to){ alert('⚠️ Asigná el lead a un asesor antes de cambiar el estado.'); return } setShowStatusModal(true) }} style={{opacity:!currentLead.assigned_to?0.5:1}}>
                       <span className="pill" style={{background:scFor(currentLead.status,currentLead.phone_number).bg,color:scFor(currentLead.status,currentLead.phone_number).text}}>{scFor(currentLead.status,currentLead.phone_number).label}</span>▾
                     </button>
                     <button className="btn" onClick={()=>setShowAssignModal(true)}>👤 Asignar</button>
                     <button className="btn" onClick={()=>{setNoteText(currentLead.notes||'');setEditTarget(currentLead);setShowNoteModal(true)}}>📝 Nota</button>
                     <button className="btn" onClick={()=>openEdit(currentLead)}>✏️ Editar</button>
-                    <button style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E2E8F0',background:'#F8FAFC',color:'#64748B',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,transition:'all .15s',whiteSpace:'nowrap'}}
-                      onClick={()=>setShowFinalizarModal(true)}>
+                    <button style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E2E8F0',background:'#F8FAFC',color:'#64748B',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,transition:'all .15s',whiteSpace:'nowrap',opacity:!currentLead.assigned_to?0.5:1}}
+                      onClick={()=>{ if(!currentLead.assigned_to){ alert('⚠️ Asigná el lead a un asesor antes de finalizar la conversación.'); return } setShowFinalizarModal(true) }}>
                       ✓ Finalizar
                     </button>
                   </div>
@@ -1963,13 +1924,19 @@ Este límite protege el número de WhatsApp de la empresa.`)
             ):(
               <table className="tbl" style={{width:'100%',borderCollapse:'collapse'}}>
                 <thead><tr>
-                  <th>DNI</th><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Repartición</th><th>Banco</th><th>Estado</th><th>Asignado</th><th>Acciones</th>
+                  <th>Fecha</th><th>Hora</th><th>DNI</th><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Repartición</th><th>Banco</th><th>Estado</th><th>Asignado</th><th>Acciones</th>
                 </tr></thead>
                 <tbody>
                   {baseLeads.map(lead=>{
                     const s=sc(lead.status)
                     return (
                       <tr key={lead.id}>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11.5,color:'#64748B',whiteSpace:'nowrap'}}>
+                          {new Date(lead.created_at).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}
+                        </td>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11.5,color:'#94A3B8',whiteSpace:'nowrap'}}>
+                          {new Date(lead.created_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}
+                        </td>
                         <td className="mono" style={{color:'#64748B',fontSize:12}}>{lead.dni||'—'}</td>
                         <td style={{fontWeight:600,color:'#0F172A',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.full_name||'—'}</td>
                         <td style={{fontSize:12}}>
@@ -1999,7 +1966,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                       </tr>
                     )
                   })}
-                  {baseLeads.length===0&&<tr><td colSpan={8} style={{textAlign:'center',padding:48,color:'#94A3B8'}}>Sin resultados</td></tr>}
+                  {baseLeads.length===0&&<tr><td colSpan={10} style={{textAlign:'center',padding:48,color:'#94A3B8'}}>Sin resultados</td></tr>}
                 </tbody>
               </table>
             )}
@@ -2072,7 +2039,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
             ) : (
               <table className="tbl" style={{width:'100%',borderCollapse:'collapse'}}>
                 <thead><tr>
-                  {['Fecha','Nombre','DNI','Teléfono','Repartición','Flujo','Prestación','Afiliado','Vendedor','Situación','Estado','Acciones'].map(h=>(
+                  {['Fecha','Hora','Nombre','DNI','Teléfono','Repartición','Flujo','Prestación','Afiliado','Vendedor','Situación','Estado','Acciones'].map(h=>(
                     <th key={h}>{h}</th>
                   ))}
                 </tr></thead>
@@ -2102,7 +2069,12 @@ Este límite protege el número de WhatsApp de la empresa.`)
                     const ec = estadoColors[c.estado] || estadoColors.pendiente
                     return (
                       <tr key={c.id} onClick={()=>{setConsultaSelected(c);setConsultaEdit({vendedor:c.vendedor||'',situacion:c.situacion||'',estado:c.estado||'pendiente'});setShowConsultaModal(true)}}>
-                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11.5,color:'#64748B',whiteSpace:'nowrap'}}>{new Date(c.created_at).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11.5,color:'#64748B',whiteSpace:'nowrap'}}>
+                          {new Date(c.created_at).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}
+                        </td>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11.5,color:'#94A3B8',whiteSpace:'nowrap'}}>
+                          {new Date(c.created_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}
+                        </td>
                         <td style={{fontWeight:600,color:'#0F172A',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre_apellido||'—'}</td>
                         <td style={{fontFamily:"'DM Mono',monospace",fontSize:12,color:'#64748B'}}>{c.dni||'—'}</td>
                         <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{c.phone||'—'}</td>
