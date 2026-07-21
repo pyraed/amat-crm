@@ -315,6 +315,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   const msgEndRef  = useRef<HTMLDivElement>(null)
   const userRef    = useRef<HTMLInputElement>(null)
+  const baseSearchTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
+  const cSearchTimer    = useRef<ReturnType<typeof setTimeout>|null>(null)
   const [mounted, setMounted] = useState(false)
 
   useEffect(()=>{
@@ -678,7 +680,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // useEffect con debounce — evita que múltiples dependencias disparen cargas simultáneas
   const consultasTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
-  useEffect(()=>{
+  useEffect(()=>{\
     if(tab==='reportes') loadReportes(reportePeriodo, reporteDesde, reporteHasta)
     if(tab==='consultas') {
       // Spinner inmediato — sin esto se ve un flash de los datos viejos durante el debounce
@@ -697,7 +699,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             data.forEach((r:any)=>{ if(r.telefono && !map[r.telefono]) map[r.telefono]=r.fecha })
             setCampanas(map)
           })
-      }, 50) // 50ms es suficiente para que React agrupe todos los cambios de estado
+      }, 50)
+    }
+    // Cleanup: cancelar timer pendiente si el componente se desmonta o cambian las deps
+    return ()=>{
+      if(consultasTimer.current) clearTimeout(consultasTimer.current)
     }
   },[tab, cSearch, cFlujo, cEstado, cRep, cOrden]) // eslint-disable-line
 
@@ -847,6 +853,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   useEffect(()=>{
     if(tab==='bandeja'){
+      let cancelado = false
+
       // Cargar mensajes: todos los de los últimos 30 días en lotes para no perder nada
       ;(async () => {
         const desde = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -868,7 +876,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           fromIdx += BATCH
           batches++
         }
-        if(allMsgs.length) setMessages(allMsgs)
+        if(!cancelado && allMsgs.length) setMessages(allMsgs)
       })()
 
       // Cargar leads asignados + cola en un solo async para evitar race conditions
@@ -878,7 +886,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           .select('id', { count: 'exact', head: true })
           .is('assigned_to', null).eq('archived', false)
           .in('status', ['new','contacted'])
-          .then(({ count }) => setColaTotal(count || 0))
+          .then(({ count }) => { if(!cancelado) setColaTotal(count || 0) })
 
         // Cargar en paralelo: leads asignados + cola
         // EXCLUIDOS debe coincidir exactamente con la lista del realtime para evitar
@@ -896,6 +904,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             .order('created_at', { ascending: true })
             .limit(50)
         ])
+
+        if(cancelado) return
 
         // Leads asignados van a botLeads, cola va a colaLeadsState (estado independiente)
         const asignados = (asignadosRes.data || []) as LoanLead[]
@@ -918,6 +928,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             Promise.all(chunks.map(chunk=>
               supabase.from('amat_consultas').select('phone,flujo').in('phone',chunk).then(({data})=>data||[])
             )).then(results=>{
+              if(cancelado) return
               const flujoMapCola: Record<string,string> = {}
               results.flat().forEach((r:any)=>{ if(r.phone) flujoMapCola[r.phone]=r.flujo||'solicitud' })
               setFlujoMap(prev=>({...prev,...flujoMapCola}))
@@ -926,6 +937,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           setColaLeadsState(cola)
         }
       })()
+
+      return () => { cancelado = true }
     }
   },[tab, me]) // eslint-disable-line
 
@@ -1985,10 +1998,10 @@ Este límite protege el número de WhatsApp de la empresa.`)
                 onChange={e=>{
                   const v=e.target.value
                   setBaseSearchInput(v)
-                  clearTimeout((window as any).__st)
-                  ;(window as any).__st=setTimeout(()=>{ setBaseSearch(v); setBasePage(0) },400)
+                  if(baseSearchTimer.current) clearTimeout(baseSearchTimer.current)
+                  baseSearchTimer.current=setTimeout(()=>{ setBaseSearch(v); setBasePage(0) },400)
                 }}
-                onKeyDown={e=>{ if(e.key==='Enter'){ clearTimeout((window as any).__st); setBaseSearch(baseSearchInput); setBasePage(0) } }}
+                onKeyDown={e=>{ if(e.key==='Enter'){ if(baseSearchTimer.current) clearTimeout(baseSearchTimer.current); setBaseSearch(baseSearchInput); setBasePage(0) } }}
               />
             </div>
             <button className="btn pri" onClick={()=>{setBaseSearch(baseSearchInput);setBasePage(0)}}>Buscar</button>
@@ -2108,8 +2121,8 @@ Este límite protege el número de WhatsApp de la empresa.`)
               <input className="si" placeholder="Nombre, DNI o teléfono..." value={cSearchInput}
                 onChange={e=>{
                   setCSearchInput(e.target.value)
-                  clearTimeout((window as any).__ct)
-                  ;(window as any).__ct=setTimeout(()=>{ setCSearch(e.target.value) },400)
+                  if(cSearchTimer.current) clearTimeout(cSearchTimer.current)
+                  cSearchTimer.current=setTimeout(()=>{ setCSearch(e.target.value) },400)
                 }}
               />
             </div>
