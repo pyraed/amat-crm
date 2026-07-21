@@ -708,7 +708,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // useEffect con debounce — evita que múltiples dependencias disparen cargas simultáneas
   const consultasTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
-  useEffect(()=>{\
+  useEffect(()=>{
     if(tab==='reportes') loadReportes(reportePeriodo, reporteDesde, reporteHasta)
     if(tab==='consultas') {
       // Spinner inmediato — sin esto se ve un flash de los datos viejos durante el debounce
