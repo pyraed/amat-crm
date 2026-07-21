@@ -337,6 +337,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const userRef    = useRef<HTMLInputElement>(null)
   const baseSearchTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
   const cSearchTimer    = useRef<ReturnType<typeof setTimeout>|null>(null)
+  // Contadores de request — cada carga nueva incrementa el contador.
+  // Si al llegar la respuesta el contador cambió, la respuesta es obsoleta y se descarta.
+  const loadBaseSeq      = useRef(0)
+  const loadConsultasSeq = useRef(0)
   const [mounted, setMounted] = useState(false)
 
   useEffect(()=>{
@@ -601,6 +605,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     searchOverride?: string,
   ) => {
     setConsultasLoading(true)
+    const seq    = ++loadConsultasSeq.current
     const search = searchOverride ?? cSearchRef.current
     const flujo  = flujoOverride  ?? cFlujoRef.current
     const estado = estadoOverride ?? cEstadoRef.current
@@ -644,10 +649,13 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     try {
       const [consultasRes, leadsRes] = await Promise.all([q, leadsPromise])
       if(consultasRes.error) throw consultasRes.error
+      // Si llegó una carga más nueva mientras esperábamos, descartar esta respuesta
+      if(seq !== loadConsultasSeq.current) return
       data = consultasRes.data
       count = consultasRes.count
       leadsData = leadsRes.data
     } catch(e: any) {
+      if(seq !== loadConsultasSeq.current) return
       console.error('[loadConsultas] Error Supabase:', e)
       alert('❌ Error al cargar las consultas. Intentá de nuevo.')
       setConsultasLoading(false)
@@ -825,6 +833,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   const loadBase = async()=>{
     setBaseLoading(true)
+    const seq = ++loadBaseSeq.current
     const search   = baseSearchRef.current
     const rep      = baseRepRef.current
     const banco    = baseBancoRef.current
@@ -848,13 +857,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     try {
       const {data, count, error} = await q
       if(error) throw error
+      // Si llegó una carga más nueva mientras esperábamos, descartar esta respuesta
+      if(seq !== loadBaseSeq.current) return
       setBaseLeads((data as LoanLead[])||[])
       setBaseTotal(count||0)
     } catch(e: any) {
+      if(seq !== loadBaseSeq.current) return
       console.error('[loadBase] Error Supabase:', e)
       alert('❌ Error al cargar la base de contactos. Intentá de nuevo.')
     } finally {
-      setBaseLoading(false)
+      if(seq === loadBaseSeq.current) setBaseLoading(false)
     }
   }
 
