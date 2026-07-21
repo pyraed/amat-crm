@@ -170,6 +170,50 @@ function calcularCuotaAMAT(entidad: string, linea: string, reparticion: string, 
 }
 
 
+// ─────────────────────────────────────────────
+//  HELPER: safeQuery
+//  Wrapper para todas las operaciones Supabase.
+//  - Captura errores y los loguea con contexto
+//  - Devuelve { data, error, ok } siempre consistente
+//  - El caller decide qué mostrar al usuario según ok
+// ─────────────────────────────────────────────
+type SafeResult<T> = { data: T | null; error: string | null; ok: boolean }
+
+async function safeQuery<T>(
+  context: string,
+  fn: () => Promise<{ data: T | null; error: any }>
+): Promise<SafeResult<T>> {
+  try {
+    const { data, error } = await fn()
+    if (error) {
+      console.error(`[${context}] Error Supabase:`, error)
+      return { data: null, error: error.message || 'Error desconocido', ok: false }
+    }
+    return { data, error: null, ok: true }
+  } catch (e: any) {
+    console.error(`[${context}] Excepción:`, e)
+    return { data: null, error: e?.message || 'Error de red', ok: false }
+  }
+}
+
+// Variante para operaciones sin retorno de datos (UPDATE/INSERT donde no necesitamos data)
+async function safeRun(
+  context: string,
+  fn: () => Promise<{ error: any }>
+): Promise<{ ok: boolean; error: string | null }> {
+  try {
+    const { error } = await fn()
+    if (error) {
+      console.error(`[${context}] Error Supabase:`, error)
+      return { ok: false, error: error.message || 'Error desconocido' }
+    }
+    return { ok: true, error: null }
+  } catch (e: any) {
+    console.error(`[${context}] Excepción:`, e)
+    return { ok: false, error: e?.message || 'Error de red' }
+  }
+}
+
 export default function BandejaClient({ initialLeads, initialMessages }: Props) {
   // AUTH
   const [me, setMe]                       = useState<SysUser|null>(null)
@@ -571,8 +615,23 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     })()
 
     // Ejecutar en paralelo
-    const [{ data, error, count }, { data: leadsData }] = await Promise.all([q, leadsPromise])
-    if (error) console.error('[CONSULTAS] Error Supabase:', error)
+    let data: any[] | null = null
+    let leadsData: any[] | null = null
+    let count: number | null = null
+
+    try {
+      const [consultasRes, leadsRes] = await Promise.all([q, leadsPromise])
+      if(consultasRes.error) throw consultasRes.error
+      data = consultasRes.data
+      count = consultasRes.count
+      leadsData = leadsRes.data
+    } catch(e: any) {
+      console.error('[loadConsultas] Error Supabase:', e)
+      alert('❌ Error al cargar las consultas. Intentá de nuevo.')
+      setConsultasLoading(false)
+      return
+    }
+
     setConsultasTotal(count || 0)
 
     // Deduplicar con Set — O(n) en vez de O(n²)
@@ -759,11 +818,18 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(assigned==='sin') q=q.is('assigned_to',null)
     else if(assigned!=='all') q=q.eq('assigned_to',assigned)
     q=q.order('updated_at',{ascending:false}).range(page*PAGE_SIZE,(page+1)*PAGE_SIZE-1)
-    const {data,count,error}=await q
-    if(error) console.error('[BASE] Error Supabase:', error)
-    setBaseLeads((data as LoanLead[])||[])
-    setBaseTotal(count||0)
-    setBaseLoading(false)
+
+    try {
+      const {data, count, error} = await q
+      if(error) throw error
+      setBaseLeads((data as LoanLead[])||[])
+      setBaseTotal(count||0)
+    } catch(e: any) {
+      console.error('[loadBase] Error Supabase:', e)
+      alert('❌ Error al cargar la base de contactos. Intentá de nuevo.')
+    } finally {
+      setBaseLoading(false)
+    }
   }
 
   const baseMounted = useRef(false)
@@ -990,26 +1056,39 @@ Este límite protege el número de WhatsApp de la empresa.`)
       ...(opts?.notes !== undefined && { notes: opts.notes }),
       ...(opts?.extraFields || {}),
     }
-    await supabase.from('amat_loan_leads').update(upd).eq('id', lead.id)
 
-    // Sincronizar amat_consultas con el mapeo canónico
+    // 1. Actualizar DB primero — si falla, no tocamos la UI
+    const resLead = await safeRun('cambiarEstado:lead', () =>
+      supabase.from('amat_loan_leads').update(upd).eq('id', lead.id)
+    )
+    if(!resLead.ok) {
+      alert('❌ No se pudo cambiar el estado. Intentá de nuevo.')
+      return
+    }
+
+    // 2. Sincronizar amat_consultas — fallo no crítico (loguear, no bloquear)
     if(lead.phone_number) {
       const updC: any = {
         estado: STATUS_A_CONSULTA[nuevoStatus] || 'pendiente',
         updated_at: new Date().toISOString(),
       }
       if(opts?.situacion?.trim()) updC.situacion = opts.situacion.trim()
-      await supabase.from('amat_consultas').update(updC).eq('phone', lead.phone_number)
+      const resConsulta = await safeRun('cambiarEstado:consulta', () =>
+        supabase.from('amat_consultas').update(updC).eq('phone', lead.phone_number!)
+      )
+      if(!resConsulta.ok) {
+        // No bloquear — el lead ya se actualizó. Solo avisar en consola.
+        console.warn('[cambiarEstado] Lead actualizado pero consulta no sincronizada:', lead.phone_number)
+      }
     }
 
-    // Si es final: sacar de todas las listas en memoria y cerrar el chat si estaba abierto
+    // 3. Actualizar UI solo después de confirmar que DB está ok
     if(esFinal) {
       setBotLeads(prev => prev.filter(l => l.id !== lead.id))
       if(nuevoStatus === 'closed' || nuevoStatus === 'resolved') setCerradosHoyCount(c => c + 1)
       if(selectedPhone === lead.phone_number) setSelectedPhone(null)
     } else {
       setBotLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
-      // Actualizar también en colaLeadsState si estaba ahí
       setColaLeadsState(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
     }
   }
@@ -1018,11 +1097,13 @@ Este límite protege el número de WhatsApp de la empresa.`)
   const updateStatus = async (id: number, status: string, notes?: string) => {
     const lead = bandejaLeads.find(l=>l.id===id) || colaLeadsState.find(l=>l.id===id) || baseLeads.find(l=>l.id===id)
     if(!lead) {
-      // Lead no está en memoria — actualizar directo en DB con la misma lógica
       const esFinal = ESTADOS_FINALES.includes(status)
       const upd: any = { status, updated_at: new Date().toISOString(), ...(esFinal && { archived: true }) }
       if(notes !== undefined) upd.notes = notes
-      await supabase.from('amat_loan_leads').update(upd).eq('id', id)
+      const res = await safeRun('updateStatus', () =>
+        supabase.from('amat_loan_leads').update(upd).eq('id', id)
+      )
+      if(!res.ok) alert('❌ No se pudo actualizar el estado. Intentá de nuevo.')
       return
     }
     await cambiarEstado(lead, status, { notes })
@@ -1041,15 +1122,27 @@ Este límite protege el número de WhatsApp de la empresa.`)
       alert(`Tenés ${misActivas} conversaciones activas. El límite es ${LIMITE_BANDEJA}. Cerrá alguna antes de tomar una nueva.`)
       return
     }
-    await supabase.from('amat_loan_leads')
-      .update({assigned_to: me.username, status:'contacted', updated_at:new Date().toISOString()})
-      .eq('id', lead.id)
-    if(lead.phone_number) {
-      await supabase.from('amat_consultas')
-        .update({vendedor: me.username, estado:'pendiente', updated_at:new Date().toISOString()})
-        .eq('phone', lead.phone_number)
+
+    // 1. DB primero — si falla no tocamos la UI ni el contador
+    const resLead = await safeRun('tomarConversacion:lead', () =>
+      supabase.from('amat_loan_leads')
+        .update({assigned_to: me.username, status:'contacted', updated_at:new Date().toISOString()})
+        .eq('id', lead.id)
+    )
+    if(!resLead.ok) {
+      alert('❌ No se pudo tomar la conversación. Intentá de nuevo.')
+      return
     }
-    // Bajar contador PRIMERO — antes del cambio de vista para que el badge se actualice
+    if(lead.phone_number) {
+      await safeRun('tomarConversacion:consulta', () =>
+        supabase.from('amat_consultas')
+          .update({vendedor: me.username, estado:'pendiente', updated_at:new Date().toISOString()})
+          .eq('phone', lead.phone_number!)
+      )
+      // Si falla la consulta no bloqueamos — el lead ya fue tomado
+    }
+
+    // 2. UI solo después de confirmar DB
     setColaTotal(t => Math.max(0, t - 1))
     setColaLeadsState(prev => prev.filter(l => l.id !== lead.id))
 
@@ -1171,16 +1264,25 @@ Este límite protege el número de WhatsApp de la empresa.`)
         upd.archived = false
       }
     }
-    await supabase.from('amat_loan_leads').update(upd).eq('id',editTarget.id)
-    // Si quedó en estado final, sacarlo de bandeja en memoria
+    const resEdit = await safeRun('saveEdit:lead', () =>
+      supabase.from('amat_loan_leads').update(upd).eq('id',editTarget.id)
+    )
+    if(!resEdit.ok) {
+      alert('❌ No se pudo guardar los cambios. Intentá de nuevo.')
+      setEditSaving(false)
+      return
+    }
+    // UI solo después de confirmar DB
     if(editForm.status && ESTADOS_FINALES.includes(editForm.status)) {
       setBotLeads(prev => prev.filter(l => l.id !== editTarget.id))
     }
-    // Sincronizar amat_consultas
+    // Sincronizar amat_consultas — fallo no crítico
     if(editTarget.phone_number && editForm.status) {
-      await supabase.from('amat_consultas')
-        .update({ estado: STATUS_A_CONSULTA[editForm.status] || 'pendiente', updated_at: new Date().toISOString() })
-        .eq('phone', editTarget.phone_number)
+      await safeRun('saveEdit:consulta', () =>
+        supabase.from('amat_consultas')
+          .update({ estado: STATUS_A_CONSULTA[editForm.status!] || 'pendiente', updated_at: new Date().toISOString() })
+          .eq('phone', editTarget.phone_number!)
+      )
     }
     setEditSaving(false); setShowEditModal(false); setEditTarget(null)
     if(tab==='base') loadBase()
@@ -1189,7 +1291,10 @@ Este límite protege el número de WhatsApp de la empresa.`)
   const saveNote=async()=>{
     const lead=currentLead||editTarget
     if(!lead) return
-    await supabase.from('amat_loan_leads').update({notes:noteText,updated_at:new Date().toISOString()}).eq('id',lead.id)
+    const res = await safeRun('saveNote', () =>
+      supabase.from('amat_loan_leads').update({notes:noteText,updated_at:new Date().toISOString()}).eq('id',lead.id)
+    )
+    if(!res.ok) { alert('❌ No se pudo guardar la nota. Intentá de nuevo.'); return }
     setShowNoteModal(false)
   }
 
@@ -2527,8 +2632,13 @@ Este límite protege el número de WhatsApp de la empresa.`)
             <h3>Asignar a un asesor</h3>
             {USERS.map(u=>(
               <div key={u.id} className="mopt" onClick={async()=>{
-                await supabase.from('amat_loan_leads').update({assigned_to:u.username,updated_at:new Date().toISOString()}).eq('id',currentLead.id)
-                await supabase.from('amat_consultas').update({vendedor:u.username,updated_at:new Date().toISOString()}).eq('phone',currentLead.phone_number||'')
+                const res = await safeRun('asignar:lead', () =>
+                  supabase.from('amat_loan_leads').update({assigned_to:u.username,updated_at:new Date().toISOString()}).eq('id',currentLead.id)
+                )
+                if(!res.ok) { alert('❌ No se pudo asignar. Intentá de nuevo.'); return }
+                await safeRun('asignar:consulta', () =>
+                  supabase.from('amat_consultas').update({vendedor:u.username,updated_at:new Date().toISOString()}).eq('phone',currentLead.phone_number||'')
+                )
                 setShowAssignModal(false)
               }}>
                 <div className="av" style={{width:34,height:34,fontSize:11,background:u.color,color:'white'}}>{u.initials}</div>
@@ -2539,7 +2649,13 @@ Este límite protege el número de WhatsApp de la empresa.`)
                 {currentLead.assigned_to===u.username&&<span style={{color:'#F59E0B',fontSize:18}}>✓</span>}
               </div>
             ))}
-            <div className="mopt" style={{border:'1px solid #E2E8F0',borderRadius:10,marginTop:6}} onClick={async()=>{await supabase.from('amat_loan_leads').update({assigned_to:null,updated_at:new Date().toISOString()}).eq('id',currentLead.id);setShowAssignModal(false)}}>
+            <div className="mopt" style={{border:'1px solid #E2E8F0',borderRadius:10,marginTop:6}} onClick={async()=>{
+              const res = await safeRun('quitarAsignacion', () =>
+                supabase.from('amat_loan_leads').update({assigned_to:null,updated_at:new Date().toISOString()}).eq('id',currentLead.id)
+              )
+              if(!res.ok) { alert('❌ No se pudo quitar la asignación. Intentá de nuevo.'); return }
+              setShowAssignModal(false)
+            }}>
               <span style={{fontSize:13,color:'#EF4444'}}>Quitar asignación</span>
             </div>
             <button className="btn" style={{width:'100%',justifyContent:'center',marginTop:8}} onClick={()=>setShowAssignModal(false)}>Cancelar</button>
