@@ -17,6 +17,26 @@ import { LoanLead, Message } from '@/lib/types'
 type Role = 'Administrador' | 'Vendedor' | 'Cobranza'
 type SysUser = { id:string; username:string; password:string; displayName:string; role:Role; initials:string; color:string }
 
+// ── Tipos de formularios ──────────────────────────────────
+type VentaForm = {
+  entidad:     string
+  linea:       string
+  reparticion: string
+  monto:       string
+  cuotas:      string
+  valor_cuota: string
+  notas:       string
+}
+
+type ConsultaEditForm = {
+  vendedor:  string
+  situacion: string
+  estado:    string
+}
+
+// LeadEstado: valores válidos de status en amat_loan_leads
+type LeadEstado = 'new' | 'contacted' | 'contactado' | 'closed' | 'rejected' | 'not_interested' | 'sin_respuesta' | 'resolved' | 'unresolved' | 'finalizado'
+
 const USERS: SysUser[] = [
   { id:'1',  username:'Walter',   password:'Walter#2026',  displayName:'Walter',   role:'Administrador', initials:'WA', color:'#B45309' },
   { id:'2',  username:'Muse',     password:'Muse#2026',    displayName:'Muse',     role:'Administrador', initials:'MU', color:'#92400E' },
@@ -231,7 +251,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [consultasLoading, setConsultasLoading] = useState(false)
   const [consultaSelected, setConsultaSelected] = useState<any|null>(null)
   const [showConsultaModal, setShowConsultaModal] = useState(false)
-  const [consultaEdit, setConsultaEdit]     = useState<any>({})
+  const [consultaEdit, setConsultaEdit]     = useState<ConsultaEditForm>({vendedor:'',situacion:'',estado:'pendiente'})
 
   // Filtros consultas
   const [cFlujo, setCFlujo]     = useState('all')
@@ -283,7 +303,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [reporteDesde, setReporteDesde]               = useState('')
   const [reporteHasta, setReporteHasta]               = useState('')
   const [showVentaModal, setShowVentaModal]         = useState(false)
-  const [ventaForm, setVentaForm]         = useState<any>({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
+  const [ventaForm, setVentaForm]         = useState<VentaForm>({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
 
   // Filtros base
   const [basePage, setBasePage]           = useState(0)
@@ -2750,11 +2770,11 @@ Este límite protege el número de WhatsApp de la empresa.`)
               </div>
               <div>
                 <label className="fl">Monto solicitado</label>
-                <input className="fi" type="number" value={editForm.amount||''} onChange={e=>setEditForm(f=>({...f,amount:Number(e.target.value)||null as any}))}/>
+                <input className="fi" type="number" value={editForm.amount||''} onChange={e=>setEditForm(f=>({...f,amount:Number(e.target.value)||undefined}))}/>
               </div>
               <div>
                 <label className="fl">Cuotas</label>
-                <input className="fi" type="number" value={editForm.installments||''} onChange={e=>setEditForm(f=>({...f,installments:Number(e.target.value)||null as any}))}/>
+                <input className="fi" type="number" value={editForm.installments||''} onChange={e=>setEditForm(f=>({...f,installments:Number(e.target.value)||undefined}))}/>
               </div>
               <div>
                 <label className="fl">Estado</label>
@@ -2939,7 +2959,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                 <div style={{display:'flex',gap:6}}>
                   {['AMAT','DOS DE AGOSTO'].map(e=>(
                     <button key={e} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.entidad===e?'#B45309':'#E2E8F0',background:ventaForm.entidad===e?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.entidad===e?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm((f:any)=>({...f,entidad:e}))}>
+                      onClick={()=>setVentaForm(f=>({...f,entidad:e}))}>
                       {e}
                     </button>
                   ))}
@@ -2950,7 +2970,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                 <div style={{display:'flex',gap:5}}>
                   {['Haberes','Ayuda','BAPRO'].map(l=>(
                     <button key={l} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.linea===l?'#B45309':'#E2E8F0',background:ventaForm.linea===l?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.linea===l?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm((f:any)=>({...f,linea:l}))}>
+                      onClick={()=>setVentaForm(f=>({...f,linea:l}))}>
                       {l}
                     </button>
                   ))}
@@ -2961,7 +2981,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                 <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
                   {REPARTICIONES.map(r=>(
                     <button key={r} style={{padding:'6px 10px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.reparticion===r?'#B45309':'#E2E8F0',background:ventaForm.reparticion===r?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.reparticion===r?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm((f:any)=>({...f,reparticion:r}))}>
+                      onClick={()=>setVentaForm(f=>({...f,reparticion:r}))}>
                       {r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB')}
                     </button>
                   ))}
@@ -2969,7 +2989,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
               </div>
               <div>
                 <label className="fl">Monto</label>
-                <select className="fs" value={ventaForm.monto||''} onChange={e=>setVentaForm((f:any)=>({...f,monto:e.target.value}))}>
+                <select className="fs" value={ventaForm.monto||''} onChange={e=>setVentaForm(f=>({...f,monto:e.target.value}))}>
                   <option value="">— Seleccioná un monto —</option>
                   {Object.keys(TABLAS_CUOTA[parseInt(ventaForm.cuotas)||12]||TABLAS_CUOTA[12]).map(Number).sort((a,b)=>a-b).map(m=>(
                     <option key={m} value={m}>
@@ -2983,7 +3003,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                 <div style={{display:'flex',gap:5}}>
                   {[6,12,18,24].map(n=>(
                     <button key={n} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:parseInt(ventaForm.cuotas)===n?'#F59E0B':'#E2E8F0',background:parseInt(ventaForm.cuotas)===n?'#FFFBEB':'white',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'DM Mono',monospace",color:parseInt(ventaForm.cuotas)===n?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm((f:any)=>({...f,cuotas:String(n)}))}>
+                      onClick={()=>setVentaForm(f=>({...f,cuotas:String(n)}))}>
                       {n}
                     </button>
                   ))}
@@ -3004,12 +3024,12 @@ Este límite protege el número de WhatsApp de la empresa.`)
             )}
             <div style={{marginBottom:12}}>
               <label className="fl">Notas (opcional)</label>
-              <textarea className="ta" style={{minHeight:56}} value={ventaForm.notas} onChange={e=>setVentaForm((f:any)=>({...f,notas:e.target.value}))}/>
+              <textarea className="ta" style={{minHeight:56}} value={ventaForm.notas} onChange={e=>setVentaForm(f=>({...f,notas:e.target.value}))}/>
             </div>
             <div style={{display:'flex',gap:8}}>
               <button style={{flex:2,padding:'10px',background:'linear-gradient(135deg,#059669,#10B981)',color:'white',border:'none',borderRadius:9,fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:(!ventaForm.entidad||!ventaForm.linea||!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas)?0.4:1}}
                 disabled={!ventaForm.entidad||!ventaForm.linea||!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas}
-                onClick={()=>{ setVentaForm((f:any)=>({...f,valor_cuota:String(calcCuota)})); setTimeout(guardarVenta,50) }}>
+                onClick={()=>{ setVentaForm(f=>({...f,valor_cuota:String(calcCuota)})); setTimeout(guardarVenta,50) }}>
                 💾 Guardar venta
               </button>
               <button className="btn" style={{flex:1}} onClick={()=>setShowVentaModal(false)}>Cancelar</button>
@@ -3054,14 +3074,14 @@ Este límite protege el número de WhatsApp de la empresa.`)
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
               <div>
                 <label className="fl">Vendedor asignado</label>
-                <select className="fs" value={consultaEdit.vendedor} onChange={e=>setConsultaEdit((f:any)=>({...f,vendedor:e.target.value}))}>
+                <select className="fs" value={consultaEdit.vendedor} onChange={e=>setConsultaEdit(f=>({...f,vendedor:e.target.value}))}>
                   <option value="">Sin asignar</option>
                   {USERS.map(u=><option key={u.id} value={u.username}>{u.username} — {u.role}</option>)}
                 </select>
               </div>
               <div>
                 <label className="fl">Estado</label>
-                <select className="fs" value={consultaEdit.estado} onChange={e=>setConsultaEdit((f:any)=>({...f,estado:e.target.value}))}>
+                <select className="fs" value={consultaEdit.estado} onChange={e=>setConsultaEdit(f=>({...f,estado:e.target.value}))}>
                   <option value="pendiente">Pendiente</option>
                   <option value="contactado">Contactado</option>
                   {consultaSelected.flujo==='cobranzas' ? (<>
@@ -3078,7 +3098,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
             </div>
             <div style={{marginBottom:16}}>
               <label className="fl">Situación / Resolución</label>
-              <textarea className="ta" placeholder="Describí qué pasó con esta consulta..." value={consultaEdit.situacion} onChange={e=>setConsultaEdit((f:any)=>({...f,situacion:e.target.value}))}/>
+              <textarea className="ta" placeholder="Describí qué pasó con esta consulta..." value={consultaEdit.situacion} onChange={e=>setConsultaEdit(f=>({...f,situacion:e.target.value}))}/>
             </div>
             <div style={{display:'flex',gap:8,paddingTop:14,borderTop:'1px solid #F1F5F9'}}>
               <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={async()=>{
