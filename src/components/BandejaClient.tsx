@@ -1031,9 +1031,30 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const sendReply=async()=>{
     if(!replyText.trim()||!selectedPhone||!me) return
     const text = replyText
-    setReplyText('')  // limpiar input de inmediato para que no se sienta trabado
+    setReplyText('')
     setSending(true)
-    // UI optimista: mostrar el mensaje al instante en ambos arrays
+
+    // Auto-asignación: si el lead no tiene dueño, asignarlo al operador que escribe
+    if(currentLead && !currentLead.assigned_to) {
+      const resAsign = await safeRun('sendReply:autoAsignar', () =>
+        supabase.from('amat_loan_leads')
+          .update({ assigned_to: me.username, status: 'contacted', updated_at: new Date().toISOString() })
+          .eq('id', currentLead.id)
+      )
+      if(resAsign.ok) {
+        await safeRun('sendReply:autoAsignarConsulta', () =>
+          supabase.from('amat_consultas')
+            .update({ vendedor: me.username, estado: 'pendiente', updated_at: new Date().toISOString() })
+            .eq('phone', selectedPhone)
+        )
+        // Actualizar en memoria
+        setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
+        setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
+        setColaTotal(t => Math.max(0, t - 1))
+      }
+    }
+
+    // UI optimista: mostrar el mensaje al instante
     const tempId = `temp_${Date.now()}`
     const tempMsg: Message = {
       id: tempId as any,
@@ -1055,7 +1076,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       })
       clearTimeout(timeout)
     } catch(e) {
-      // Si falla o timeout, restaurar el texto para que no se pierda
       setReplyText(text)
     } finally {
       setSending(false)
@@ -1091,6 +1111,26 @@ Ya se le envió una plantilla a este número en las últimas ${LIMITE_PLANTILLA_
 Este límite protege el número de WhatsApp de la empresa.`)
       return
     }
+
+    // Auto-asignación: si el lead no tiene dueño, asignarlo al operador que envía
+    if(currentLead && !currentLead.assigned_to) {
+      const resAsign = await safeRun('sendTemplate:autoAsignar', () =>
+        supabase.from('amat_loan_leads')
+          .update({ assigned_to: me.username, status: 'contacted', updated_at: new Date().toISOString() })
+          .eq('id', currentLead.id)
+      )
+      if(resAsign.ok) {
+        await safeRun('sendTemplate:autoAsignarConsulta', () =>
+          supabase.from('amat_consultas')
+            .update({ vendedor: me.username, estado: 'pendiente', updated_at: new Date().toISOString() })
+            .eq('phone', selectedPhone)
+        )
+        setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
+        setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
+        setColaTotal(t => Math.max(0, t - 1))
+      }
+    }
+
     setSending(true)
     try {
       const controller = new AbortController()
