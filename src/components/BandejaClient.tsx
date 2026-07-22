@@ -315,6 +315,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [baseTel, setBaseTel]             = useState<'all'|'con'|'sin'>('all')
   const [baseAssigned, setBaseAssigned]   = useState('all')
   const [baseFlujo, setBaseFlujo]         = useState('all')
+  const [baseOrdenCol, setBaseOrdenCol]   = useState<string>('created_at')
+  const [baseOrdenDir, setBaseOrdenDir]   = useState<'asc'|'desc'>('desc')
 
   // Modales
   const [showStatusModal, setShowStatusModal]     = useState(false)
@@ -829,6 +831,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const baseTelRef      = useRef(baseTel)
   const baseAssignedRef = useRef(baseAssigned)
   const basePageRef     = useRef(basePage)
+  const baseOrdenColRef = useRef(baseOrdenCol)
+  const baseOrdenDirRef = useRef(baseOrdenDir)
 
   useEffect(()=>{ baseSearchRef.current   = baseSearch   },[baseSearch])
   useEffect(()=>{ baseRepRef.current      = baseRep      },[baseRep])
@@ -837,17 +841,25 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   useEffect(()=>{ baseTelRef.current      = baseTel      },[baseTel])
   useEffect(()=>{ baseAssignedRef.current = baseAssigned },[baseAssigned])
   useEffect(()=>{ basePageRef.current     = basePage     },[basePage])
+  useEffect(()=>{ baseOrdenColRef.current = baseOrdenCol },[baseOrdenCol])
+  useEffect(()=>{ baseOrdenDirRef.current = baseOrdenDir },[baseOrdenDir])
 
-  const loadBase = async()=>{
+  const loadBase = async(overrides?: {
+    search?: string; rep?: string; banco?: string; status?: string;
+    tel?: string; assigned?: string; page?: number;
+    ordenCol?: string; ordenDir?: 'asc'|'desc'
+  })=>{
     setBaseLoading(true)
     const seq = ++loadBaseSeq.current
-    const search   = baseSearchRef.current
-    const rep      = baseRepRef.current
-    const banco    = baseBancoRef.current
-    const status   = baseStatusRef.current
-    const tel      = baseTelRef.current
-    const assigned = baseAssignedRef.current
-    const page     = basePageRef.current
+    const search    = overrides?.search    ?? baseSearchRef.current
+    const rep       = overrides?.rep       ?? baseRepRef.current
+    const banco     = overrides?.banco     ?? baseBancoRef.current
+    const status    = overrides?.status    ?? baseStatusRef.current
+    const tel       = overrides?.tel       ?? baseTelRef.current
+    const assigned  = overrides?.assigned  ?? baseAssignedRef.current
+    const page      = overrides?.page      ?? basePageRef.current
+    const ordenCol  = overrides?.ordenCol  ?? baseOrdenColRef.current
+    const ordenDir  = overrides?.ordenDir  ?? baseOrdenDirRef.current
 
     let q=supabase.from('amat_loan_leads').select('id,phone_number,full_name,dni,reparticion,bank,status,assigned_to,created_at,updated_at,archived,email',{count:'exact'})
     if(search)           q=q.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
@@ -858,7 +870,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(tel==='sin')      q=q.or('phone_number.is.null,phone_number.eq.')
     if(assigned==='sin') q=q.is('assigned_to',null)
     else if(assigned!=='all') q=q.eq('assigned_to',assigned)
-    q=q.order('updated_at',{ascending:false}).range(page*PAGE_SIZE,(page+1)*PAGE_SIZE-1)
+    q=q.order(ordenCol,{ascending: ordenDir==='asc'}).range(page*PAGE_SIZE,(page+1)*PAGE_SIZE-1)
 
     try {
       const {data, count, error} = await q
@@ -901,8 +913,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   useEffect(()=>{
     if(!baseMounted.current) { baseMounted.current = true; return }
-    if(tab==='base') loadBase()
-  },[baseSearch,baseRep,baseBanco,baseStatus,baseTel,baseAssigned,basePage]) // eslint-disable-line
+    if(tab==='base') loadBase({
+      search: baseSearch, rep: baseRep, banco: baseBanco,
+      status: baseStatus, tel: baseTel, assigned: baseAssigned,
+      page: basePage, ordenCol: baseOrdenCol, ordenDir: baseOrdenDir
+    })
+  },[baseSearch,baseRep,baseBanco,baseStatus,baseTel,baseAssigned,basePage,baseOrdenCol,baseOrdenDir]) // eslint-disable-line
 
   useEffect(()=>{
     if(tab==='bandeja'){
@@ -1880,7 +1896,9 @@ Este límite protege el número de WhatsApp de la empresa.`)
                     <button className="btn" onClick={()=>{ if(!currentLead.assigned_to){ alert('⚠️ Asigná el lead a un asesor antes de cambiar el estado.'); return } setShowStatusModal(true) }} style={{opacity:!currentLead.assigned_to?0.5:1}}>
                       <span className="pill" style={{background:scFor(currentLead.status,currentLead.phone_number).bg,color:scFor(currentLead.status,currentLead.phone_number).text}}>{scFor(currentLead.status,currentLead.phone_number).label}</span>▾
                     </button>
-                    <button className="btn" onClick={()=>setShowAssignModal(true)}>👤 Asignar</button>
+                    {me?.role==='Administrador'&&(
+                      <button className="btn" onClick={()=>setShowAssignModal(true)}>👤 Asignar</button>
+                    )}
                     <button className="btn" onClick={()=>{setNoteText(currentLead.notes||'');setEditTarget(currentLead);setShowNoteModal(true)}}>📝 Nota</button>
                     <button className="btn" onClick={()=>openEdit(currentLead)}>✏️ Editar</button>
                     <button style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E2E8F0',background:'#F8FAFC',color:'#64748B',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,transition:'all .15s',whiteSpace:'nowrap',opacity:!currentLead.assigned_to?0.5:1}}
@@ -2111,7 +2129,39 @@ Este límite protege el número de WhatsApp de la empresa.`)
             ):(
               <table className="tbl" style={{width:'100%',borderCollapse:'collapse'}}>
                 <thead><tr>
-                  <th>Fecha</th><th>Hora</th><th>DNI</th><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Repartición</th><th>Flujo</th><th>Banco</th><th>Estado</th><th>Asignado</th><th>Acciones</th>
+                  {(()=>{
+                    const cols: {label:string; col:string|null}[] = [
+                      {label:'Fecha', col:'created_at'},
+                      {label:'Hora',  col:null},
+                      {label:'Últ. mod.', col:'updated_at'},
+                      {label:'DNI',   col:'dni'},
+                      {label:'Nombre',col:'full_name'},
+                      {label:'Teléfono', col:null},
+                      {label:'Email', col:null},
+                      {label:'Repartición', col:'reparticion'},
+                      {label:'Flujo', col:null},
+                      {label:'Banco', col:'bank'},
+                      {label:'Estado',col:'status'},
+                      {label:'Asignado', col:'assigned_to'},
+                      {label:'Acciones', col:null},
+                    ]
+                    return cols.map(({label, col})=>(
+                      <th key={label} onClick={()=>{
+                        if(!col) return
+                        if(baseOrdenCol===col) {
+                          const newDir = baseOrdenDir==='desc'?'asc':'desc'
+                          setBaseOrdenDir(newDir)
+                          loadBase({search:baseSearch,rep:baseRep,banco:baseBanco,status:baseStatus,tel:baseTel,assigned:baseAssigned,page:0,ordenCol:col,ordenDir:newDir})
+                        } else {
+                          setBaseOrdenCol(col); setBaseOrdenDir('desc'); setBasePage(0)
+                          loadBase({search:baseSearch,rep:baseRep,banco:baseBanco,status:baseStatus,tel:baseTel,assigned:baseAssigned,page:0,ordenCol:col,ordenDir:'desc'})
+                        }
+                      }} style={{cursor:col?'pointer':'default',userSelect:'none',whiteSpace:'nowrap'}}>
+                        {label}
+                        {col&&baseOrdenCol===col&&<span style={{marginLeft:4,fontSize:10}}>{baseOrdenDir==='desc'?'↓':'↑'}</span>}
+                      </th>
+                    ))
+                  })()}
                 </tr></thead>
                 <tbody>
                   {baseLeads.filter(lead=>{
@@ -2127,6 +2177,9 @@ Este límite protege el número de WhatsApp de la empresa.`)
                         </td>
                         <td style={{fontFamily:"'DM Mono',monospace",fontSize:11.5,color:'#94A3B8',whiteSpace:'nowrap'}}>
                           {new Date(lead.created_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}
+                        </td>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'#CBD5E1',whiteSpace:'nowrap'}}>
+                          {new Date(lead.updated_at).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}
                         </td>
                         <td className="mono" style={{color:'#64748B',fontSize:12}}>{lead.dni||'—'}</td>
                         <td style={{fontWeight:600,color:'#0F172A',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.full_name||'—'}</td>
@@ -2164,7 +2217,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                       </tr>
                     )
                   })}
-                  {baseLeads.length===0&&<tr><td colSpan={11} style={{textAlign:'center',padding:48,color:'#94A3B8'}}>Sin resultados</td></tr>}
+                  {baseLeads.length===0&&<tr><td colSpan={12} style={{textAlign:'center',padding:48,color:'#94A3B8'}}>Sin resultados</td></tr>}
                 </tbody>
               </table>
             )}
@@ -2837,6 +2890,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
               <option value="not_interested">No interesado</option>
                 </select>
               </div>
+              {me?.role==='Administrador'&&(
               <div>
                 <label className="fl">Asignado a</label>
                 <select className="fs" value={editForm.assigned_to||''} onChange={e=>setEditForm(f=>({...f,assigned_to:e.target.value}))}>
@@ -2844,6 +2898,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                   {USERS.map(u=><option key={u.id} value={u.username}>{u.username} — {u.role}</option>)}
                 </select>
               </div>
+              )}
               <div style={{gridColumn:'1/-1'}}>
                 <label className="fl">Nota interna</label>
                 <textarea className="ta" style={{minHeight:60}} value={editForm.notes||''} onChange={e=>setEditForm(f=>({...f,notes:e.target.value}))}/>
