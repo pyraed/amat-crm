@@ -1339,7 +1339,17 @@ Este límite protege el número de WhatsApp de la empresa.`)
     setCurrentChatMsgs([])
     setSelectedPhone(lead.phone_number)
     if(lead.phone_number) cargarMensajes(lead.phone_number)
-    // No cambiar status automáticamente — el operador decide con el botón Tomar
+    // Refrescar datos frescos del lead desde DB al abrir el chat
+    // Evita mostrar datos viejos si otra sesión editó el lead mientras tanto
+    if(lead.id) {
+      supabase.from('amat_loan_leads').select('*').eq('id', lead.id).single()
+        .then(({data}) => {
+          if(data) {
+            setBotLeads(prev => prev.map(l => l.id === data.id ? data as LoanLead : l))
+            setBaseLeads(prev => prev.map(l => l.id === data.id ? data as LoanLead : l))
+          }
+        })
+    }
   }
 
   const finalizarConversacion = async (nota?: string) => {
