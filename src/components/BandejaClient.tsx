@@ -720,9 +720,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   useEffect(()=>{
     if(tab==='reportes') loadReportes(reportePeriodo, reporteDesde, reporteHasta)
     if(tab==='consultas') {
-      // Spinner inmediato — sin esto se ve un flash de los datos viejos durante el debounce
+      // Al entrar al tab, sincronizar el input visual con el estado real del filtro
+      setCSearchInput(cSearch)
       setConsultasLoading(true)
-      // Cancelar cualquier carga pendiente antes de arrancar una nueva
       if(consultasTimer.current) clearTimeout(consultasTimer.current)
       consultasTimer.current = setTimeout(()=>{
         loadConsultas(cRep, cFlujo, cEstado, cSearch)
@@ -738,7 +738,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           })
       }, 50)
     }
-    // Cleanup: cancelar timer pendiente si el componente se desmonta o cambian las deps
     return ()=>{
       if(consultasTimer.current) clearTimeout(consultasTimer.current)
     }
