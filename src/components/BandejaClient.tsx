@@ -464,12 +464,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   }
 
                   // Lead activo normal — solo agregar a cola si no tiene asignado
-                  // Si ya tiene dueño, no lo mandamos a cola (evita que vuelva a aparecer
-                  // como nuevo cuando el cliente responde a un lead ya tomado)
                   if((lead as any).archived) return
                   if(lead.assigned_to) {
-                    // Tiene dueño — solo actualizar en botLeads si está ahí, no tocar la cola
-                    setBotLeads(prev => prev.map(l => l.phone_number === lead.phone_number ? lead : l))
+                    // Tiene dueño — actualizar en botLeads si está, o agregar si es del usuario actual
+                    // (puede llegar antes de que termine la carga inicial de botLeads)
+                    setBotLeads(prev => {
+                      const existe = prev.find(l => l.phone_number === lead.phone_number)
+                      if(existe) return prev.map(l => l.phone_number === lead.phone_number ? lead : l)
+                      // Si es del operador actual, agregar — no tocar la cola
+                      if(lead.assigned_to === meRef.current?.username) return [...prev, lead]
+                      return prev
+                    })
                     return
                   }
                   // Sin dueño y no archivado → sí va a cola
