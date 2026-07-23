@@ -902,16 +902,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
-  const baseMounted = useRef(false)
   useEffect(()=>{
     if(tab==='base') {
-      baseMounted.current = false // resetear al cambiar de tab
-      loadBase()
+      loadBase({
+        search: baseSearch, rep: baseRep, banco: baseBanco,
+        status: baseStatus, tel: baseTel, assigned: baseAssigned,
+        page: basePage, ordenCol: baseOrdenCol, ordenDir: baseOrdenDir
+      })
     }
   },[tab]) // eslint-disable-line
 
   useEffect(()=>{
-    if(!baseMounted.current) { baseMounted.current = true; return }
     if(tab==='base') loadBase({
       search: baseSearch, rep: baseRep, banco: baseBanco,
       status: baseStatus, tel: baseTel, assigned: baseAssigned,
