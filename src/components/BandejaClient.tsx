@@ -463,8 +463,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                     return
                   }
 
-                  // Lead activo normal — agregar a cola si no está ya
+                  // Lead activo normal — solo agregar a cola si no tiene asignado
+                  // Si ya tiene dueño, no lo mandamos a cola (evita que vuelva a aparecer
+                  // como nuevo cuando el cliente responde a un lead ya tomado)
                   if((lead as any).archived) return
+                  if(lead.assigned_to) {
+                    // Tiene dueño — solo actualizar en botLeads si está ahí, no tocar la cola
+                    setBotLeads(prev => prev.map(l => l.phone_number === lead.phone_number ? lead : l))
+                    return
+                  }
+                  // Sin dueño y no archivado → sí va a cola
                   setColaLeadsState(p2=>p2.find(l=>l.phone_number===lead.phone_number)?p2:[lead,...p2])
                   setColaTotal(t=>t+1)
                   supabase.from('amat_consultas').select('phone,flujo').eq('phone',msg.phone_number).single()
