@@ -1643,7 +1643,8 @@ Este límite protege el número de WhatsApp de la empresa.`)
         .fs:focus{border-color:#3B82F6}
         .fl{display:block;font-size:11px;font-weight:600;color:#64748B;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
         .tbl th{text-align:left;padding:10px 14px;background:#F8FAFC;border-bottom:1px solid #E2E8F0;font-size:11px;font-weight:600;color:#64748B;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;position:sticky;top:0;z-index:1}
-        .tbl td{padding:9px 14px;border-bottom:1px solid #F8FAFC;font-size:13px;color:#374151;vertical-align:middle}
+        .tbl td{padding:9px 14px;border-bottom:1px solid #F8FAFC;font-size:13px;color:#374151;vertical-align:middle;user-select:text}
+        .tbl tr{cursor:default}
         .tbl tr:hover td{background:#F8FAFC;cursor:pointer}
         .mono{font-family:'DM Mono',monospace}
         .ta{width:100%;border:1px solid #E2E8F0;border-radius:10px;padding:11px 14px;font-size:13px;font-family:inherit;resize:vertical;color:#1E293B;outline:none;min-height:80px}
@@ -2361,7 +2362,10 @@ Este límite protege el número de WhatsApp de la empresa.`)
                     }
                     const ec = estadoColors[c.estado] || estadoColors.pendiente
                     return (
-                      <tr key={c.id} onClick={()=>{setConsultaSelected(c);setConsultaEdit({vendedor:c.vendedor||'',situacion:c.situacion||'',estado:c.estado||'pendiente'});setShowConsultaModal(true)}}>
+                      <tr key={c.id} onClick={(e)=>{
+                        if(window.getSelection()?.toString()) return
+                        setConsultaSelected(c);setConsultaEdit({vendedor:c.vendedor||'',situacion:c.situacion||'',estado:c.estado||'pendiente'});setShowConsultaModal(true)
+                      }}>
                         <td style={{fontFamily:"'DM Mono',monospace",fontSize:11.5,color:'#64748B',whiteSpace:'nowrap'}}>
                           {new Date(c.created_at).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}
                         </td>
