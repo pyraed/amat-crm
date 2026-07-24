@@ -338,6 +338,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   const msgEndRef  = useRef<HTMLDivElement>(null)
   const userRef    = useRef<HTMLInputElement>(null)
+  const meRef      = useRef<SysUser|null>(null)
   const baseSearchTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
   const cSearchTimer    = useRef<ReturnType<typeof setTimeout>|null>(null)
   // Contadores de request — cada carga nueva incrementa el contador.
@@ -356,6 +357,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       setRememberMe(true)
     }
   },[])
+
+  // Mantener meRef sincronizado — los closures de realtime no capturan estado React
+  useEffect(()=>{ meRef.current = me },[me])
   const chatScrollRef  = useRef<HTMLDivElement>(null)
   const isAtBottom     = useRef(true)
   const prevPhone      = useRef<string|null>(null)
@@ -558,12 +562,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const BATCH = 200
     const chunks = (arr: string[]) => Array.from({length: Math.ceil(arr.length/BATCH)}, (_,i) => arr.slice(i*BATCH,(i+1)*BATCH))
 
-    // Cargar leads en lotes
+    // Cargar leads en lotes — EXCLUIDOS debe coincidir con el realtime rt-leads
     Promise.all(chunks(phones).map(chunk =>
       supabase.from('amat_loan_leads')
         .select('*')
         .in('phone_number', chunk)
-        .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved")')
+        .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved","sin_respuesta","closed")')
         .eq('archived', false)
         .then(({data}) => data || [])
     )).then(results => {
@@ -1291,32 +1295,6 @@ Este límite protege el número de WhatsApp de la empresa.`)
     setSelectedPhone(lead.phone_number)
     setVistaMode('mis_chats')
     if(lead.phone_number) cargarMensajes(lead.phone_number)
-
-    // Reemplazar con uno nuevo de la cola — excluir el lead recién tomado del conteo
-    const EXCLUIDOS_COLA = ['finalizado','rejected','not_interested','resolved','unresolved','closed','sin_respuesta']
-    const colaActual = bandejaLeads.filter(l =>
-      l.id !== lead.id &&   // excluir el que acaba de tomar
-      !l.assigned_to &&
-      !EXCLUIDOS_COLA.includes(l.status||'') &&
-      !l.archived
-    )
-    const idsEnMemoria = new Set([...colaActual.map(l => l.id), lead.id])
-    supabase
-      .from('amat_loan_leads')
-      .select('*')
-      .is('assigned_to', null)
-      .eq('archived', false)
-      .not('status', 'in', `(${EXCLUIDOS_COLA.map(e=>`"${e}"`).join(',')})`)
-      .order('updated_at', { ascending: false })
-      .range(colaActual.length, colaActual.length)
-      .then(({ data }) => {
-        if(data?.length) {
-          const nuevo = data[0] as LoanLead
-          if(!idsEnMemoria.has(nuevo.id)) {
-            setBotLeads(prev => [...prev, nuevo])
-          }
-        }
-      })
   }
 
   // Helper: cargar mensajes de un phone sin límite
