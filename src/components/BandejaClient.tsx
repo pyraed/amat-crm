@@ -503,18 +503,21 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved','sin_respuesta','closed']
         if(p.eventType==='UPDATE'){
           if(EXCLUIDOS.includes(updated.status||'') || (updated as any).archived){
-            // Solo sacar si realmente estaba en la lista — evita operaciones innecesarias
             setBotLeads(prev=>{
               const existe = prev.find(l=>l.id===updated.id)
               if(!existe) return prev
               return prev.filter(l=>l.id!==updated.id)
             })
           } else {
-            // Solo actualizar si ya estaba — nunca agregar leads nuevos por este camino
             setBotLeads(prev=>{
               const existe = prev.find(l=>l.id===updated.id)
-              if(!existe) return prev
-              return prev.map(l=>l.id===updated.id?updated:l)
+              if(existe) return prev.map(l=>l.id===updated.id?updated:l)
+              // Si el lead fue asignado a este operador (ej: tomó desde Base),
+              // agregarlo a botLeads aunque no estuviera antes
+              if(updated.assigned_to && updated.assigned_to === meRef.current?.username) {
+                return [...prev, updated]
+              }
+              return prev
             })
           }
           setBaseLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
