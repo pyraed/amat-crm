@@ -2271,6 +2271,8 @@ Este límite protege el número de WhatsApp de la empresa.`)
                             <button className="btn" style={{padding:'4px 9px',fontSize:11,borderColor:'#6EE7B7',color:'#065F46',background:'#ECFDF5'}}
                               onClick={()=>{
                                 if(lead.phone_number) cargarMensajes(lead.phone_number)
+                                setBotLeads(prev => prev.find(l=>l.id===lead.id) ? prev : [...prev, lead])
+                                setVistaMode('mis_chats')
                                 setTab('bandeja')
                                 setSelectedPhone(lead.phone_number)
                               }}>
@@ -2425,6 +2427,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                               e.stopPropagation()
                               setTab('bandeja')
                               setSelectedPhone(c.phone)
+                              setVistaMode('mis_chats')
                               // Cargar historial completo del chat
                               const {data:msgs} = await supabase.from('amat_messages')
                                 .select('*').eq('phone_number',c.phone)
