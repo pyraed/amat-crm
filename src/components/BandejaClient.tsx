@@ -2252,7 +2252,12 @@ Este límite protege el número de WhatsApp de la empresa.`)
                             <button className="btn" style={{padding:'4px 9px',fontSize:11,borderColor:'#6EE7B7',color:'#065F46',background:'#ECFDF5'}}
                               onClick={()=>{
                                 if(lead.phone_number) cargarMensajes(lead.phone_number)
-                                setBotLeads(prev => prev.find(l=>l.id===lead.id) ? prev : [...prev, lead])
+                                // Solo agregar a botLeads si ya está asignado al usuario actual
+                                // Si no está asignado, el chat abre igual (currentLead lo busca en baseLeads)
+                                // pero no aparece en Mis chats hasta que se tome formalmente
+                                if(lead.assigned_to === me?.username) {
+                                  setBotLeads(prev => prev.find(l=>l.id===lead.id) ? prev : [...prev, lead])
+                                }
                                 setVistaMode('mis_chats')
                                 setTab('bandeja')
                                 setSelectedPhone(lead.phone_number)
