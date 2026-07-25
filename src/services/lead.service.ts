@@ -311,8 +311,8 @@ export async function fetchVentasCerradas() {
  * Reactiva un lead archivado (cuando la persona vuelve a escribir).
  * Solo aplica a estados no_interested, sin_respuesta, unresolved.
  */
-export async function reactivarLead(leadId: number) {
-  return safeRun('lead.service:reactivar', () =>
+export async function reactivarLead(leadId: number, phone?: string | null) {
+  const res = await safeRun('lead.service:reactivar', () =>
     supabase.from('amat_loan_leads').update({
       status:      'new',
       archived:    false,
@@ -320,4 +320,22 @@ export async function reactivarLead(leadId: number) {
       updated_at:  new Date().toISOString(),
     }).eq('id', leadId)
   )
+  // Sincronizar amat_consultas — el lead volvió a cola
+  if(res.ok && phone) {
+    await syncConsultaEstadoLocal(phone, 'cola')
+  }
+  return res
+}
+
+// Helper interno para evitar importación circular
+async function syncConsultaEstadoLocal(phone: string, estado: string) {
+  try {
+    await supabase.from('amat_consultas').update({
+      estado,
+      vendedor:   null,
+      updated_at: new Date().toISOString(),
+    }).eq('phone', phone)
+  } catch(e) {
+    console.error('[lead.service:reactivar] Error sincronizando consulta:', e)
+  }
 }

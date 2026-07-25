@@ -22,6 +22,7 @@ import { REPARTICIONES, BANCOS, TEMPLATES } from '@/domain/entities/catalogs'
 import { fetchFlujoMap } from '@/services/consulta.service'
 import { fetchMensajesPhone } from '@/services/chat.service'
 import { exportarVentas } from '@/services/export.service'
+import { sincronizarEstados } from '@/services/consulta.service'
 import { useAuth } from '@/hooks/useAuth'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useBandeja } from '@/hooks/useBandeja'
@@ -519,6 +520,35 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         stats={stats} handleLogout={handleLogout}
       />
 
+      {/* ── Botón de sincronización — solo administradores ── */}
+      {me.role === 'Administrador' && (
+        <div style={{position:'fixed',bottom:16,right:16,zIndex:50}}>
+          <button
+            onClick={async () => {
+              const resultado = await sincronizarEstados()
+              if(resultado.error) {
+                alert(`❌ Error al sincronizar: ${resultado.error}`)
+              } else if(resultado.corregidos === 0) {
+                alert('✅ Todo sincronizado. No hay inconsistencias.')
+              } else {
+                alert(`✅ Se corrigieron ${resultado.corregidos} registro${resultado.corregidos !== 1 ? 's' : ''} desincronizados.`)
+                // Recargar consultas si estamos en ese tab
+                if(tab === 'consultas') loadConsultas()
+              }
+            }}
+            title="Verificar y corregir estados desincronizados"
+            style={{
+              padding:'8px 14px',borderRadius:10,border:'1px solid #E2E8F0',
+              background:'white',fontSize:12,fontWeight:600,cursor:'pointer',
+              fontFamily:'inherit',color:'#64748B',
+              boxShadow:'0 2px 8px rgba(0,0,0,0.1)',
+              display:'flex',alignItems:'center',gap:6,
+            }}>
+            🔄 Sincronizar estados
+          </button>
+        </div>
+      )}
+
       {/* ══ BANDEJA ══ */}
       {tabLoading && (
         <div style={{position:'absolute',inset:0,background:'rgba(255,255,255,0.7)',zIndex:50,display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -614,10 +644,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                         padding:'4px',minWidth:180,zIndex:101,
                       }} onClick={e=>e.stopPropagation()}>
                         <button onClick={()=>{
+                          // Vista previa: solo carga mensajes y abre el chat
+                          // NO agrega el lead a botLeads ni toca la DB
+                          // Si Nicolas escribe, sendReply lo auto-asignará en ese momento
                           setCurrentChatMsgs([])
                           setSelectedPhone(colaMenu.phone_number)
                           if(colaMenu.phone_number) cargarMensajes(colaMenu.phone_number)
-                          setBotLeads(prev => prev.find(l=>l.id===colaMenu.id) ? prev : [colaMenu,...prev])
                           setColaMenu(null); setColaMenuRef(null)
                         }} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'8px 10px',border:'none',background:'none',cursor:'pointer',borderRadius:6,fontSize:12,color:'#0F172A',fontWeight:500,fontFamily:'inherit',textAlign:'left'}}
                           onMouseEnter={e=>(e.currentTarget.style.background='#F8FAFC')}
