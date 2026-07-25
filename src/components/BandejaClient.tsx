@@ -10,12 +10,16 @@ import CampanaModal from '@/components/CampanaModal'
 import CalculadorOferta from '@/components/CalculadorOferta'
 import { supabase } from '@/lib/supabase'
 import { LoanLead, Message } from '@/lib/types'
-
-// ─────────────────────────────────────────────
-//  USUARIOS
-// ─────────────────────────────────────────────
-type Role = 'Administrador' | 'Vendedor' | 'Cobranza'
-type SysUser = { id:string; username:string; password:string; displayName:string; role:Role; initials:string; color:string }
+import { USERS, SysUser, Role } from '@/domain/entities/users'
+import {
+  LEAD_STATUS, COBRANZA_STATUS, ESTADOS_FINALES,
+  OPCIONES_VENTAS, OPCIONES_VENTAS_INTERMEDIOS, OPCIONES_COBRANZAS,
+  LeadEstado, StatusMeta,
+  getStatusMeta, getEstadosFinalesPorFlujo, getFlujoLabel,
+} from '@/domain/entities/leadStatus'
+import { REPARTICIONES, BANCOS, REJECTION_REASONS, TEMPLATES } from '@/domain/entities/catalogs'
+import { STATUS_A_CONSULTA, consultaStatusToLeadStatus } from '@/domain/workflows/statusMapping'
+import { TABLAS_CUOTA, calcularCuotaAMAT } from '@/domain/calculations/cuotas'
 
 // ── Tipos de formularios ──────────────────────────────────
 type VentaForm = {
@@ -34,161 +38,11 @@ type ConsultaEditForm = {
   estado:    string
 }
 
-// LeadEstado: valores válidos de status en amat_loan_leads
-type LeadEstado = 'new' | 'contacted' | 'contactado' | 'closed' | 'rejected' | 'not_interested' | 'sin_respuesta' | 'resolved' | 'unresolved' | 'finalizado'
-
-const USERS: SysUser[] = [
-  { id:'1',  username:'Walter',   password:'Walter#2026',  displayName:'Walter',   role:'Administrador', initials:'WA', color:'#B45309' },
-  { id:'2',  username:'Muse',     password:'Muse#2026',    displayName:'Muse',     role:'Administrador', initials:'MU', color:'#92400E' },
-  { id:'9',  username:'Nicolas',  password:'Nicolas2026',  displayName:'Nicolas',  role:'Administrador', initials:'NI', color:'#1D4ED8' },
-  { id:'3',  username:'Valentin', password:'Mutual2026',   displayName:'Valentin', role:'Vendedor',      initials:'VA', color:'#D97706' },
-  { id:'4',  username:'Juan',     password:'Mutual2026',   displayName:'Juan',     role:'Vendedor',      initials:'JU', color:'#F59E0B' },
-  { id:'5',  username:'Eliseo',   password:'Mutual2026',   displayName:'Eliseo',   role:'Vendedor',      initials:'EL', color:'#10B981' },
-  { id:'6',  username:'Maxi',     password:'Mutual2026',   displayName:'Maxi',     role:'Vendedor',      initials:'MX', color:'#3B82F6' },
-  { id:'7',  username:'Facundo',  password:'Mutual2026',   displayName:'Facundo',  role:'Vendedor',      initials:'FA', color:'#8B5CF6' },
-  { id:'8',  username:'Emanuel',  password:'Mutual2026',   displayName:'Emanuel',  role:'Cobranza',      initials:'EM', color:'#7C3AED' },
-  { id:'10', username:'Matias',   password:'Mutual2026',   displayName:'Matias',   role:'Vendedor',      initials:'MT', color:'#0EA5E9' },
-  { id:'11', username:'Gonzalo',  password:'Mutual2026',   displayName:'Gonzalo',  role:'Vendedor',      initials:'GO', color:'#06B6D4' },
-  { id:'12', username:'Mariano',  password:'Mutual2026',   displayName:'Mariano',  role:'Administrador', initials:'MR', color:'#EC4899' },
-  { id:'13', username:'VENTAS_MG1', password:'Mg2026', displayName:'Ventas MG1', role:'Vendedor', initials:'M1', color:'#F97316' },
-  { id:'14', username:'VENTAS_MG2', password:'Mg2026', displayName:'Ventas MG2', role:'Vendedor', initials:'M2', color:'#84CC16' },
-  { id:'15', username:'VENTAS_MG3', password:'Mg2026', displayName:'Ventas MG3', role:'Vendedor', initials:'M3', color:'#06B6D4' },
-]
-
-// ─────────────────────────────────────────────
-//  CONFIGURACIÓN DE ESTADOS Y ETIQUETAS
-// ─────────────────────────────────────────────
-// ═══ MODELO CANÓNICO DE ESTADOS ═══
-// Ventas:    pendiente (new/contacted) → vendido (closed) / rechazado (rejected) / no interesado (not_interested)
-// Cobranzas: pendiente (new/contacted) → resuelto (resolved) / no resuelto (unresolved)
-// Todo estado final implica archived: true — un lead archivado nunca vuelve a bandeja/cola.
-const ESTADOS_FINALES = ['closed','rejected','not_interested','resolved','unresolved','sin_respuesta']
-
-const LEAD_STATUS: Record<string,{label:string;color:string;bg:string;text:string;desc:string}> = {
-  new:           { label:'Cola',           color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En cola, sin tomar' },
-  contacted:     { label:'Pendiente',      color:'#3B82F6', bg:'#EFF6FF', text:'#1D4ED8', desc:'En bandeja del operador' },
-  not_interested:{ label:'No interesado',  color:'#6B7280', bg:'#F9FAFB', text:'#374151', desc:'No quiere la oferta' },
-  sin_respuesta: { label:'Sin respuesta',  color:'#94A3B8', bg:'#F1F5F9', text:'#475569', desc:'No contestó los mensajes' },
-  contactado:    { label:'Contactado',     color:'#3B82F6', bg:'#EFF6FF', text:'#1D4ED8', desc:'Respondió, en conversación activa' },
-  rejected:      { label:'Rechazado',      color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No cumple requisitos' },
-  closed:        { label:'Vendido',        color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Operación concretada' },
-  // legacy — solo para mostrar registros históricos, no seleccionables
-  finalizado:    { label:'Cerrado',        color:'#6B7280', bg:'#F3F4F6', text:'#374151', desc:'Conversación finalizada (histórico)' },
-  resolved:      { label:'Resuelto',       color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Caso resuelto' },
-  unresolved:    { label:'No resuelto',    color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No se pudo resolver' },
-}
-
-// Opciones seleccionables en el modal Cambiar estado — por flujo, sin duplicados
-const OPCIONES_VENTAS    = ['closed','rejected','not_interested','sin_respuesta'] as const
-const OPCIONES_VENTAS_INTERMEDIOS = ['contactado'] as const
-const OPCIONES_COBRANZAS = ['resolved','unresolved'] as const
-
-// Mapeo canónico único: status de amat_loan_leads → estado de amat_consultas
-const STATUS_A_CONSULTA: Record<string,string> = {
-  new:            'cola',
-  contacted:      'pendiente',
-  contactado:     'contactado',
-  closed:         'resuelto',
-  resolved:       'resuelto',
-  rejected:       'cerrado_rechazado',
-  not_interested: 'cerrado_no_interesado',
-  sin_respuesta:  'cerrado',
-  unresolved:     'cerrado',
-  finalizado:     'cerrado',
-}
-
-// Estados exclusivos para flujo COBRANZA
-const COBRANZA_STATUS: Record<string,{label:string;color:string;bg:string;text:string;desc:string}> = {
-  new:       { label:'Pendiente',   color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En cola, sin tomar' },
-  contacted: { label:'Pendiente',   color:'#F59E0B', bg:'#FFFBEB', text:'#92400E', desc:'En bandeja del operador' },
-  resolved:  { label:'Resuelto',    color:'#10B981', bg:'#ECFDF5', text:'#065F46', desc:'Caso resuelto exitosamente' },
-  unresolved:{ label:'No resuelto', color:'#EF4444', bg:'#FEF2F2', text:'#991B1B', desc:'No se pudo resolver' },
-  finalizado:{ label:'Cerrado',     color:'#6B7280', bg:'#F3F4F6', text:'#374151', desc:'Conversación finalizada (histórico)' },
-}
-
-// Motivos de rechazo / no interés
-const REJECTION_REASONS = [
-  'No cumple requisitos',
-  'No quiere ser contactado',
-  'Número incorrecto / no existe',
-  'Ya tiene préstamo activo',
-  'Otro',
-]
-
-const REPARTICIONES = [
-  'MINISTERIO DE SEGURIDAD',
-  'MINISTERIO DE EDUCACION',
-  'SERVICIO PENITENCIARIO BONAERENSE',
-  'MINISTERIO DE SALUD',
-  'EJERCITO ARGENTINO',
-  'GENDARMERIA',
-  'FUERZAS ARMADAS',
-  'OTRA REPARTICION',
-]
-
-const BANCOS = [
-  'BANCO PROVINCIA','BANCO NACION','BANCO GALICIA',
-  'BANCO SANTANDER','BANCO ICBC','BANCO MACRO','BANCO PATAGONIA','OTRO',
-]
-
-// Plantillas de mensaje (estructura lista para Meta)
-const TEMPLATES = [
-  {
-    id:'ayuda_economica',
-    name:'Ayuda Económica — Primer contacto',
-    category:'MARKETING',
-    body:`Hola {{nombre}} 👋 Te contactamos desde *AMAT* (Asociación Mutual Amarilla de Trabajadores).\n\nComo empleado/a de {{reparticion}}, podés acceder a una *Ayuda Económica* con descuento directo en tu recibo de sueldo.\n\n¿Te interesa que te contemos más? Respondé *SI* para continuar.`,
-    variables:['nombre','reparticion'],
-  },
-  {
-    id:'recontacto',
-    name:'Recontacto — Sin respuesta previa',
-    category:'MARKETING',
-    body:`Hola {{nombre}}, te escribimos nuevamente desde *AMAT*.\n\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Es sin garante y con descuento por recibo. ¿Podemos ayudarte?`,
-    variables:['nombre'],
-  },
-  {
-    id:'info_general',
-    name:'Información general',
-    category:'UTILITY',
-    body:`Hola {{nombre}} 👋 Desde *AMAT* te informamos que contamos con Ayudas Económicas para empleados públicos de la Provincia de Buenos Aires.\n\n✅ Sin garante\n✅ Descuento por recibo\n✅ Aprobación rápida\n\nEscribinos al *[número]* para más info.`,
-    variables:['nombre'],
-  },
-]
 
 const PAGE_SIZE = 50
 
 type Props = { initialLeads: LoanLead[]; initialMessages: Message[] }
 type Tab = 'bandeja' | 'consultas' | 'base' | 'reportes'
-
-// ─────────────────────────────────────────────
-//  MENSAJES DE EJEMPLO (simulados del bot)
-// ─────────────────────────────────────────────
-
-// ── Grilla AMAT para calcular valor de cuota ──────────────
-const TABLAS_CUOTA: Record<number, Record<number,number>> = {
-  6:  {100000:20833.58,110000:22916.94,150000:31250.37,200000:41667.16,250000:52083.95,300000:62500.74,350000:72917.53,400000:83334.32,450000:93751.11,500000:104167.9},
-  12: {30000:3606.13,40000:4808.17,50000:6010.21,60000:7212.25,70000:8414.3,80000:9616.64,90000:10818.38,100000:12020.42,110000:13222.46,120000:14424.51,130000:15626.55,140000:16828.59,150000:19030.63,160000:19232.68,170000:20434.72,180000:21636.76,190000:22838.8,200000:24040.84,210000:25242.89,220000:26444.93,230000:27646.97,240000:28848.01,250000:30051.06,260000:31253.1,270000:32455.14,280000:33657.18,290000:34859.22,300000:36061.27,310000:37263.31,320000:38465.35,330000:39667.39,340000:40869.44,350000:42071.48,360000:43273.52,370000:44475.56,380000:45667.6,390000:46879.65,400000:48081.69,410000:49283.73,420000:50485.77,430000:51687.82,440000:52889.86,450000:54091.9,460000:55293.94,470000:56495.98,480000:57698.03,490000:59800.07,500000:60102.11,510000:61304.15,520000:62506.2,530000:63708.24,540000:64910.28,550000:66112.32,560000:67314.36,570000:68516.41,580000:69718.45,590000:70920.49,600000:72112.53,610000:73324.58,620000:74526.62,630000:75728.66,640000:76930.7,650000:78132.74,660000:79334.79,670000:80536.83,680000:81738.87,690000:82940.91,700000:84142.96,710000:85345.0,720000:86547.04,730000:87749.08,740000:88951.12,750000:90153.17,760000:91355.21,770000:92557.25,780000:93759.29,790000:94961.34,800000:96163.38,810000:97365.42,820000:98567.46,830000:99769.5,840000:100971.55,850000:102173.59,860000:103375.63,870000:104577.67,880000:105779.72,890000:106981.76,900000:108183.8,910000:109385.84,920000:110587.88,930000:111789.93,940000:112991.97,950000:114194.01,960000:115396.05,970000:116598.1,980000:117800.14,990000:119002.18,1000000:120204.22,1050000:126214.43,1100000:132224.64,1150000:138234.86,1200000:144245.07,1250000:150255.28,1300000:156265.49,1350000:162275.7,1400000:168285.91,1450000:174296.12,1500000:180306.33},
-  18: {30000:2771.82,40000:3695.76,50000:4619.7,60000:5543.64,70000:6467.58,80000:7391.51,90000:8315.45,100000:9239.39,110000:10163.33,120000:11087.27,130000:12011.21,140000:12935.15,150000:13859.09,160000:14783.03,170000:15706.87,180000:16630.91,190000:17554.85,200000:18478.79,210000:19402.73,220000:20326.67,230000:21250.6,240000:22174.54,250000:23098.48,260000:24022.42,270000:24946.36,280000:25870.3,290000:26794.24,300000:27718.18,310000:28642.12,320000:29566.06,330000:30490.0,340000:31413.94,350000:32337.88,360000:33261.82,370000:34185.76,380000:35109.69,390000:36033.63,400000:36957.57,410000:37881.51,420000:38805.45,430000:39729.39,440000:40653.33,450000:41557.27,460000:42501.21,470000:43425.15,480000:44349.09,490000:45273.03,500000:46196.97,510000:47120.91,520000:48044.85,530000:48968.78,540000:49892.72,550000:50816.66,560000:51740.6,570000:52664.54,580000:53588.48,590000:54512.42,600000:55436.36,610000:56360.3,620000:57284.24,630000:58208.18,640000:59132.12,650000:60056.06,660000:60980.0,670000:61903.94,680000:62827.87,690000:63751.81,700000:64675.75,710000:65599.69,720000:66523.63,730000:67447.57,740000:68371.51,750000:69295.45,760000:70219.39,770000:71143.33,780000:72067.27,790000:72991.21,800000:73915.15,810000:74839.09,820000:75763.03,830000:76686.96,840000:77610.9,850000:78534.84,860000:79458.78,870000:80382.72,880000:81306.66,890000:82230.6,900000:83154.54,910000:84078.48,920000:85002.42,930000:85926.36,940000:86850.3,950000:87774.24,960000:88698.18,970000:89622.12,980000:90546.05,990000:91469.99,1000000:92393.93,1050000:97013.63,1100000:101633.33,1150000:106253.02,1200000:110872.72,1250000:115492.42,1300000:120112.11,1350000:124731.81,1400000:129351.51,1450000:133971.2,1500000:138590.9},
-  24: {30000:2376.31,40000:3168.41,50000:3960.51,60000:4752.62,70000:5544.72,80000:6336.82,90000:7128.92,100000:7921.03,110000:8713.13,120000:9505.23,130000:10297.33,140000:11089.44,150000:11881.54,160000:12673.64,170000:13465.74,180000:14257.85,190000:15049.95,200000:15842.05,210000:16634.15,220000:17426.26,230000:18218.36,240000:19010.46,250000:19802.56,260000:20594.67,270000:21386.77,280000:22178.87,290000:22970.98,300000:23736.08,310000:24555.18,320000:25347.28,330000:26139.39,340000:26931.49,350000:27723.59,360000:28515.69,370000:29307.8,380000:30099.9,390000:30892.0,400000:31684.1,410000:32476.21,420000:33268.31,430000:34060.41,440000:34852.51,450000:35644.62,460000:36436.72,470000:37228.82,480000:38020.92,490000:38813.03,500000:39605.13,510000:40397.23,520000:41189.33,530000:41981.44,540000:42773.54,550000:43565.64,560000:44357.75,570000:45149.85,580000:45941.95,590000:46734.05,600000:47526.16,610000:48318.26,620000:49110.36,630000:49902.46,640000:50694.57,650000:51486.67,660000:52278.77,670000:53070.87,680000:53862.98,690000:54655.08,700000:55447.18,710000:56239.28,720000:57031.39,730000:57823.49,740000:58615.59,750000:59407.69,760000:60199.8,770000:60991.9,780000:61784.0,790000:62576.1,800000:63368.21,810000:64160.31,820000:64952.41,830000:65744.52,840000:66536.62,850000:67328.72,860000:68120.82,870000:68912.93,880000:69705.03,890000:70497.13,900000:71289.23,910000:72081.34,920000:72873.44,930000:73665.54,940000:74457.64,950000:75249.75,960000:76041.85,970000:76833.95,980000:77626.05,990000:78418.16,1000000:79210.26,1050000:83170.77,1100000:87131.29,1150000:91091.8,1200000:95052.31,1250000:99012.82,1300000:102973.34,1350000:106933.85,1400000:110894.36,1450000:114854.88,1500000:118815.39},
-}
-
-function calcularCuotaAMAT(entidad: string, linea: string, reparticion: string, monto: number, cuotas: number): number {
-  const vc = TABLAS_CUOTA[cuotas]?.[monto] || 0
-  if(linea === 'Ayuda') {
-    if(reparticion.includes('EDUCACION')) return 28996
-    if(reparticion.includes('SALUD')) return 15464
-    return vc
-  }
-  const memb: Record<string,number> = {
-    'MINISTERIO DE SEGURIDAD': 4300, 'SERVICIO PENITENCIARIO BONAERENSE': 4300,
-    'MINISTERIO DE EDUCACION': 9900, 'MINISTERIO DE SALUD': 5172,
-  }
-  const cs = memb[reparticion] || 4300
-  const med = monto<=200000?3850:monto<=300000?6150:monto<=400000?8150:monto<=600000?11850:14850
-  return vc + cs + med
-}
-
 
 // ─────────────────────────────────────────────
 //  HELPER: safeQuery
@@ -1542,24 +1396,15 @@ Este límite protege el número de WhatsApp de la empresa.`)
 
   if(!mounted) return null
 
-  const sc=(status:string)=>LEAD_STATUS[status]||LEAD_STATUS.new
-  const scCob=(status:string)=>COBRANZA_STATUS[status]||COBRANZA_STATUS.new
-  const scFor=(status:string,phone:string|null)=>{
-    const flujo = phone ? flujoMap[phone] : 'solicitud'
-    return flujo==='cobranzas' ? scCob(status) : sc(status)
-  }
-  const getEstadosFor=(phone:string|null)=>{
+  const sc    = (status:string) => getStatusMeta(status, 'solicitud')
+  const scCob = (status:string) => getStatusMeta(status, 'cobranzas')
+  const scFor = (status:string, phone:string|null) => getStatusMeta(status, phone ? flujoMap[phone] : 'solicitud')
+  const getEstadosFor = (phone:string|null) => {
     const flujo = phone ? flujoMap[phone] : 'solicitud'
     return flujo==='cobranzas' ? COBRANZA_STATUS : LEAD_STATUS
   }
-  const getEstadosFinalesFor=(phone:string|null)=>{
-    const flujo = phone ? flujoMap[phone] : 'solicitud'
-    return flujo==='cobranzas'
-      ? ['resolved','unresolved']
-      : ['not_interested','rejected','closed']
-  }
-  const getFlujoLabel=(phone:string|null)=>
-    phone && flujoMap[phone]==='cobranzas' ? 'Cobranzas' : 'Ventas'
+  const getEstadosFinalesFor = (phone:string|null) => getEstadosFinalesPorFlujo(phone ? flujoMap[phone] : 'solicitud')
+  const getFlujoLabelFor = (phone:string|null) => getFlujoLabel(phone ? flujoMap[phone] : 'solicitud')
 
   // ══════════════════════════════════════════
   //  PANTALLA DE LOGIN
@@ -1917,7 +1762,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                             background:flujoMap[currentLead.phone_number||'']==='cobranzas'?'#F5F3FF':'#EFF6FF',
                             color:flujoMap[currentLead.phone_number||'']==='cobranzas'?'#6D28D9':'#1D4ED8',
                             display:'flex',alignItems:'center',gap:4,fontFamily:'inherit'}}>
-                          {getFlujoLabel(currentLead.phone_number)} <span style={{fontSize:9}}>▼</span>
+                          {getFlujoLabelFor(currentLead.phone_number)} <span style={{fontSize:9}}>▼</span>
                         </button>
                       )}
                       {currentLead.assigned_to&&<span>· 👤 {currentLead.assigned_to}</span>}
@@ -3298,15 +3143,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
                 // 2. Sincronizar amat_loan_leads con el estado elegido
                 if(consultaSelected.phone) {
                   const esCob = consultaSelected.flujo === 'cobranzas'
-                  const CONSULTA_A_STATUS: Record<string,string> = {
-                    pendiente:              'contacted',
-                    contactado:             'contactado',
-                    resuelto:               esCob ? 'resolved' : 'closed',
-                    cerrado:                esCob ? 'unresolved' : 'not_interested',
-                    cerrado_rechazado:      'rejected',
-                    cerrado_no_interesado:  'not_interested',
-                  }
-                  const nuevoStatus = CONSULTA_A_STATUS[consultaEdit.estado] || 'contacted'
+                  const nuevoStatus = consultaStatusToLeadStatus(consultaEdit.estado, consultaSelected.flujo || 'solicitud')
                   const esFinal = ESTADOS_FINALES.includes(nuevoStatus)
 
                   const resLead = await safeQuery('gestionar:getLead', () =>

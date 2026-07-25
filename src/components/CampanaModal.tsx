@@ -3,31 +3,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { LoanLead } from '@/lib/types'
+import { TEMPLATES } from '@/domain/entities/catalogs'
 
-// ─────────────────────────────────────────────
-//  PLANTILLAS (mismas que el sistema)
-// ─────────────────────────────────────────────
-const TEMPLATES = [
-  {
-    id: 'ayuda_economica',
-    name: 'Ayuda Económica — Primer contacto',
-    category: 'MARKETING',
-    body: `Hola {{nombre}} 👋 Te contactamos desde *AMAT* (Asociación Mutual Amarilla de Trabajadores).\n\nComo empleado/a de {{reparticion}}, podés acceder a una *Ayuda Económica* con descuento directo en tu recibo de sueldo.\n\n¿Te interesa que te contemos más? Respondé *SI* para continuar.`,
-    variables: ['nombre', 'reparticion'],
-    metaName: 'primer_contacto_esp',
-  },
-  {
-    id: 'recontacto',
-    name: 'Recontacto — Sin respuesta previa',
-    category: 'MARKETING',
-    body: `Hola {{nombre}}, te escribimos nuevamente desde *AMAT*.\n\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Es sin garante y con descuento por recibo.\n\n¿Podemos ayudarte?`,
-    variables: ['nombre'],
-    metaName: 'recontacto',
-  },
-  // info_general eliminada — no existe en Meta todavía
-]
-
-const REPARTICIONES = [
+// Reparticiones reducidas para el filtro de segmento de campaña.
+// No usar REPARTICIONES de catalogs — este subconjunto es intencional:
+// solo las reparticiones con volumen de campaña activo.
+const REPARTICIONES_CAMPANA = [
   'MINISTERIO DE SEGURIDAD',
   'MINISTERIO DE EDUCACION',
   'SERVICIO PENITENCIARIO BONAERENSE',
@@ -549,7 +530,7 @@ export default function CampanaModal({ onClose }: Props) {
                     <label style={s.label}>Repartición</label>
                     <select style={s.select} value={filterRep} onChange={e => setFilterRep(e.target.value)}>
                       <option value="all">Todas</option>
-                      {REPARTICIONES.map(r => <option key={r} value={r}>{r}</option>)}
+                      {REPARTICIONES_CAMPANA.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </div>
                   <div>
