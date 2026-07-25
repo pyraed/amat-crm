@@ -10,7 +10,7 @@ import CampanaModal from '@/components/CampanaModal'
 import CalculadorOferta from '@/components/CalculadorOferta'
 import { supabase } from '@/lib/supabase'
 import { LoanLead, Message } from '@/lib/types'
-import { SysUser } from '@/domain/entities/users'
+import { USERS, SysUser } from '@/domain/entities/users'
 import {
   LEAD_STATUS, COBRANZA_STATUS, ESTADOS_FINALES,
   OPCIONES_VENTAS, OPCIONES_VENTAS_INTERMEDIOS, OPCIONES_COBRANZAS,
