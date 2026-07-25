@@ -13,14 +13,12 @@ import {
 } from '@/components/modals/Modals'
 import { supabase } from '@/lib/supabase'
 import { LoanLead, Message } from '@/lib/types'
-import { USERS, SysUser } from '@/domain/entities/users'
+import { USERS } from '@/domain/entities/users'
 import {
   LEAD_STATUS, COBRANZA_STATUS, ESTADOS_FINALES,
   getStatusMeta, getEstadosFinalesPorFlujo, getFlujoLabel,
 } from '@/domain/entities/leadStatus'
 import { REPARTICIONES, BANCOS, TEMPLATES } from '@/domain/entities/catalogs'
-import { STATUS_A_CONSULTA } from '@/domain/workflows/statusMapping'
-import { TABLAS_CUOTA } from '@/domain/calculations/cuotas'
 import { fetchFlujoMap } from '@/services/consulta.service'
 import { fetchMensajesPhone } from '@/services/chat.service'
 import { exportarVentas } from '@/services/export.service'
@@ -40,12 +38,6 @@ type VentaForm = {
   cuotas:      string
   valor_cuota: string
   notas:       string
-}
-
-type ConsultaEditForm = {
-  vendedor:  string
-  situacion: string
-  estado:    string
 }
 
 
@@ -86,18 +78,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [currentChatMsgs, setCurrentChatMsgs] = useState<Message[]>([])
 
   // ── Bandeja ───────────────────────────────────────────────────────────────
+  const cargarMensajesInline = (phone: string) => {
+    fetchMensajesPhone(phone).then(msgs => {
+      setCurrentChatMsgs(msgs)
+      setMessages(prev => [...prev.filter(m => m.phone_number !== phone), ...msgs])
+    })
+  }
+
   const bandeja = useBandeja(
     me, tab, messages, initialMessages,
     setSelectedPhone, setVistaMode,
-    (phone: string) => {
-      // cargarMensajes inline — evita dependencia circular con useChat
-      import('@/services/chat.service').then(({ fetchMensajesPhone }) => {
-        fetchMensajesPhone(phone).then(msgs => {
-          setCurrentChatMsgs(msgs)
-          setMessages(prev => [...prev.filter(m => m.phone_number !== phone), ...msgs])
-        })
-      })
-    }
+    cargarMensajesInline,
   )
 
   // ── Base ──────────────────────────────────────────────────────────────────
@@ -177,7 +168,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // Reportes destructuring
   const {
-    reporteLeads, pipelineFlujoMap,
+    reporteLeads, pipelineFlujoMap: reporteFlujoMap,
     reporteMode, setReporteMode,
     reportePeriodo, setReportePeriodo,
     reporteDesde, setReporteDesde,
@@ -208,11 +199,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   }
 
   const cargarMensajes = (phone: string) => {
-    import('@/services/chat.service').then(({ fetchMensajesPhone }) => {
-      fetchMensajesPhone(phone).then(msgs => {
-        setCurrentChatMsgs(msgs)
-        setMessages(prev => [...prev.filter(m => m.phone_number !== phone), ...msgs])
-      })
+    fetchMensajesPhone(phone).then(msgs => {
+      setCurrentChatMsgs(msgs)
+      setMessages(prev => [...prev.filter(m => m.phone_number !== phone), ...msgs])
     })
   }
 
@@ -350,7 +339,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const lead = currentLead || editTarget
     if(!lead || !rejectReason) return
     const note = `Rechazado: ${rejectReason}`
-    await bandeja.updateStatus(lead.id, 'rejected', lead.notes ? lead.notes + '\n' + note : note)
+    const notaFinal = lead.notes ? lead.notes + '\n' + note : note
+    await bandeja.cambiarEstado(lead, 'rejected', { notes: notaFinal })
     setShowRejectModal(false); setRejectReason('')
   }
 
@@ -404,17 +394,25 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const currentLead = allLeads.find(l=>l.phone_number===selectedPhone)
-    || colaLeadsState.find(l=>l.phone_number===selectedPhone)
-    || baseLeads.find(l=>l.phone_number===selectedPhone)
+  // useMemo evita buscar en los arrays en cada render del componente
+  const currentLead = useMemo(() => {
+    if(!selectedPhone) return undefined
+    return allLeads.find(l=>l.phone_number===selectedPhone)
+      || colaLeadsState.find(l=>l.phone_number===selectedPhone)
+      || baseLeads.find(l=>l.phone_number===selectedPhone)
+  }, [allLeads, colaLeadsState, baseLeads, selectedPhone])
 
-  const currentMsgs = (
-    currentChatMsgs.length > 0 && currentChatMsgs[0]?.phone_number === selectedPhone
-  )
-    ? currentChatMsgs
-    : messages
-        .filter(m=>m.phone_number===selectedPhone)
-        .sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())
+  // currentMsgs: usa el cache local si está disponible para el phone activo,
+  // sino filtra del array global. El useMemo evita recomputar en cada render.
+  const currentMsgs = useMemo(() => {
+    if(!selectedPhone) return []
+    if(currentChatMsgs.length > 0 && currentChatMsgs[0]?.phone_number === selectedPhone) {
+      return currentChatMsgs
+    }
+    return messages
+      .filter(m=>m.phone_number===selectedPhone)
+      .sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())
+  }, [currentChatMsgs, messages, selectedPhone])
 
   const stats = useMemo(()=>({
     inbound:  bandejaLeads.length,
@@ -1283,7 +1281,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       {tab==='reportes'&&(
         <TabReportes
           reporteLeads={reporteLeads}
-          pipelineFlujoMap={pipelineFlujoMap}
+          pipelineFlujoMap={reporteFlujoMap}
           reporteMode={reporteMode}
           setReporteMode={setReporteMode}
           reportePeriodo={reportePeriodo}
