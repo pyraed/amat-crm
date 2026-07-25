@@ -20,6 +20,21 @@ import {
 import { REPARTICIONES, BANCOS, REJECTION_REASONS, TEMPLATES } from '@/domain/entities/catalogs'
 import { STATUS_A_CONSULTA, consultaStatusToLeadStatus } from '@/domain/workflows/statusMapping'
 import { TABLAS_CUOTA, calcularCuotaAMAT } from '@/domain/calculations/cuotas'
+import {
+  fetchConsultas, fetchFlujoMap, fetchCampanasRecientes,
+  updateConsulta, insertConsulta, syncConsultaEstado,
+} from '@/services/consulta.service'
+import {
+  fetchBase, fetchBandejaLeads, fetchLeadById, fetchCerradosHoy,
+  cambiarEstadoLead, tomarLead, autoAsignarLead, editLead, saveLeadNote,
+  reactivarLead,
+} from '@/services/lead.service'
+import {
+  fetchMensajesPhone, puedeEnviarPlantilla, registrarCampana,
+  sendReply as chatSendReply, sendTemplate as chatSendTemplate,
+} from '@/services/chat.service'
+import { fetchReporteData } from '@/services/report.service'
+import { exportarVentas } from '@/services/export.service'
 
 // ── Tipos de formularios ──────────────────────────────────
 type VentaForm = {
@@ -44,49 +59,7 @@ const PAGE_SIZE = 50
 type Props = { initialLeads: LoanLead[]; initialMessages: Message[] }
 type Tab = 'bandeja' | 'consultas' | 'base' | 'reportes'
 
-// ─────────────────────────────────────────────
-//  HELPER: safeQuery
-//  Wrapper para todas las operaciones Supabase.
-//  - Captura errores y los loguea con contexto
-//  - Devuelve { data, error, ok } siempre consistente
-//  - El caller decide qué mostrar al usuario según ok
-// ─────────────────────────────────────────────
-type SafeResult<T> = { data: T | null; error: string | null; ok: boolean }
 
-async function safeQuery<T>(
-  context: string,
-  fn: () => Promise<{ data: T | null; error: any }>
-): Promise<SafeResult<T>> {
-  try {
-    const { data, error } = await fn()
-    if (error) {
-      console.error(`[${context}] Error Supabase:`, error)
-      return { data: null, error: error.message || 'Error desconocido', ok: false }
-    }
-    return { data, error: null, ok: true }
-  } catch (e: any) {
-    console.error(`[${context}] Excepción:`, e)
-    return { data: null, error: e?.message || 'Error de red', ok: false }
-  }
-}
-
-// Variante para operaciones sin retorno de datos (UPDATE/INSERT donde no necesitamos data)
-async function safeRun(
-  context: string,
-  fn: () => Promise<{ error: any }>
-): Promise<{ ok: boolean; error: string | null }> {
-  try {
-    const { error } = await fn()
-    if (error) {
-      console.error(`[${context}] Error Supabase:`, error)
-      return { ok: false, error: error.message || 'Error desconocido' }
-    }
-    return { ok: true, error: null }
-  } catch (e: any) {
-    console.error(`[${context}] Excepción:`, e)
-    return { ok: false, error: e?.message || 'Error de red' }
-  }
-}
 
 export default function BandejaClient({ initialLeads, initialMessages }: Props) {
   // AUTH
@@ -296,50 +269,38 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   const status = (lead.status || '') as string
 
                   // Reactivación cuando la persona vuelve a escribir:
-                  // - closed (vendido) → entra a cola SIN cambiar estado
-                  // - todos los demás estados finales → resetear a new y volver a cola
+                  // - closed/rejected: NO se reactivan nunca
+                  // - not_interested, sin_respuesta, unresolved → resetear a new y volver a cola
                   if(ESTADOS_FINALES.includes(status)) {
-                    // Vendido y Rechazado: NO se reactivan nunca
                     if(status === 'closed' || status === 'rejected') return
 
-                    // not_interested, sin_respuesta, unresolved → resetear a new y volver a cola
-                    supabase.from('amat_loan_leads')
-                      .update({ status:'new', archived:false, assigned_to:undefined as any, updated_at:new Date().toISOString() })
-                      .eq('id', lead.id)
-                      .then(()=>{
-                        const r = {...lead, status:'new', archived:false, assigned_to:undefined as any}
-                        setColaLeadsState(p2=>p2.find(l=>l.id===lead.id)?p2:[r as LoanLead,...p2])
-                        setColaTotal(t=>t+1)
-                      })
+                    reactivarLead(lead.id).then(res => {
+                      if(!res.ok) return
+                      const r = {...lead, status:'new' as any, archived:false, assigned_to:null}
+                      setColaLeadsState(p2=>p2.find(l=>l.id===lead.id)?p2:[r as LoanLead,...p2])
+                      setColaTotal(t=>t+1)
+                    })
                     if(lead.phone_number) {
-                      supabase.from('amat_consultas')
-                        .update({ estado:'cola', updated_at:new Date().toISOString() })
-                        .eq('phone', lead.phone_number)
+                      syncConsultaEstado(lead.phone_number, 'cola')
                     }
-                    supabase.from('amat_consultas').select('phone,flujo').eq('phone',msg.phone_number).single()
-                      .then(({data:cdata})=>{ if(cdata?.phone) setFlujoMap(prev=>({...prev,[cdata.phone]:cdata.flujo||'solicitud'})) })
+                    fetchFlujoMap([msg.phone_number]).then(map => setFlujoMap(prev=>({...prev,...map})))
                     return
                   }
 
-                  // Lead activo normal — solo agregar a cola si no tiene asignado
+                  // Lead activo normal
                   if((lead as any).archived) return
                   if(lead.assigned_to) {
-                    // Tiene dueño — actualizar en botLeads si está, o agregar si es del usuario actual
-                    // (puede llegar antes de que termine la carga inicial de botLeads)
                     setBotLeads(prev => {
                       const existe = prev.find(l => l.phone_number === lead.phone_number)
                       if(existe) return prev.map(l => l.phone_number === lead.phone_number ? lead : l)
-                      // Si es del operador actual, agregar — no tocar la cola
                       if(lead.assigned_to === meRef.current?.username) return [...prev, lead]
                       return prev
                     })
                     return
                   }
-                  // Sin dueño y no archivado → sí va a cola
                   setColaLeadsState(p2=>p2.find(l=>l.phone_number===lead.phone_number)?p2:[lead,...p2])
                   setColaTotal(t=>t+1)
-                  supabase.from('amat_consultas').select('phone,flujo').eq('phone',msg.phone_number).single()
-                    .then(({data:cdata})=>{ if(cdata?.phone) setFlujoMap(prev=>({...prev,[cdata.phone]:cdata.flujo||'solicitud'})) })
+                  fetchFlujoMap([msg.phone_number]).then(map => setFlujoMap(prev=>({...prev,...map})))
                 }
               })
           }
@@ -405,12 +366,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // Cargar leads de la bandeja (solo los que tienen mensajes)
   useEffect(()=>{
-    const hoy = new Date().toISOString().split('T')[0]
-    supabase.from('amat_loan_leads')
-      .select('id,status,updated_at')
-      .eq('status','closed')
-      .gte('updated_at', hoy + 'T00:00:00.000Z')
-      .then(({data})=>{ if(data) setCerradosHoyCount(data.length) })
+    fetchCerradosHoy().then(n => setCerradosHoyCount(n))
 
     const phones=[...new Set(initialMessages.map(m=>m.phone_number))]
     ; if(phones.length===0){ ; return }
@@ -488,70 +444,31 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const estado = estadoOverride ?? cEstadoRef.current
     const rep    = repOverride    ?? cRepRef.current
 
-    // Query principal de consultas — solo columnas necesarias, límite 500, count real
-    let q = supabase
-      .from('amat_consultas')
-      .select('id,phone,nombre_apellido,dni,reparticion_label,flujo,prestacion,afiliado,vendedor,situacion,estado,created_at,updated_at', { count: 'exact' })
-      .order('created_at', { ascending: cOrdenRef.current === 'asc' })
-      .limit(500)
-    if (search)           q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
-    if (flujo !== 'all')  q = q.eq('flujo', flujo)
-    if (estado === 'cola') {
-      q = q.eq('estado', 'cola')
-    } else if (estado === 'pendiente') {
-      q = q.eq('estado', 'pendiente')
-    } else if (estado === 'resuelto_cob') {
-      // Resuelto cobranzas → en amat_consultas se guarda como 'resuelto' con flujo cobranzas
-      q = q.eq('estado', 'resuelto').eq('flujo', 'cobranzas')
-    } else if (estado === 'cerrado_cob') {
-      // No resuelto cobranzas → en amat_consultas se guarda como 'cerrado' con flujo cobranzas
-      q = q.eq('estado', 'cerrado').eq('flujo', 'cobranzas')
-    } else if (estado !== 'all') {
-      q = q.eq('estado', estado)
-    }
-    if (rep !== 'all')    q = q.ilike('reparticion_label', rep)
-
-    // Query de leads sin consulta — paralela, SIEMPRE con el mismo límite
-    // para que el listado sea consistente con y sin filtros
-    const leadsPromise = (() => {
-      let lq = supabase
-        .from('amat_loan_leads')
-        .select('id,phone_number,full_name,dni,reparticion,assigned_to,status,created_at')
-        .order('created_at', { ascending: false })
-        .limit(300)
-      if(search) lq = lq.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
-      if(rep !== 'all') lq = lq.ilike('reparticion', `%${rep}%`)
-      return lq
-    })()
-
-    // Ejecutar en paralelo
-    let data: any[] | null = null
-    let leadsData: any[] | null = null
-    let count: number | null = null
+    let data: any[] = []
+    let leadsData: any[] = []
+    let count = 0
 
     try {
-      const [consultasRes, leadsRes] = await Promise.all([q, leadsPromise])
-      if(consultasRes.error) throw consultasRes.error
-      // Si llegó una carga más nueva mientras esperábamos, descartar esta respuesta
+      const result = await fetchConsultas({ search, flujo, estado, rep, orden: cOrdenRef.current })
       if(seq !== loadConsultasSeq.current) return
-      data = consultasRes.data
-      count = consultasRes.count
-      leadsData = leadsRes.data
+      data      = result.consultas
+      leadsData = result.leadsData
+      count     = result.count
     } catch(e: any) {
       if(seq !== loadConsultasSeq.current) return
-      console.error('[loadConsultas] Error Supabase:', e)
+      console.error('[loadConsultas] Error:', e)
       alert('❌ Error al cargar las consultas. Intentá de nuevo.')
       setConsultasLoading(false)
       return
     }
 
-    setConsultasTotal(count || 0)
+    setConsultasTotal(count)
 
     // Deduplicar con Set — O(n) en vez de O(n²)
-    const phonesConConsulta = new Set((data||[]).map((c:any) => c.phone).filter(Boolean))
+    const phonesConConsulta = new Set(data.map((c:any) => c.phone).filter(Boolean))
     const statusMap: Record<string,string> = { new:'cola', contacted:'pendiente', contactado:'contactado', closed:'resuelto', resolved:'resuelto', rejected:'cerrado_rechazado', not_interested:'cerrado_no_interesado', sin_respuesta:'cerrado', unresolved:'cerrado', finalizado:'cerrado' }
 
-    const sinConsulta = (leadsData||[])
+    const sinConsulta = leadsData
       .filter((l:any) => l.phone_number && !phonesConConsulta.has(l.phone_number))
       .map((l:any) => ({
         id: `lead_${l.id}`,
@@ -570,7 +487,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       .filter((c:any) => estado === 'all' || c.estado === estado)
 
     // Deduplicar consultas — O(n) con Map
-    const todasConsultas = [...sinConsulta, ...((data as any[]) || [])]
+    const todasConsultas = [...sinConsulta, ...data]
     const seenPhones = new Map<string, any>()
     for(const c of todasConsultas) {
       const phone = c.phone || ''
@@ -600,16 +517,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       if(consultasTimer.current) clearTimeout(consultasTimer.current)
       consultasTimer.current = setTimeout(()=>{
         loadConsultas(cRep, cFlujo, cEstado, cSearch)
-        supabase.from('amat_campanas').select('telefono,fecha')
-          .gte('fecha', new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString())
-          .order('fecha',{ascending:false})
-          .limit(5000)
-          .then(({data})=>{
-            if(!data) return
-            const map: Record<string,string> = {}
-            data.forEach((r:any)=>{ if(r.telefono && !map[r.telefono]) map[r.telefono]=r.fecha })
-            setCampanas(map)
-          })
+        fetchCampanasRecientes(60).then(map => setCampanas(map))
       }, 50)
     }
     return ()=>{
@@ -620,81 +528,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // Cargar datos de reportes
   const loadReportes = async (
-  periodo?: string,
-  desdeCustom?: string,
-  hastaCustom?: string
-) => {
-  const p = periodo ?? reportePeriodo
-
-  // Calcular rango de fechas según el período
-  const ahora = new Date()
-  let desde: string | null = null
-  let hasta: string | null = null
-
-  if (p === 'mes_actual') {
-    desde = new Date(ahora.getFullYear(), ahora.getMonth(), 1).toISOString()
-    hasta = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59).toISOString()
-  } else if (p === 'mes_pasado') {
-    desde = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1).toISOString()
-    hasta = new Date(ahora.getFullYear(), ahora.getMonth(), 0, 23, 59, 59).toISOString()
-  } else if (p === '3_meses') {
-    desde = new Date(ahora.getFullYear(), ahora.getMonth() - 2, 1).toISOString()
-    hasta = ahora.toISOString()
-  } else if (p === '6_meses') {
-    desde = new Date(ahora.getFullYear(), ahora.getMonth() - 5, 1).toISOString()
-    hasta = ahora.toISOString()
-  } else if (p === 'anio_actual') {
-    desde = new Date(ahora.getFullYear(), 0, 1).toISOString()
-    hasta = ahora.toISOString()
-  } else if (p === 'custom') {
-    desde = desdeCustom ? new Date(desdeCustom).toISOString() : null
-    hasta = hastaCustom ? new Date(hastaCustom + 'T23:59:59').toISOString() : null
+    periodo?: string,
+    desdeCustom?: string,
+    hastaCustom?: string
+  ) => {
+    const p = (periodo ?? reportePeriodo) as any
+    const { leads, flujoMap: rFlujoMap, cerradosHoy } = await fetchReporteData(p, desdeCustom, hastaCustom)
+    setReporteLeads(leads)
+    setCerradosHoyCount(cerradosHoy)
+    setPipelineFlujoMap(rFlujoMap)
   }
-  // 'historico' → sin filtro de fecha
-
-  let allData: any[] = []
-  let from = 0
-  let batches = 0
-  const MAX_BATCHES = 20
-
-  while (batches < MAX_BATCHES) {
-    let q = supabase
-      .from('amat_loan_leads')
-      .select('id, status, reparticion, assigned_to, updated_at, created_at, phone_number, entidad, linea, monto_solicitado, cant_cuotas, valor_cuota')
-      .order('updated_at', { ascending: false })
-      .range(from, from + 999)
-    if (desde) q = q.gte('updated_at', desde)
-    if (hasta) q = q.lte('updated_at', hasta)
-
-    const { data } = await q
-    if (!data || data.length === 0) break
-    allData = [...allData, ...data]
-    if (data.length < 1000) break
-    from += 1000
-    batches++
-  }
-
-  setReporteLeads(allData as LoanLead[])
-  const hoy = new Date().toDateString()
-  setCerradosHoyCount(allData.filter((l: any) => l.status === 'closed' && new Date(l.updated_at).toDateString() === hoy).length)
-
-  // Cargar flujo por teléfono para separar ventas/cobranzas en los reportes
-  const phones = allData.map((l: any) => l.phone_number).filter(Boolean)
-  if (phones.length > 0) {
-    const BATCH = 200
-    const chunks = Array.from({ length: Math.ceil(phones.length / BATCH) }, (_, i) =>
-      phones.slice(i * BATCH, (i + 1) * BATCH)
-    )
-    const results = await Promise.all(
-      chunks.map(chunk =>
-        supabase.from('amat_consultas').select('phone,flujo').in('phone', chunk).then(({ data }) => data || [])
-      )
-    )
-    const map: Record<string, string> = {}
-    results.flat().forEach((r: any) => { if (r.phone) map[r.phone] = r.flujo || 'solicitud' })
-    setPipelineFlujoMap(map)
-  }
-}
 
   // Cargar base paginada
   const baseSearchRef   = useRef(baseSearch)
@@ -724,52 +567,35 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   })=>{
     setBaseLoading(true)
     const seq = ++loadBaseSeq.current
-    const search    = overrides?.search    ?? baseSearchRef.current
-    const rep       = overrides?.rep       ?? baseRepRef.current
-    const banco     = overrides?.banco     ?? baseBancoRef.current
-    const status    = overrides?.status    ?? baseStatusRef.current
-    const tel       = overrides?.tel       ?? baseTelRef.current
-    const assigned  = overrides?.assigned  ?? baseAssignedRef.current
-    const page      = overrides?.page      ?? basePageRef.current
-    const ordenCol  = overrides?.ordenCol  ?? baseOrdenColRef.current
-    const ordenDir  = overrides?.ordenDir  ?? baseOrdenDirRef.current
-
-    let q=supabase.from('amat_loan_leads').select('id,phone_number,full_name,dni,reparticion,bank,status,assigned_to,created_at,updated_at,archived,email',{count:'exact'})
-    if(search)           q=q.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
-    if(rep!=='all')      q=q.ilike('reparticion',rep)
-    if(banco!=='all')    q=q.eq('bank',banco)
-    if(status!=='all') q=q.eq('status',status)
-    if(tel==='con')      q=q.not('phone_number','is',null).neq('phone_number','')
-    if(tel==='sin')      q=q.or('phone_number.is.null,phone_number.eq.')
-    if(assigned==='sin') q=q.is('assigned_to',null)
-    else if(assigned!=='all') q=q.eq('assigned_to',assigned)
-    q=q.order(ordenCol,{ascending: ordenDir==='asc'}).range(page*PAGE_SIZE,(page+1)*PAGE_SIZE-1)
+    const filtros = {
+      search:   overrides?.search   ?? baseSearchRef.current,
+      rep:      overrides?.rep      ?? baseRepRef.current,
+      banco:    overrides?.banco    ?? baseBancoRef.current,
+      status:   overrides?.status   ?? baseStatusRef.current,
+      tel:      (overrides?.tel     ?? baseTelRef.current) as 'all'|'con'|'sin',
+      assigned: overrides?.assigned ?? baseAssignedRef.current,
+      page:     overrides?.page     ?? basePageRef.current,
+      ordenCol: overrides?.ordenCol ?? baseOrdenColRef.current,
+      ordenDir: (overrides?.ordenDir ?? baseOrdenDirRef.current) as 'asc'|'desc',
+    }
 
     try {
-      const {data, count, error} = await q
-      if(error) throw error
+      const { leads, total } = await fetchBase(filtros)
       if(seq !== loadBaseSeq.current) return
-      const leads = (data as LoanLead[])||[]
       setBaseLeads(leads)
-      setBaseTotal(count||0)
+      setBaseTotal(total)
 
       // Cargar flujo de los leads de esta página para mostrar la columna Flujo
       const phones = leads.map(l=>l.phone_number).filter(Boolean) as string[]
       if(phones.length) {
-        const BATCH = 200
-        const chunks = Array.from({length:Math.ceil(phones.length/BATCH)},(_,i)=>phones.slice(i*BATCH,(i+1)*BATCH))
-        Promise.all(chunks.map(chunk=>
-          supabase.from('amat_consultas').select('phone,flujo').in('phone',chunk).then(({data})=>data||[])
-        )).then(results=>{
+        fetchFlujoMap(phones).then(map => {
           if(seq !== loadBaseSeq.current) return
-          const map: Record<string,string> = {}
-          results.flat().forEach((r:any)=>{ if(r.phone) map[r.phone]=r.flujo||'solicitud' })
           setFlujoMap(prev=>({...prev,...map}))
         })
       }
     } catch(e: any) {
       if(seq !== loadBaseSeq.current) return
-      console.error('[loadBase] Error Supabase:', e)
+      console.error('[loadBase] Error:', e)
       alert('❌ Error al cargar la base de contactos. Intentá de nuevo.')
     } finally {
       if(seq === loadBaseSeq.current) setBaseLoading(false)
@@ -798,61 +624,21 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(tab==='bandeja'){
       let cancelado = false
 
-      // Cargar mensajes: todos los de los últimos 30 días en lotes para no perder nada
+      // Cargar mensajes de los últimos 30 días
       ;(async () => {
-        const desde = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-        let allMsgs: Message[] = []
-        let fromIdx = 0
-        const BATCH = 1000
-        const MAX_BATCHES = 10 // tope de seguridad: 10.000 mensajes máximo
-        let batches = 0
-        while(batches < MAX_BATCHES) {
-          const { data: batch } = await supabase
-            .from('amat_messages')
-            .select('id,phone_number,body,direction,sender,created_at,media_url,media_type')
-            .gte('created_at', desde)
-            .order('created_at', { ascending: false })
-            .range(fromIdx, fromIdx + BATCH - 1)
-          if(!batch || batch.length === 0) break
-          allMsgs = [...allMsgs, ...batch as Message[]]
-          if(batch.length < BATCH) break
-          fromIdx += BATCH
-          batches++
-        }
-        if(!cancelado && allMsgs.length) setMessages(allMsgs)
+        const { fetchMensajesBandeja } = await import('@/services/lead.service')
+        const allMsgs = await fetchMensajesBandeja()
+        if(!cancelado && allMsgs.length) setMessages(allMsgs as Message[])
       })()
 
-      // Cargar leads asignados + cola en un solo async para evitar race conditions
+      // Cargar leads asignados + cola
       ;(async () => {
-        // Count de cola (no bloquea)
-        supabase.from('amat_loan_leads')
-          .select('id', { count: 'exact', head: true })
-          .is('assigned_to', null).eq('archived', false)
-          .in('status', ['new','contacted'])
-          .then(({ count }) => { if(!cancelado) setColaTotal(count || 0) })
-
-        // Cargar en paralelo: leads asignados + cola
-        // EXCLUIDOS debe coincidir exactamente con la lista del realtime para evitar
-        // que leads cargados aquí sean borrados por el primer UPDATE que llegue
-        const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved','sin_respuesta','closed']
-        const [asignadosRes, colaRes] = await Promise.all([
-          me ? supabase.from('amat_loan_leads').select('*')
-            .eq('assigned_to', me.username).eq('archived', false)
-            .not('status', 'in', `(${EXCLUIDOS.map(e=>`${e}`).join(',')})`)
-            .order('updated_at', { ascending: false })
-            : Promise.resolve({ data: [] }),
-          supabase.from('amat_loan_leads').select('*')
-            .is('assigned_to', null).eq('archived', false)
-            .in('status', ['new','contacted'])
-            .order('created_at', { ascending: true })
-            .limit(50)
-        ])
-
+        if(!me) return
+        const { asignados, cola, colaTotal } = await fetchBandejaLeads(me.username)
         if(cancelado) return
 
-        // Leads asignados van a botLeads, cola va a colaLeadsState (estado independiente)
-        const asignados = (asignadosRes.data || []) as LoanLead[]
-        const cola = (colaRes.data || []) as LoanLead[]
+        setColaTotal(colaTotal)
+
         if(asignados.length) {
           setBotLeads(prev => {
             const merged = [...prev]
@@ -863,18 +649,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           })
         }
         if(cola.length) {
-          // Cargar flujo de cada lead de la cola para poder filtrar correctamente
           const phonesCol = cola.map((l:LoanLead)=>l.phone_number).filter(Boolean) as string[]
           if(phonesCol.length) {
-            const BATCH = 200
-            const chunks = Array.from({length:Math.ceil(phonesCol.length/BATCH)},(_,i)=>phonesCol.slice(i*BATCH,(i+1)*BATCH))
-            Promise.all(chunks.map(chunk=>
-              supabase.from('amat_consultas').select('phone,flujo').in('phone',chunk).then(({data})=>data||[])
-            )).then(results=>{
+            fetchFlujoMap(phonesCol).then(map => {
               if(cancelado) return
-              const flujoMapCola: Record<string,string> = {}
-              results.flat().forEach((r:any)=>{ if(r.phone) flujoMapCola[r.phone]=r.flujo||'solicitud' })
-              setFlujoMap(prev=>({...prev,...flujoMapCola}))
+              setFlujoMap(prev=>({...prev,...map}))
             })
           }
           setColaLeadsState(cola)
@@ -910,18 +689,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
     // Auto-asignación: si el lead no tiene dueño, asignarlo al operador que escribe
     if(currentLead && !currentLead.assigned_to) {
-      const resAsign = await safeRun('sendReply:autoAsignar', () =>
-        supabase.from('amat_loan_leads')
-          .update({ assigned_to: me.username, status: 'contacted', updated_at: new Date().toISOString() })
-          .eq('id', currentLead.id)
-      )
+      const resAsign = await autoAsignarLead(currentLead.id, selectedPhone, me.username)
       if(resAsign.ok) {
-        await safeRun('sendReply:autoAsignarConsulta', () =>
-          supabase.from('amat_consultas')
-            .update({ vendedor: me.username, estado: 'pendiente', updated_at: new Date().toISOString() })
-            .eq('phone', selectedPhone)
-        )
-        // Actualizar en memoria
         setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
         setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
         setColaTotal(t => Math.max(0, t - 1))
@@ -941,14 +710,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setCurrentChatMsgs(prev => [...prev, tempMsg])
     setMessages(prev => [...prev, tempMsg])
     try {
-      const controller = new AbortController()
-      const timeout = setTimeout(()=>controller.abort(), 8000)
-      await fetch('/api/send-message',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({phone:selectedPhone,text,senderName:me.username}),
-        signal: controller.signal,
-      })
-      clearTimeout(timeout)
+      await chatSendReply({ phone: selectedPhone, text, senderName: me.username })
     } catch(e) {
       setReplyText(text)
     } finally {
@@ -957,22 +719,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   }
 
   const LIMITE_PLANTILLA_HORAS = 24
-
-  const puedeEnviarPlantilla = async (phone: string): Promise<{ok:boolean, horasRestantes?:number}> => {
-    const desde = new Date(Date.now() - LIMITE_PLANTILLA_HORAS * 60 * 60 * 1000).toISOString()
-    const { data } = await supabase
-      .from('amat_campanas')
-      .select('fecha')
-      .eq('telefono', phone)
-      .gte('fecha', desde)
-      .order('fecha', { ascending: false })
-      .limit(1)
-    if(data?.length) {
-      const horasPasadas = (Date.now() - new Date(data[0].fecha).getTime()) / (1000 * 60 * 60)
-      return { ok: false, horasRestantes: Math.ceil(LIMITE_PLANTILLA_HORAS - horasPasadas) }
-    }
-    return { ok: true }
-  }
 
   const sendTemplate=async(template:'recontacto'|'primer_contacto_esp'|'ayuda_economica')=>{
     if(!selectedPhone||!me) return
@@ -988,17 +734,8 @@ Este límite protege el número de WhatsApp de la empresa.`)
 
     // Auto-asignación: si el lead no tiene dueño, asignarlo al operador que envía
     if(currentLead && !currentLead.assigned_to) {
-      const resAsign = await safeRun('sendTemplate:autoAsignar', () =>
-        supabase.from('amat_loan_leads')
-          .update({ assigned_to: me.username, status: 'contacted', updated_at: new Date().toISOString() })
-          .eq('id', currentLead.id)
-      )
+      const resAsign = await autoAsignarLead(currentLead.id, selectedPhone, me.username)
       if(resAsign.ok) {
-        await safeRun('sendTemplate:autoAsignarConsulta', () =>
-          supabase.from('amat_consultas')
-            .update({ vendedor: me.username, estado: 'pendiente', updated_at: new Date().toISOString() })
-            .eq('phone', selectedPhone)
-        )
         setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
         setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
         setColaTotal(t => Math.max(0, t - 1))
@@ -1006,45 +743,24 @@ Este límite protege el número de WhatsApp de la empresa.`)
     }
 
     setSending(true)
-    try {
-      const controller = new AbortController()
-      const timeout = setTimeout(()=>controller.abort(), 8000)
-      await fetch('/api/send-message',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({phone:selectedPhone,template,senderName:me.username}),
-        signal: controller.signal,
-      })
-      clearTimeout(timeout)
-    } catch(e) {
-      console.error('[sendTemplate] error o timeout:', e)
-    } finally {
-      // Buscar el lead en todas las fuentes posibles
-      const lead = bandejaLeads.find(l=>l.phone_number===selectedPhone)
-        || baseLeads.find(l=>l.phone_number===selectedPhone)
-      try {
-        await supabase.from('amat_campanas').insert({
-          documento: lead?.dni || null,
-          telefono: selectedPhone,
-          fecha: new Date().toISOString(),
-          plantilla: template,
-          operador: me.username,
-        })
-      } catch(insertErr) {
-        console.error('[sendTemplate] error insertando campana:', insertErr)
-      }
-      setSending(false)
-    }
+    const lead = bandejaLeads.find(l=>l.phone_number===selectedPhone)
+      || baseLeads.find(l=>l.phone_number===selectedPhone)
+    await chatSendTemplate({ phone: selectedPhone, template, senderName: me.username, dni: lead?.dni })
+    setSending(false)
   }
 
   // ═══ FUNCIÓN ÚNICA DE CAMBIO DE ESTADO ═══
-  // Todos los caminos (modal, venta, rechazo, finalizar) pasan por acá.
-  // Garantiza: leads + consultas sincronizados, archivado en finales, limpieza de memoria.
   const cambiarEstado = async (
     lead: LoanLead,
     nuevoStatus: string,
     opts?: { notes?: string; situacion?: string; extraFields?: Record<string,any> }
   ) => {
-    const esFinal = ESTADOS_FINALES.includes(nuevoStatus)
+    const { ok, esFinal } = await cambiarEstadoLead(lead, nuevoStatus, opts)
+    if(!ok) {
+      alert('❌ No se pudo cambiar el estado. Intentá de nuevo.')
+      return
+    }
+
     const upd: any = {
       status: nuevoStatus,
       updated_at: new Date().toISOString(),
@@ -1053,32 +769,6 @@ Este límite protege el número de WhatsApp de la empresa.`)
       ...(opts?.extraFields || {}),
     }
 
-    // 1. Actualizar DB primero — si falla, no tocamos la UI
-    const resLead = await safeRun('cambiarEstado:lead', () =>
-      supabase.from('amat_loan_leads').update(upd).eq('id', lead.id)
-    )
-    if(!resLead.ok) {
-      alert('❌ No se pudo cambiar el estado. Intentá de nuevo.')
-      return
-    }
-
-    // 2. Sincronizar amat_consultas — fallo no crítico (loguear, no bloquear)
-    if(lead.phone_number) {
-      const updC: any = {
-        estado: STATUS_A_CONSULTA[nuevoStatus] || 'pendiente',
-        updated_at: new Date().toISOString(),
-      }
-      if(opts?.situacion?.trim()) updC.situacion = opts.situacion.trim()
-      const resConsulta = await safeRun('cambiarEstado:consulta', () =>
-        supabase.from('amat_consultas').update(updC).eq('phone', lead.phone_number!)
-      )
-      if(!resConsulta.ok) {
-        // No bloquear — el lead ya se actualizó. Solo avisar en consola.
-        console.warn('[cambiarEstado] Lead actualizado pero consulta no sincronizada:', lead.phone_number)
-      }
-    }
-
-    // 3. Actualizar UI solo después de confirmar que DB está ok
     if(esFinal) {
       setBotLeads(prev => prev.filter(l => l.id !== lead.id))
       if(nuevoStatus === 'closed' || nuevoStatus === 'resolved') setCerradosHoyCount(c => c + 1)
@@ -1096,10 +786,8 @@ Este límite protege el número de WhatsApp de la empresa.`)
       const esFinal = ESTADOS_FINALES.includes(status)
       const upd: any = { status, updated_at: new Date().toISOString(), ...(esFinal && { archived: true }) }
       if(notes !== undefined) upd.notes = notes
-      const res = await safeRun('updateStatus', () =>
-        supabase.from('amat_loan_leads').update(upd).eq('id', id)
-      )
-      if(!res.ok) alert('❌ No se pudo actualizar el estado. Intentá de nuevo.')
+      const { ok } = await cambiarEstadoLead({ id } as LoanLead, status, { notes })
+      if(!ok) alert('❌ No se pudo actualizar el estado. Intentá de nuevo.')
       return
     }
     await cambiarEstado(lead, status, { notes })
@@ -1109,7 +797,6 @@ Este límite protege el número de WhatsApp de la empresa.`)
 
   const tomarConversacion = async (lead: LoanLead) => {
     if(!me) return
-    // Verificar límite de 20 conversaciones activas
     const misActivas = bandejaLeads.filter(l =>
       l.assigned_to === me.username &&
       !['closed','rejected','not_interested','resolved','unresolved','finalizado','sin_respuesta'].includes(l.status||'')
@@ -1119,60 +806,33 @@ Este límite protege el número de WhatsApp de la empresa.`)
       return
     }
 
-    // 1. DB primero — si falla no tocamos la UI ni el contador
-    const resLead = await safeRun('tomarConversacion:lead', () =>
-      supabase.from('amat_loan_leads')
-        .update({assigned_to: me.username, status:'contacted', updated_at:new Date().toISOString()})
-        .eq('id', lead.id)
-    )
-    if(!resLead.ok) {
+    const { ok } = await tomarLead(lead, me.username)
+    if(!ok) {
       alert('❌ No se pudo tomar la conversación. Intentá de nuevo.')
       return
     }
-    if(lead.phone_number) {
-      await safeRun('tomarConversacion:consulta', () =>
-        supabase.from('amat_consultas')
-          .update({vendedor: me.username, estado:'pendiente', updated_at:new Date().toISOString()})
-          .eq('phone', lead.phone_number!)
-      )
-      // Si falla la consulta no bloqueamos — el lead ya fue tomado
-    }
 
-    // 2. UI solo después de confirmar DB
     setColaTotal(t => Math.max(0, t - 1))
     setColaLeadsState(prev => prev.filter(l => l.id !== lead.id))
-
-    // Actualizar en botLeads — si ya está, actualizar; si no, agregar
     setBotLeads(prev => {
       const existe = prev.find(l => l.id === lead.id)
       if(existe) return prev.map(l => l.id === lead.id ? { ...l, assigned_to: me.username, status: 'contacted' } : l)
       return [...prev, { ...lead, assigned_to: me.username, status: 'contacted' }]
     })
-
     setSelectedPhone(lead.phone_number)
     setVistaMode('mis_chats')
     if(lead.phone_number) cargarMensajes(lead.phone_number)
   }
 
-  // Helper: cargar mensajes de un phone sin límite
+  // Helper: cargar mensajes de un phone
   const cargarMensajes = (phone: string) => {
-    supabase.from('amat_messages')
-      .select('id,phone_number,body,direction,sender,created_at,media_url,media_type')
-      .eq('phone_number', phone)
-      .order('created_at', {ascending: false})
-      .limit(200)  // últimos 200 mensajes — suficiente para cualquier conversación
-      .then(({data}) => {
-        if(data) {
-          // Revertir para mostrar de más viejo a más nuevo
-          const msgs = (data as Message[]).reverse()
-          setCurrentChatMsgs(msgs)
-          // Actualizar el array global sin re-mergear todo
-          setMessages(prev => [
-            ...prev.filter(m => m.phone_number !== phone),
-            ...msgs
-          ])
-        }
-      })
+    fetchMensajesPhone(phone).then(msgs => {
+      setCurrentChatMsgs(msgs)
+      setMessages(prev => [
+        ...prev.filter(m => m.phone_number !== phone),
+        ...msgs
+      ])
+    })
   }
 
   const abrirChat = (lead: LoanLead) => {
@@ -1180,15 +840,13 @@ Este límite protege el número de WhatsApp de la empresa.`)
     setSelectedPhone(lead.phone_number)
     if(lead.phone_number) cargarMensajes(lead.phone_number)
     // Refrescar datos frescos del lead desde DB al abrir el chat
-    // Evita mostrar datos viejos si otra sesión editó el lead mientras tanto
     if(lead.id) {
-      supabase.from('amat_loan_leads').select('*').eq('id', lead.id).single()
-        .then(({data}) => {
-          if(data) {
-            setBotLeads(prev => prev.map(l => l.id === data.id ? data as LoanLead : l))
-            setBaseLeads(prev => prev.map(l => l.id === data.id ? data as LoanLead : l))
-          }
-        })
+      fetchLeadById(lead.id).then(res => {
+        if(res.ok && res.data) {
+          setBotLeads(prev => prev.map(l => l.id === res.data!.id ? res.data! : l))
+          setBaseLeads(prev => prev.map(l => l.id === res.data!.id ? res.data! : l))
+        }
+      })
     }
   }
 
@@ -1229,40 +887,14 @@ Este límite protege el número de WhatsApp de la empresa.`)
   const saveEdit=async()=>{
     if(!editTarget) return
     setEditSaving(true)
-    const upd: any = {
-      ...editForm,
-      full_name:    editForm.full_name?.toUpperCase()||editForm.full_name,
-      reparticion:  editForm.reparticion?.toUpperCase()||editForm.reparticion,
-      bank:         editForm.bank?.toUpperCase()||editForm.bank,
-      updated_at:   new Date().toISOString()
-    }
-    // Coherencia de archivado con el modelo canónico
-    if(editForm.status) {
-      if(ESTADOS_FINALES.includes(editForm.status)) {
-        upd.archived = true
-      } else {
-        upd.archived = false
-      }
-    }
-    const resEdit = await safeRun('saveEdit:lead', () =>
-      supabase.from('amat_loan_leads').update(upd).eq('id',editTarget.id)
-    )
-    if(!resEdit.ok) {
+    const { ok } = await editLead(editTarget.id, editTarget.phone_number, editForm)
+    if(!ok) {
       alert('❌ No se pudo guardar los cambios. Intentá de nuevo.')
       setEditSaving(false)
       return
     }
-    // UI solo después de confirmar DB
     if(editForm.status && ESTADOS_FINALES.includes(editForm.status)) {
       setBotLeads(prev => prev.filter(l => l.id !== editTarget.id))
-    }
-    // Sincronizar amat_consultas — fallo no crítico
-    if(editTarget.phone_number && editForm.status) {
-      await safeRun('saveEdit:consulta', () =>
-        supabase.from('amat_consultas')
-          .update({ estado: STATUS_A_CONSULTA[editForm.status!] || 'pendiente', updated_at: new Date().toISOString() })
-          .eq('phone', editTarget.phone_number!)
-      )
     }
     setEditSaving(false); setShowEditModal(false); setEditTarget(null)
     if(tab==='base') loadBase()
@@ -1271,9 +903,7 @@ Este límite protege el número de WhatsApp de la empresa.`)
   const saveNote=async()=>{
     const lead=currentLead||editTarget
     if(!lead) return
-    const res = await safeRun('saveNote', () =>
-      supabase.from('amat_loan_leads').update({notes:noteText,updated_at:new Date().toISOString()}).eq('id',lead.id)
-    )
+    const res = await saveLeadNote(lead.id, noteText)
     if(!res.ok) { alert('❌ No se pudo guardar la nota. Intentá de nuevo.'); return }
     setShowNoteModal(false)
   }
@@ -1287,36 +917,8 @@ Este límite protege el número de WhatsApp de la empresa.`)
   }
 
   const exportVentas = async () => {
-    const {data} = await supabase.from('amat_loan_leads')
-      .select('*').eq('status','closed').order('updated_at',{ascending:false})
-    if(!data||data.length===0){ alert('No hay ventas cerradas para exportar'); return }
-    const XLSX = await import('xlsx')
-    const rows = data.map((l:any)=>{
-      const fmtNum = (n:any) => n ? Number(n).toLocaleString('es-AR') : ''
-      return {
-        'DNI':             l.dni||'',
-        'Nombre':          l.full_name||'',
-        'Teléfono':        l.phone_number||'',
-        'Email':           l.email||'',
-        'Repartición':     l.reparticion||'',
-        'Entidad':         l.entidad||'',
-        'Línea':           l.linea||'',
-        'Monto ($)':       fmtNum(l.monto_solicitado),
-        'Cuotas':          l.cant_cuotas||'',
-        'Valor cuota ($)': fmtNum(l.valor_cuota),
-        'Asignado a':      l.assigned_to||'',
-        'Fecha cierre':    new Date(l.updated_at).toLocaleDateString('es-AR'),
-        'Observaciones':   l.notes||'',
-      }
-    })
-    const ws = XLSX.utils.json_to_sheet(rows)
-    ws['!cols'] = [
-      {wch:12},{wch:28},{wch:16},{wch:28},{wch:30},
-      {wch:10},{wch:12},{wch:16},{wch:8},{wch:16},{wch:12},{wch:14},{wch:30}
-    ]
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb,ws,'Ventas AMAT')
-    XLSX.writeFile(wb, 'AMAT_ventas_' + new Date().toISOString().slice(0,10) + '.xlsx')
+    const { ok, error } = await exportarVentas()
+    if(!ok) alert(error || 'Error al exportar')
   }
 
   const openTemplate=(lead:LoanLead)=>{
@@ -2260,10 +1862,10 @@ Este límite protege el número de WhatsApp de la empresa.`)
                               setSelectedPhone(c.phone)
                               setVistaMode('mis_chats')
                               // Cargar historial completo del chat
-                              const {data:msgs} = await supabase.from('amat_messages')
-                                .select('*').eq('phone_number',c.phone)
-                                .order('created_at',{ascending:true})
-                              if(msgs) setMessages(prev=>[...prev.filter(m=>m.phone_number!==c.phone),...msgs as Message[]])
+                              if(c.phone) {
+                                const msgs = await fetchMensajesPhone(c.phone)
+                                if(msgs.length) setMessages(prev=>[...prev.filter(m=>m.phone_number!==c.phone),...msgs])
+                              }
                               // Si el lead no está en botLeads traerlo igual
                               if(!allLeads.find(l=>l.phone_number===c.phone)){
                                 const {data:lead} = await supabase.from('amat_loan_leads')
@@ -2669,13 +2271,8 @@ Este límite protege el número de WhatsApp de la empresa.`)
             <h3>Asignar a un asesor</h3>
             {USERS.map(u=>(
               <div key={u.id} className="mopt" onClick={async()=>{
-                const res = await safeRun('asignar:lead', () =>
-                  supabase.from('amat_loan_leads').update({assigned_to:u.username,updated_at:new Date().toISOString()}).eq('id',currentLead.id)
-                )
+                const res = await tomarLead({...currentLead, assigned_to: null}, u.username)
                 if(!res.ok) { alert('❌ No se pudo asignar. Intentá de nuevo.'); return }
-                await safeRun('asignar:consulta', () =>
-                  supabase.from('amat_consultas').update({vendedor:u.username,updated_at:new Date().toISOString()}).eq('phone',currentLead.phone_number||'')
-                )
                 setShowAssignModal(false)
               }}>
                 <div className="av" style={{width:34,height:34,fontSize:11,background:u.color,color:'white'}}>{u.initials}</div>
@@ -2687,10 +2284,8 @@ Este límite protege el número de WhatsApp de la empresa.`)
               </div>
             ))}
             <div className="mopt" style={{border:'1px solid #E2E8F0',borderRadius:10,marginTop:6}} onClick={async()=>{
-              const res = await safeRun('quitarAsignacion', () =>
-                supabase.from('amat_loan_leads').update({assigned_to:null,updated_at:new Date().toISOString()}).eq('id',currentLead.id)
-              )
-              if(!res.ok) { alert('❌ No se pudo quitar la asignación. Intentá de nuevo.'); return }
+              const { error } = await supabase.from('amat_loan_leads').update({assigned_to:null,updated_at:new Date().toISOString()}).eq('id',currentLead.id)
+              if(error) { alert('❌ No se pudo quitar la asignación. Intentá de nuevo.'); return }
               setShowAssignModal(false)
             }}>
               <span style={{fontSize:13,color:'#EF4444'}}>Quitar asignación</span>
@@ -2866,12 +2461,11 @@ Este límite protege el número de WhatsApp de la empresa.`)
                     } catch(e) {
                       console.error('[plantilla modal] timeout o error:', e)
                     } finally {
-                      await supabase.from('amat_campanas').insert({
-                        documento: editTarget.dni || null,
-                        telefono: editTarget.phone_number,
-                        fecha: new Date().toISOString(),
+                      await registrarCampana({
+                        phone:     editTarget.phone_number!,
+                        dni:       editTarget.dni,
                         plantilla: selectedTemplate.id,
-                        operador: me.username,
+                        operador:  me.username,
                       })
                       await updateStatus(editTarget.id,'contacted')
                       setShowTemplateModal(false)
@@ -3111,29 +2705,22 @@ Este límite protege el número de WhatsApp de la empresa.`)
                 // 1. Guardar consulta — INSERT o UPDATE según corresponda
                 let resConsulta
                 if(String(consultaSelected.id).startsWith('lead_')) {
-                  resConsulta = await safeRun('gestionar:insert', () =>
-                    supabase.from('amat_consultas').insert({
-                      phone:            consultaSelected.phone,
-                      nombre_apellido:  consultaSelected.nombre_apellido,
-                      dni:              consultaSelected.dni,
-                      reparticion_label:consultaSelected.reparticion_label,
-                      flujo:            consultaSelected.flujo||'solicitud',
-                      vendedor:         consultaEdit.vendedor,
-                      situacion:        consultaEdit.situacion,
-                      estado:           consultaEdit.estado,
-                      created_at:       new Date().toISOString(),
-                      updated_at:       new Date().toISOString()
-                    })
-                  )
+                  resConsulta = await insertConsulta({
+                    phone:            consultaSelected.phone,
+                    nombre_apellido:  consultaSelected.nombre_apellido,
+                    dni:              consultaSelected.dni,
+                    reparticion_label:consultaSelected.reparticion_label,
+                    flujo:            consultaSelected.flujo||'solicitud',
+                    vendedor:         consultaEdit.vendedor,
+                    situacion:        consultaEdit.situacion,
+                    estado:           consultaEdit.estado,
+                  })
                 } else {
-                  resConsulta = await safeRun('gestionar:update', () =>
-                    supabase.from('amat_consultas').update({
-                      vendedor:  consultaEdit.vendedor,
-                      situacion: consultaEdit.situacion,
-                      estado:    consultaEdit.estado,
-                      updated_at:new Date().toISOString()
-                    }).eq('id',consultaSelected.id)
-                  )
+                  resConsulta = await updateConsulta(consultaSelected.id, {
+                    vendedor:  consultaEdit.vendedor,
+                    situacion: consultaEdit.situacion,
+                    estado:    consultaEdit.estado,
+                  })
                 }
                 if(!resConsulta.ok) {
                   alert('❌ No se pudo guardar la consulta. Intentá de nuevo.')
@@ -3146,12 +2733,15 @@ Este límite protege el número de WhatsApp de la empresa.`)
                   const nuevoStatus = consultaStatusToLeadStatus(consultaEdit.estado, consultaSelected.flujo || 'solicitud')
                   const esFinal = ESTADOS_FINALES.includes(nuevoStatus)
 
-                  const resLead = await safeQuery('gestionar:getLead', () =>
-                    supabase.from('amat_loan_leads')
-                      .select('id,archived,assigned_to,status')
-                      .eq('phone_number', consultaSelected.phone)
-                      .single()
-                  )
+                  const resLead = await fetchLeadById
+                    ? await (async () => {
+                        const { data } = await supabase.from('amat_loan_leads')
+                          .select('id,archived,assigned_to,status')
+                          .eq('phone_number', consultaSelected.phone)
+                          .single()
+                        return { ok: !!data, data }
+                      })()
+                    : { ok: false, data: null }
 
                   if(resLead.ok && resLead.data) {
                     const existingLead = resLead.data as any
@@ -3166,9 +2756,10 @@ Este límite protege el número de WhatsApp de la empresa.`)
                       if(consultaEdit.vendedor) updateData.assigned_to = consultaEdit.vendedor
                     }
 
-                    const resUpdate = await safeRun('gestionar:updateLead', () =>
-                      supabase.from('amat_loan_leads').update(updateData).eq('id', existingLead.id)
-                    )
+                    const resUpdate = await (async () => {
+                      const { error } = await supabase.from('amat_loan_leads').update(updateData).eq('id', existingLead.id)
+                      return { ok: !error }
+                    })()
 
                     if(resUpdate.ok) {
                       // UI solo después de confirmar todas las ops en DB
