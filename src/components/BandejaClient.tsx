@@ -105,7 +105,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setBotLeads: bandeja.setBotLeads,
   })
 
+  // ── Consultas ─────────────────────────────────────────────────────────────
+  const consultas$ = useConsultas(tab, bandeja.flujoMap)
+
+  // ── Reportes ──────────────────────────────────────────────────────────────
+  const reportes = useReportes(tab, bandeja.setCerradosHoyCount)
+
   // ── Realtime ──────────────────────────────────────────────────────────────
+  // Debe ir después de consultas$ para poder pasar setConsultas
   const { meRef } = useRealtime(me, {
     setMessages,
     setCurrentChatMsgs,
@@ -116,12 +123,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setConsultas:       consultas$.setConsultas,
     setBaseLeads:       base.setBaseLeads,
   })
-
-  // ── Consultas ─────────────────────────────────────────────────────────────
-  const consultas$ = useConsultas(tab, bandeja.flujoMap)
-
-  // ── Reportes ──────────────────────────────────────────────────────────────
-  const reportes = useReportes(tab, bandeja.setCerradosHoyCount)
 
   // Wire loadReportes into the tab effect
   useEffect(()=>{
