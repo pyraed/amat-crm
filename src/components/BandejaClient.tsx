@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line, Area, AreaChart, RadialBarChart, RadialBar
@@ -10,31 +10,25 @@ import CampanaModal from '@/components/CampanaModal'
 import CalculadorOferta from '@/components/CalculadorOferta'
 import { supabase } from '@/lib/supabase'
 import { LoanLead, Message } from '@/lib/types'
-import { USERS, SysUser, Role } from '@/domain/entities/users'
+import { SysUser } from '@/domain/entities/users'
 import {
   LEAD_STATUS, COBRANZA_STATUS, ESTADOS_FINALES,
   OPCIONES_VENTAS, OPCIONES_VENTAS_INTERMEDIOS, OPCIONES_COBRANZAS,
-  LeadEstado, StatusMeta,
   getStatusMeta, getEstadosFinalesPorFlujo, getFlujoLabel,
 } from '@/domain/entities/leadStatus'
 import { REPARTICIONES, BANCOS, REJECTION_REASONS, TEMPLATES } from '@/domain/entities/catalogs'
 import { STATUS_A_CONSULTA, consultaStatusToLeadStatus } from '@/domain/workflows/statusMapping'
 import { TABLAS_CUOTA, calcularCuotaAMAT } from '@/domain/calculations/cuotas'
-import {
-  fetchConsultas, fetchFlujoMap, fetchCampanasRecientes,
-  updateConsulta, insertConsulta, syncConsultaEstado,
-} from '@/services/consulta.service'
-import {
-  fetchBase, fetchBandejaLeads, fetchLeadById, fetchCerradosHoy,
-  cambiarEstadoLead, tomarLead, autoAsignarLead, editLead, saveLeadNote,
-  reactivarLead,
-} from '@/services/lead.service'
-import {
-  fetchMensajesPhone, puedeEnviarPlantilla, registrarCampana,
-  sendReply as chatSendReply, sendTemplate as chatSendTemplate,
-} from '@/services/chat.service'
-import { fetchReporteData } from '@/services/report.service'
+import { updateConsulta, insertConsulta, syncConsultaEstado, fetchFlujoMap } from '@/services/consulta.service'
+import { fetchMensajesPhone } from '@/services/chat.service'
 import { exportarVentas } from '@/services/export.service'
+import { registrarCampana } from '@/services/chat.service'
+import { useAuth } from '@/hooks/useAuth'
+import { useRealtime } from '@/hooks/useRealtime'
+import { useBandeja } from '@/hooks/useBandeja'
+import { useConsultas } from '@/hooks/useConsultas'
+import { useBase } from '@/hooks/useBase'
+import { useReportes } from '@/hooks/useReportes'
 
 // ── Tipos de formularios ──────────────────────────────────
 type VentaForm = {
@@ -62,136 +56,139 @@ type Tab = 'bandeja' | 'consultas' | 'base' | 'reportes'
 
 
 export default function BandejaClient({ initialLeads, initialMessages }: Props) {
-  // AUTH
-  const [me, setMe]                       = useState<SysUser|null>(null)
-  const [loginUser, setLoginUser]         = useState('')
-  const [loginPass, setLoginPass]         = useState('')
-  const [loginErr, setLoginErr]           = useState('')
-  const [showPass, setShowPass]           = useState(false)
-  const [attempts, setAttempts]           = useState(0)
-  const [locked, setLocked]               = useState(false)
-  const [countdown, setCountdown]         = useState(0)
-  const [rememberMe, setRememberMe]       = useState(false)
 
-  // DATA — consultas (llegadas del bot)
-  const [consultas, setConsultas]           = useState<any[]>([])
-  const [consultasLoading, setConsultasLoading] = useState(false)
-  const [consultaSelected, setConsultaSelected] = useState<any|null>(null)
-  const [showConsultaModal, setShowConsultaModal] = useState(false)
-  const [consultaEdit, setConsultaEdit]     = useState<ConsultaEditForm>({vendedor:'',situacion:'',estado:'pendiente'})
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  const auth = useAuth()
+  const {
+    me, userRef, handleLogin, handleLogout, handleRememberMe,
+    loginUser, setLoginUser, loginPass, setLoginPass,
+    loginErr, showPass, setShowPass,
+    locked, countdown, rememberMe,
+  } = auth
 
-  // Filtros consultas
-  const [cFlujo, setCFlujo]     = useState('all')
-  const [cEstado, setCEstado]   = useState('all')
-  const [cOrden, setCOrden]     = useState<'desc'|'asc'>('desc')
-  const [campanas, setCampanas]   = useState<Record<string,string>>({})
-  const [cRep, setCRep]         = useState('all')
-  const [cSearch, setCSearch]   = useState('')
-  const [cSearchInput, setCSearchInput] = useState('')
+  // ── Tab UI ────────────────────────────────────────────────────────────────
+  const [tab, setTab]         = useState<Tab>('bandeja')
+  const [tabLoading, setTabLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const msgEndRef = useRef<HTMLDivElement>(null)
 
-  // DATA — bandeja (solo leads que tienen conversación activa con el bot)
-  const [botLeads, setBotLeads]           = useState<LoanLead[]>([])
-  const [messages, setMessages]           = useState<Message[]>(initialMessages)
+  // Montaje — SSR hydration guard
+  useEffect(()=>{ setMounted(true) },[])
+
+  // ── Messages (global) ─────────────────────────────────────────────────────
+  const [messages, setMessages]   = useState<Message[]>(initialMessages)
+  const [vistaMode, setVistaMode] = useState<'cola'|'mis_chats'>('cola')
+
+  // selectedPhone y currentChatMsgs viven aquí porque los necesitan
+  // tanto useBandeja (tomarConversacion) como useChat (cargarMensajes)
+  const [selectedPhone, setSelectedPhone]     = useState<string|null>(null)
   const [currentChatMsgs, setCurrentChatMsgs] = useState<Message[]>([])
 
-  // DATA — base de contactos (server-side paginado)
-  const [baseLeads, setBaseLeads]         = useState<LoanLead[]>([])
-  const [baseTotal, setBaseTotal]         = useState(0)
-  const [baseLoading, setBaseLoading]     = useState(false)
-
-  // UI
-  const [tab, setTab]                     = useState<Tab>('bandeja')
-  const [tabLoading, setTabLoading]       = useState(false)
-  const [selectedPhone, setSelectedPhone] = useState<string|null>(null)
-  const [replyText, setReplyText]         = useState('')
-  const [sending, setSending]             = useState(false)
-
-  // Filtros bandeja
-  const [bandejaSearch, setBandejaSearch] = useState('')
-  const [soloNoLeidos, setSoloNoLeidos]   = useState(false)
-  const [vistaMode, setVistaMode]         = useState<'cola'|'mis_chats'>('cola')
-  // Mapa phone → flujo (solicitud|cobranzas) cargado de amat_consultas
-  const [flujoMap, setFlujoMap]           = useState<Record<string,string>>({})
-  const [colaPage, setColaPage]           = useState(50)
-  const [colaTotal, setColaTotal]         = useState(0)
-  const [colaLeadsState, setColaLeadsState] = useState<LoanLead[]>([])
-  const [colaMenu, setColaMenu]           = useState<LoanLead|null>(null)
-  const [editandoFlujo, setEditandoFlujo]   = useState(false)
-  const [colaMenuRef, setColaMenuRef]     = useState<{x:number,y:number}|null>(null)
-  const [consultasTotal, setConsultasTotal] = useState(0)
-  const [showFinalizarModal, setShowFinalizarModal] = useState(false)
-  const [finalizarEstado, setFinalizarEstado]       = useState('')
-  const [finalizarNota, setFinalizarNota]           = useState('')
-  const [cerradosHoyCount, setCerradosHoyCount]     = useState(0)
-  const [reporteLeads, setReporteLeads]             = useState<LoanLead[]>([])
-  const [pipelineFlujoMap, setPipelineFlujoMap]     = useState<Record<string,string>>({})
-  const [reporteMode, setReporteMode]               = useState<'ventas'|'cobranzas'>('ventas')
-  const [reportePeriodo, setReportePeriodo]           = useState('mes_actual')
-  const [reporteDesde, setReporteDesde]               = useState('')
-  const [reporteHasta, setReporteHasta]               = useState('')
-  const [showVentaModal, setShowVentaModal]         = useState(false)
-  const [ventaForm, setVentaForm]         = useState<VentaForm>({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
-
-  // Filtros base
-  const [basePage, setBasePage]           = useState(0)
-  const [baseSearch, setBaseSearch]       = useState('')
-  const [baseSearchInput, setBaseSearchInput] = useState('')
-  const [baseRep, setBaseRep]             = useState('all')
-  const [baseBanco, setBaseBanco]         = useState('all')
-  const [baseStatus, setBaseStatus]       = useState('all')
-  const [baseTel, setBaseTel]             = useState<'all'|'con'|'sin'>('all')
-  const [baseAssigned, setBaseAssigned]   = useState('all')
-  const [baseFlujo, setBaseFlujo]         = useState('all')
-  const [baseOrdenCol, setBaseOrdenCol]   = useState<string>('created_at')
-  const [baseOrdenDir, setBaseOrdenDir]   = useState<'asc'|'desc'>('desc')
-
-  // Modales
-  const [showStatusModal, setShowStatusModal]     = useState(false)
-  const [showAssignModal, setShowAssignModal]     = useState(false)
-  const [showNoteModal, setShowNoteModal]         = useState(false)
-  const [showEditModal, setShowEditModal]         = useState(false)
-  const [showTemplateModal, setShowTemplateModal] = useState(false)
-  const [showImportExport, setShowImportExport]   = useState(false)
-  const [showCampana, setShowCampana]             = useState(false)
-  const [showCalculador, setShowCalculador]       = useState(false)
-  const [showRejectModal, setShowRejectModal]     = useState(false)
-  const [editTarget, setEditTarget]               = useState<LoanLead|null>(null)
-  const [editForm, setEditForm]                   = useState<Partial<LoanLead>>({})
-  const [editSaving, setEditSaving]               = useState(false)
-  const [noteText, setNoteText]                   = useState('')
-  const [rejectReason, setRejectReason]           = useState('')
-  const [selectedTemplate, setSelectedTemplate]   = useState<typeof TEMPLATES[0]|null>(null)
-  const [templateVars, setTemplateVars]           = useState<Record<string,string>>({})
-
-  const msgEndRef  = useRef<HTMLDivElement>(null)
-  const userRef    = useRef<HTMLInputElement>(null)
-  const meRef      = useRef<SysUser|null>(null)
-  const baseSearchTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
-  const cSearchTimer    = useRef<ReturnType<typeof setTimeout>|null>(null)
-  // Contadores de request — cada carga nueva incrementa el contador.
-  // Si al llegar la respuesta el contador cambió, la respuesta es obsoleta y se descarta.
-  const loadBaseSeq      = useRef(0)
-  const loadConsultasSeq = useRef(0)
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(()=>{
-    setMounted(true)
-    const savedUser = localStorage.getItem('amat_remember_user')
-    const savedPass = localStorage.getItem('amat_remember_pass')
-    if(savedUser && savedPass) {
-      setLoginUser(savedUser)
-      setLoginPass(savedPass)
-      setRememberMe(true)
+  // ── Bandeja ───────────────────────────────────────────────────────────────
+  const bandeja = useBandeja(
+    me, tab, messages, initialMessages,
+    setSelectedPhone, setVistaMode,
+    (phone: string) => {
+      // cargarMensajes inline — evita dependencia circular con useChat
+      import('@/services/chat.service').then(({ fetchMensajesPhone }) => {
+        fetchMensajesPhone(phone).then(msgs => {
+          setCurrentChatMsgs(msgs)
+          setMessages(prev => [...prev.filter(m => m.phone_number !== phone), ...msgs])
+        })
+      })
     }
-  },[])
+  )
 
-  // Mantener meRef sincronizado — los closures de realtime no capturan estado React
-  useEffect(()=>{ meRef.current = me },[me])
+  // ── Base ──────────────────────────────────────────────────────────────────
+  const base = useBase(tab, {
+    setFlujoMap: bandeja.setFlujoMap,
+    setBotLeads: bandeja.setBotLeads,
+  })
+
+  // ── Realtime ──────────────────────────────────────────────────────────────
+  const { meRef } = useRealtime(me, {
+    setMessages,
+    setCurrentChatMsgs,
+    setBotLeads:        bandeja.setBotLeads,
+    setColaLeadsState:  bandeja.setColaLeadsState,
+    setColaTotal:       bandeja.setColaTotal,
+    setFlujoMap:        bandeja.setFlujoMap,
+    setConsultas:       consultas$.setConsultas,
+    setBaseLeads:       base.setBaseLeads,
+  })
+
+  // ── Consultas ─────────────────────────────────────────────────────────────
+  const consultas$ = useConsultas(tab, bandeja.flujoMap)
+
+  // ── Reportes ──────────────────────────────────────────────────────────────
+  const reportes = useReportes(tab, bandeja.setCerradosHoyCount)
+
+  // Wire loadReportes into the tab effect
+  useEffect(()=>{
+    if(tab==='reportes') reportes.loadReportes(reportes.reportePeriodo, reportes.reporteDesde, reportes.reporteHasta)
+  },[tab]) // eslint-disable-line
+
+  // ── Destructure for convenience ───────────────────────────────────────────
+  const {
+    botLeads, setBotLeads, allLeads, bandejaLeads,
+    colaLeadsState, setColaLeadsState,
+    colaTotal, setColaTotal,
+    colaPage, setColaPage,
+    colaMenu, setColaMenu,
+    colaMenuRef, setColaMenuRef,
+    flujoMap, setFlujoMap,
+    cerradosHoyCount, setCerradosHoyCount,
+    bandejaSearch, setBandejaSearch,
+    soloNoLeidos, setSoloNoLeidos,
+    editandoFlujo, setEditandoFlujo,
+    cambiarEstado, updateStatus, tomarConversacion,
+  } = bandeja
+
+  // Base destructuring
+  const {
+    baseLeads, setBaseLeads, baseTotal, baseLoading,
+    basePage, setBasePage,
+    baseSearch, setBaseSearch, baseSearchInput, setBaseSearchInput,
+    baseRep, setBaseRep, baseBanco, setBaseBanco,
+    baseStatus, setBaseStatus, baseTel, setBaseTel,
+    baseAssigned, setBaseAssigned, baseFlujo, setBaseFlujo,
+    baseOrdenCol, setBaseOrdenCol, baseOrdenDir, setBaseOrdenDir,
+    baseSearchTimer,
+    showEditModal, setShowEditModal,
+    editTarget, setEditTarget,
+    editForm, setEditForm, editSaving,
+    showNoteModal, setShowNoteModal, noteText, setNoteText,
+    loadBase, openEdit, saveEdit,
+  } = base
+
+  // Consultas destructuring
+  const {
+    consultas, setConsultas, consultasLoading, consultasTotal,
+    consultaSelected, setConsultaSelected,
+    showConsultaModal, setShowConsultaModal,
+    consultaEdit, setConsultaEdit, campanas,
+    cFlujo, setCFlujo, cEstado, setCEstado,
+    cOrden, setCOrden, cRep, setCRep,
+    cSearch, setCSearch, cSearchInput, setCSearchInput,
+    loadConsultas,
+  } = consultas$
+
+  // Reportes destructuring
+  const {
+    reporteLeads, pipelineFlujoMap,
+    reporteMode, setReporteMode,
+    reportePeriodo, setReportePeriodo,
+    reporteDesde, setReporteDesde,
+    reporteHasta, setReporteHasta,
+    loadReportes,
+  } = reportes
+
+  // Chat state (local — coordinado entre bandeja y realtime)
+  const [replyText, setReplyText]     = useState('')
+  const [sending, setSending]         = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const chatScrollRef  = useRef<HTMLDivElement>(null)
   const isAtBottom     = useRef(true)
-  const prevPhone      = useRef<string|null>(null)
-  const [unreadCount, setUnreadCount] = useState(0)
-  const prevMsgCount   = useRef(0)
 
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     const el = chatScrollRef.current
@@ -208,11 +205,61 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(isAtBottom.current) setUnreadCount(0)
   }
 
+  const cargarMensajes = (phone: string) => {
+    import('@/services/chat.service').then(({ fetchMensajesPhone }) => {
+      fetchMensajesPhone(phone).then(msgs => {
+        setCurrentChatMsgs(msgs)
+        setMessages(prev => [...prev.filter(m => m.phone_number !== phone), ...msgs])
+      })
+    })
+  }
+
+  const abrirChat = (lead: LoanLead) => {
+    setCurrentChatMsgs([])
+    setSelectedPhone(lead.phone_number)
+    if(lead.phone_number) cargarMensajes(lead.phone_number)
+    if(lead.id) {
+      import('@/services/lead.service').then(({ fetchLeadById }) => {
+        fetchLeadById(lead.id).then(res => {
+          if(res.ok && res.data) {
+            bandeja.setBotLeads(prev => prev.map(l => l.id === res.data!.id ? res.data! : l))
+            base.setBaseLeads(prev => prev.map(l => l.id === res.data!.id ? res.data! : l))
+          }
+        })
+      })
+    }
+  }
+
+
+
+  const LIMITE_BANDEJA = 50
+
+  // ── Remaining local state (modales y acciones que quedan en el componente) ──
+  const [showFinalizarModal, setShowFinalizarModal] = useState(false)
+  const [finalizarEstado, setFinalizarEstado]       = useState('')
+  const [finalizarNota, setFinalizarNota]           = useState('')
+  const [showVentaModal, setShowVentaModal]         = useState(false)
+  const [ventaForm, setVentaForm] = useState<VentaForm>({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
+  const [showStatusModal, setShowStatusModal]     = useState(false)
+  const [showAssignModal, setShowAssignModal]     = useState(false)
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [showImportExport, setShowImportExport]   = useState(false)
+  const [showCampana, setShowCampana]             = useState(false)
+  const [showCalculador, setShowCalculador]       = useState(false)
+  const [showRejectModal, setShowRejectModal]     = useState(false)
+  const [rejectReason, setRejectReason]           = useState('')
+  const [selectedTemplate, setSelectedTemplate]   = useState<typeof TEMPLATES[0]|null>(null)
+  const [templateVars, setTemplateVars]           = useState<Record<string,string>>({})
+  const cSearchTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
+
+  // ── Scroll effect ─────────────────────────────────────────────────────────
+  const prevPhone    = useRef<string|null>(null)
+  const prevMsgCount = useRef(0)
+
   useEffect(()=>{
     const phoneChanged = prevPhone.current !== selectedPhone
     prevPhone.current = selectedPhone
     if(phoneChanged) {
-      // Cambio de chat: bajar instantáneo sin animación
       scrollToBottom('instant' as ScrollBehavior)
       prevMsgCount.current = messages.length
       return
@@ -220,496 +267,43 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     const newMsgs = messages.length - prevMsgCount.current
     prevMsgCount.current = messages.length
     if(newMsgs > 0 && !isAtBottom.current) {
-      // Llegaron mensajes y el usuario está leyendo arriba: mostrar badge
       setUnreadCount(c => c + newMsgs)
     } else if(isAtBottom.current) {
-      // Ya estaba abajo: seguir bajando automático
       scrollToBottom('smooth')
     }
-  },[messages, selectedPhone])
-  useEffect(()=>{ if(!me) setTimeout(()=>userRef.current?.focus(),100) },[me])
-
-  // Bloqueo
-  useEffect(()=>{
-    if(countdown<=0) return
-    const t=setTimeout(()=>{ setCountdown(c=>c-1); if(countdown===1){setLocked(false);setAttempts(0)} },1000)
-    return ()=>clearTimeout(t)
-  },[countdown])
-
-  // Realtime mensajes
-  useEffect(()=>{
-    const ch=supabase.channel('rt-msgs')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'amat_messages'},p=>{
-        const msg = p.new as Message
-        setMessages(prev=>{
-          if(prev.find(m=>m.id===msg.id)) return prev
-          if(msg.direction==='out') {
-            const sinTemp = prev.filter(m=>!(String(m.id).startsWith('temp_')&&m.phone_number===msg.phone_number&&m.body===msg.body))
-            return [...sinTemp, msg]
-          }
-          return [...prev, msg]
-        })
-        // Actualizar currentChatMsgs si el mensaje es del chat activo
-        setCurrentChatMsgs(prev=>{
-          if(prev.length===0||prev[0]?.phone_number!==msg.phone_number) return prev
-          if(prev.find(m=>m.id===msg.id)) return prev
-          if(msg.direction==='out') {
-            const sinTemp = prev.filter(m=>!(String(m.id).startsWith('temp_')&&m.body===msg.body))
-            return [...sinTemp, msg]
-          }
-          return [...prev, msg]
-        })
-        // FIX 1: doble check con estado fresco antes de insertar el lead
-        setBotLeads(prev=>{
-          if(!prev.find(l=>l.phone_number===msg.phone_number)){
-            supabase.from('amat_loan_leads').select('*').eq('phone_number',msg.phone_number).single()
-              .then(({data})=>{
-                if(data) {
-                  const lead = data as LoanLead
-                  const status = (lead.status || '') as string
-
-                  // Reactivación cuando la persona vuelve a escribir:
-                  // - closed/rejected: NO se reactivan nunca
-                  // - not_interested, sin_respuesta, unresolved → resetear a new y volver a cola
-                  if(ESTADOS_FINALES.includes(status)) {
-                    if(status === 'closed' || status === 'rejected') return
-
-                    reactivarLead(lead.id).then(res => {
-                      if(!res.ok) return
-                      const r = {...lead, status:'new' as any, archived:false, assigned_to:null}
-                      setColaLeadsState(p2=>p2.find(l=>l.id===lead.id)?p2:[r as LoanLead,...p2])
-                      setColaTotal(t=>t+1)
-                    })
-                    if(lead.phone_number) {
-                      syncConsultaEstado(lead.phone_number, 'cola')
-                    }
-                    fetchFlujoMap([msg.phone_number]).then(map => setFlujoMap(prev=>({...prev,...map})))
-                    return
-                  }
-
-                  // Lead activo normal
-                  if((lead as any).archived) return
-                  if(lead.assigned_to) {
-                    setBotLeads(prev => {
-                      const existe = prev.find(l => l.phone_number === lead.phone_number)
-                      if(existe) return prev.map(l => l.phone_number === lead.phone_number ? lead : l)
-                      if(lead.assigned_to === meRef.current?.username) return [...prev, lead]
-                      return prev
-                    })
-                    return
-                  }
-                  setColaLeadsState(p2=>p2.find(l=>l.phone_number===lead.phone_number)?p2:[lead,...p2])
-                  setColaTotal(t=>t+1)
-                  fetchFlujoMap([msg.phone_number]).then(map => setFlujoMap(prev=>({...prev,...map})))
-                }
-              })
-          }
-          return prev
-        })
-      }).subscribe()
-    return ()=>{ supabase.removeChannel(ch) }
-  },[])
-
-  // Realtime leads
-  useEffect(()=>{
-    const ch=supabase.channel('rt-leads')
-      .on('postgres_changes',{event:'*',schema:'public',table:'amat_loan_leads'},p=>{
-        const updated = p.new as LoanLead
-        const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved','sin_respuesta','closed']
-        if(p.eventType==='UPDATE'){
-          if(EXCLUIDOS.includes(updated.status||'') || (updated as any).archived){
-            setBotLeads(prev=>{
-              const existe = prev.find(l=>l.id===updated.id)
-              if(!existe) return prev
-              return prev.filter(l=>l.id!==updated.id)
-            })
-          } else {
-            setBotLeads(prev=>{
-              const existe = prev.find(l=>l.id===updated.id)
-              if(existe) return prev.map(l=>l.id===updated.id?updated:l)
-              // Si el lead fue asignado a este operador (ej: tomó desde Base),
-              // agregarlo a botLeads aunque no estuviera antes
-              if(updated.assigned_to && updated.assigned_to === meRef.current?.username) {
-                return [...prev, updated]
-              }
-              return prev
-            })
-          }
-          setBaseLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
-        } else if(p.eventType==='INSERT'){
-          // Solo agregar a cola si es new/contacted y no archivado
-          if(['new','contacted'].includes(updated.status||'') && !(updated as any).archived && !updated.assigned_to) {
-            setColaLeadsState(prev => prev.find(l=>l.id===updated.id) ? prev : [updated as LoanLead, ...prev])
-            setColaTotal(t => t + 1)
-          }
-        }
-      }).subscribe()
-    return ()=>{ supabase.removeChannel(ch) }
-  },[])
-
-  // Realtime consultas
-  useEffect(()=>{
-    const ch=supabase.channel('rt-consultas')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'amat_consultas'},p=>{
-        setConsultas(prev=>[p.new as any,...prev])
-        const c = p.new as any
-        if(c.phone) setFlujoMap(prev=>({...prev,[c.phone]:c.flujo||'solicitud'}))
-      })
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'amat_consultas'},p=>{
-        setConsultas(prev=>prev.map(c=>c.id===(p.new as any).id?p.new as any:c))
-        const c = p.new as any
-        if(c.phone) setFlujoMap(prev=>({...prev,[c.phone]:c.flujo||'solicitud'}))
-      })
-      .subscribe()
-    return ()=>{ supabase.removeChannel(ch) }
-  },[])
-
-  // Cargar leads de la bandeja (solo los que tienen mensajes)
-  useEffect(()=>{
-    fetchCerradosHoy().then(n => setCerradosHoyCount(n))
-
-    const phones=[...new Set(initialMessages.map(m=>m.phone_number))]
-    ; if(phones.length===0){ ; return }
-
-    // Supabase tiene límite de ~1000 en .in() — hacemos lotes de 200
-    const BATCH = 200
-    const chunks = (arr: string[]) => Array.from({length: Math.ceil(arr.length/BATCH)}, (_,i) => arr.slice(i*BATCH,(i+1)*BATCH))
-
-    // Cargar leads en lotes — EXCLUIDOS debe coincidir con el realtime rt-leads
-    Promise.all(chunks(phones).map(chunk =>
-      supabase.from('amat_loan_leads')
-        .select('*')
-        .in('phone_number', chunk)
-        .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved","sin_respuesta","closed")')
-        .eq('archived', false)
-        .then(({data}) => data || [])
-    )).then(results => {
-      const all = results.flat() as LoanLead[]
-      const seen = new Set<string>()
-      const unique = all.filter(l => {
-        const key = l.phone_number || String(l.id)
-        if(seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
-      setBotLeads(prev => {
-        const merged = [...unique]
-        prev.forEach(l => { if(!merged.find(x=>x.id===l.id)) merged.push(l) })
-                return merged
-      })
-    })
-
-    // Cargar flujos en lotes
-    Promise.all(chunks(phones).map(chunk =>
-      supabase.from('amat_consultas')
-        .select('phone,flujo')
-        .in('phone', chunk)
-        .then(({data}) => data || [])
-    )).then(results => {
-      const all = results.flat()
-      if(all.length){
-        const map: Record<string,string> = {}
-        all.forEach((r:any)=>{ if(r.phone) map[r.phone]=r.flujo||'solicitud' })
-        setFlujoMap(map)
-      }
-    })
-  },[initialMessages])
-
-  // ─────────────────────────────────────────────
-  //  CARGAR CONSULTAS desde amat_consultas
-  // ─────────────────────────────────────────────
-
-  const cSearchRef = useRef(cSearch)
-  const cFlujoRef  = useRef(cFlujo)
-  const cEstadoRef = useRef(cEstado)
-  const cRepRef    = useRef(cRep)
-  const cOrdenRef  = useRef(cOrden)
-
-  useEffect(()=>{ cSearchRef.current = cSearch },[cSearch])
-  useEffect(()=>{ cFlujoRef.current  = cFlujo  },[cFlujo])
-  useEffect(()=>{ cEstadoRef.current = cEstado },[cEstado])
-  useEffect(()=>{ cRepRef.current    = cRep    },[cRep])
-  useEffect(()=>{ cOrdenRef.current  = cOrden  },[cOrden])
-
-  const loadConsultas = async (
-    repOverride?: string,
-    flujoOverride?: string,
-    estadoOverride?: string,
-    searchOverride?: string,
-  ) => {
-    setConsultasLoading(true)
-    const seq    = ++loadConsultasSeq.current
-    const search = searchOverride ?? cSearchRef.current
-    const flujo  = flujoOverride  ?? cFlujoRef.current
-    const estado = estadoOverride ?? cEstadoRef.current
-    const rep    = repOverride    ?? cRepRef.current
-
-    let data: any[] = []
-    let leadsData: any[] = []
-    let count = 0
-
-    try {
-      const result = await fetchConsultas({ search, flujo, estado, rep, orden: cOrdenRef.current })
-      if(seq !== loadConsultasSeq.current) return
-      data      = result.consultas
-      leadsData = result.leadsData
-      count     = result.count
-    } catch(e: any) {
-      if(seq !== loadConsultasSeq.current) return
-      console.error('[loadConsultas] Error:', e)
-      alert('❌ Error al cargar las consultas. Intentá de nuevo.')
-      setConsultasLoading(false)
-      return
-    }
-
-    setConsultasTotal(count)
-
-    // Deduplicar con Set — O(n) en vez de O(n²)
-    const phonesConConsulta = new Set(data.map((c:any) => c.phone).filter(Boolean))
-    const statusMap: Record<string,string> = { new:'cola', contacted:'pendiente', contactado:'contactado', closed:'resuelto', resolved:'resuelto', rejected:'cerrado_rechazado', not_interested:'cerrado_no_interesado', sin_respuesta:'cerrado', unresolved:'cerrado', finalizado:'cerrado' }
-
-    const sinConsulta = leadsData
-      .filter((l:any) => l.phone_number && !phonesConConsulta.has(l.phone_number))
-      .map((l:any) => ({
-        id: `lead_${l.id}`,
-        phone: l.phone_number,
-        nombre_apellido: l.full_name,
-        dni: l.dni,
-        reparticion_label: l.reparticion,
-        flujo: flujoMap[l.phone_number||'']||'solicitud',
-        prestacion: null, afiliado: null,
-        vendedor: l.assigned_to, situacion: null,
-        estado: statusMap[l.status||''] || l.status,
-        created_at: l.created_at,
-        _esLeadSinConsulta: true,
-      }))
-      .filter((c:any) => flujo === 'all' || c.flujo === flujo)
-      .filter((c:any) => estado === 'all' || c.estado === estado)
-
-    // Deduplicar consultas — O(n) con Map
-    const todasConsultas = [...sinConsulta, ...data]
-    const seenPhones = new Map<string, any>()
-    for(const c of todasConsultas) {
-      const phone = c.phone || ''
-      if(!phone) continue
-      const existing = seenPhones.get(phone)
-      if(!existing || new Date(c.created_at||0) > new Date(existing.created_at||0)) {
-        seenPhones.set(phone, c)
-      }
-    }
-    const ordenadas = [...seenPhones.values()].sort((a:any,b:any)=>{
-      const ta = new Date(a.created_at||0).getTime()
-      const tb = new Date(b.created_at||0).getTime()
-      return cOrdenRef.current === 'asc' ? ta - tb : tb - ta
-    })
-    setConsultas(ordenadas)
-    setConsultasLoading(false)
-  }
-
-  // useEffect con debounce — evita que múltiples dependencias disparen cargas simultáneas
-  const consultasTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
-  useEffect(()=>{
-    if(tab==='reportes') loadReportes(reportePeriodo, reporteDesde, reporteHasta)
-    if(tab==='consultas') {
-      // Al entrar al tab, sincronizar el input visual con el estado real del filtro
-      setCSearchInput(cSearch)
-      setConsultasLoading(true)
-      if(consultasTimer.current) clearTimeout(consultasTimer.current)
-      consultasTimer.current = setTimeout(()=>{
-        loadConsultas(cRep, cFlujo, cEstado, cSearch)
-        fetchCampanasRecientes(60).then(map => setCampanas(map))
-      }, 50)
-    }
-    return ()=>{
-      if(consultasTimer.current) clearTimeout(consultasTimer.current)
-    }
-  },[tab, cSearch, cFlujo, cEstado, cRep, cOrden]) // eslint-disable-line
+  },[messages, selectedPhone]) // eslint-disable-line
 
 
-  // Cargar datos de reportes
-  const loadReportes = async (
-    periodo?: string,
-    desdeCustom?: string,
-    hastaCustom?: string
-  ) => {
-    const p = (periodo ?? reportePeriodo) as any
-    const { leads, flujoMap: rFlujoMap, cerradosHoy } = await fetchReporteData(p, desdeCustom, hastaCustom)
-    setReporteLeads(leads)
-    setCerradosHoyCount(cerradosHoy)
-    setPipelineFlujoMap(rFlujoMap)
-  }
 
-  // Cargar base paginada
-  const baseSearchRef   = useRef(baseSearch)
-  const baseRepRef      = useRef(baseRep)
-  const baseBancoRef    = useRef(baseBanco)
-  const baseStatusRef   = useRef(baseStatus)
-  const baseTelRef      = useRef(baseTel)
-  const baseAssignedRef = useRef(baseAssigned)
-  const basePageRef     = useRef(basePage)
-  const baseOrdenColRef = useRef(baseOrdenCol)
-  const baseOrdenDirRef = useRef(baseOrdenDir)
+  // ── Actions ───────────────────────────────────────────────────────────────
+  const LIMITE_PLANTILLA_HORAS = 24
 
-  useEffect(()=>{ baseSearchRef.current   = baseSearch   },[baseSearch])
-  useEffect(()=>{ baseRepRef.current      = baseRep      },[baseRep])
-  useEffect(()=>{ baseBancoRef.current    = baseBanco    },[baseBanco])
-  useEffect(()=>{ baseStatusRef.current   = baseStatus   },[baseStatus])
-  useEffect(()=>{ baseTelRef.current      = baseTel      },[baseTel])
-  useEffect(()=>{ baseAssignedRef.current = baseAssigned },[baseAssigned])
-  useEffect(()=>{ basePageRef.current     = basePage     },[basePage])
-  useEffect(()=>{ baseOrdenColRef.current = baseOrdenCol },[baseOrdenCol])
-  useEffect(()=>{ baseOrdenDirRef.current = baseOrdenDir },[baseOrdenDir])
-
-  const loadBase = async(overrides?: {
-    search?: string; rep?: string; banco?: string; status?: string;
-    tel?: string; assigned?: string; page?: number;
-    ordenCol?: string; ordenDir?: 'asc'|'desc'
-  })=>{
-    setBaseLoading(true)
-    const seq = ++loadBaseSeq.current
-    const filtros = {
-      search:   overrides?.search   ?? baseSearchRef.current,
-      rep:      overrides?.rep      ?? baseRepRef.current,
-      banco:    overrides?.banco    ?? baseBancoRef.current,
-      status:   overrides?.status   ?? baseStatusRef.current,
-      tel:      (overrides?.tel     ?? baseTelRef.current) as 'all'|'con'|'sin',
-      assigned: overrides?.assigned ?? baseAssignedRef.current,
-      page:     overrides?.page     ?? basePageRef.current,
-      ordenCol: overrides?.ordenCol ?? baseOrdenColRef.current,
-      ordenDir: (overrides?.ordenDir ?? baseOrdenDirRef.current) as 'asc'|'desc',
-    }
-
-    try {
-      const { leads, total } = await fetchBase(filtros)
-      if(seq !== loadBaseSeq.current) return
-      setBaseLeads(leads)
-      setBaseTotal(total)
-
-      // Cargar flujo de los leads de esta página para mostrar la columna Flujo
-      const phones = leads.map(l=>l.phone_number).filter(Boolean) as string[]
-      if(phones.length) {
-        fetchFlujoMap(phones).then(map => {
-          if(seq !== loadBaseSeq.current) return
-          setFlujoMap(prev=>({...prev,...map}))
-        })
-      }
-    } catch(e: any) {
-      if(seq !== loadBaseSeq.current) return
-      console.error('[loadBase] Error:', e)
-      alert('❌ Error al cargar la base de contactos. Intentá de nuevo.')
-    } finally {
-      if(seq === loadBaseSeq.current) setBaseLoading(false)
-    }
-  }
-
-  useEffect(()=>{
-    if(tab==='base') {
-      loadBase({
-        search: baseSearch, rep: baseRep, banco: baseBanco,
-        status: baseStatus, tel: baseTel, assigned: baseAssigned,
-        page: basePage, ordenCol: baseOrdenCol, ordenDir: baseOrdenDir
-      })
-    }
-  },[tab]) // eslint-disable-line
-
-  useEffect(()=>{
-    if(tab==='base') loadBase({
-      search: baseSearch, rep: baseRep, banco: baseBanco,
-      status: baseStatus, tel: baseTel, assigned: baseAssigned,
-      page: basePage, ordenCol: baseOrdenCol, ordenDir: baseOrdenDir
-    })
-  },[baseSearch,baseRep,baseBanco,baseStatus,baseTel,baseAssigned,basePage,baseOrdenCol,baseOrdenDir]) // eslint-disable-line
-
-  useEffect(()=>{
-    if(tab==='bandeja'){
-      let cancelado = false
-
-      // Cargar mensajes de los últimos 30 días
-      ;(async () => {
-        const { fetchMensajesBandeja } = await import('@/services/lead.service')
-        const allMsgs = await fetchMensajesBandeja()
-        if(!cancelado && allMsgs.length) setMessages(allMsgs as Message[])
-      })()
-
-      // Cargar leads asignados + cola
-      ;(async () => {
-        if(!me) return
-        const { asignados, cola, colaTotal } = await fetchBandejaLeads(me.username)
-        if(cancelado) return
-
-        setColaTotal(colaTotal)
-
-        if(asignados.length) {
-          setBotLeads(prev => {
-            const merged = [...prev]
-            asignados.forEach(lead => {
-              if(!merged.find(l=>l.id===lead.id)) merged.push(lead)
-            })
-            return merged
-          })
-        }
-        if(cola.length) {
-          const phonesCol = cola.map((l:LoanLead)=>l.phone_number).filter(Boolean) as string[]
-          if(phonesCol.length) {
-            fetchFlujoMap(phonesCol).then(map => {
-              if(cancelado) return
-              setFlujoMap(prev=>({...prev,...map}))
-            })
-          }
-          setColaLeadsState(cola)
-        }
-      })()
-
-      return () => { cancelado = true }
-    }
-  },[tab, me]) // eslint-disable-line
-
-  // ── AUTH ──────────────────────────────────
-  const handleLogin=()=>{
-    if(locked) return
-    const u=USERS.find(u=>u.username.toUpperCase()===loginUser.trim().toUpperCase()&&u.password===loginPass)
-    if(u){
-      setMe(u); setLoginErr(''); setAttempts(0)
-      if(rememberMe){ localStorage.setItem('amat_remember_user',loginUser.trim().toUpperCase()); localStorage.setItem('amat_remember_pass',loginPass) }
-      else { localStorage.removeItem('amat_remember_user'); localStorage.removeItem('amat_remember_pass') }
-    }
-    else{
-      const a=attempts+1; setAttempts(a)
-      if(a>=5){ setLocked(true); setCountdown(30); setLoginErr('Demasiados intentos. Bloqueado 30s.') }
-      else setLoginErr(`Incorrecto. Intentos restantes: ${5-a}`)
-    }
-  }
-
-  // ── ACCIONES ──────────────────────────────
-  const sendReply=async()=>{
-    if(!replyText.trim()||!selectedPhone||!me) return
+  const sendReply = async () => {
+    if(!replyText.trim() || !selectedPhone || !me) return
     const text = replyText
     setReplyText('')
     setSending(true)
-
-    // Auto-asignación: si el lead no tiene dueño, asignarlo al operador que escribe
     if(currentLead && !currentLead.assigned_to) {
-      const resAsign = await autoAsignarLead(currentLead.id, selectedPhone, me.username)
-      if(resAsign.ok) {
-        setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
-        setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
-        setColaTotal(t => Math.max(0, t - 1))
+      const { autoAsignarLead } = await import('@/services/lead.service')
+      const res = await autoAsignarLead(currentLead.id, selectedPhone, me.username)
+      if(res.ok) {
+        bandeja.setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
+        bandeja.setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
+        bandeja.setColaTotal(t => Math.max(0, t - 1))
       }
     }
-
-    // UI optimista: mostrar el mensaje al instante
-    const tempId = `temp_${Date.now()}`
     const tempMsg: Message = {
-      id: tempId as any,
+      id: `temp_${Date.now()}` as any,
       phone_number: selectedPhone,
-      body: text,
-      direction: 'out',
+      body: text, direction: 'out',
       sender: me.username,
       created_at: new Date().toISOString(),
-    } as Message
+      media_url: null, media_type: null,
+    }
     setCurrentChatMsgs(prev => [...prev, tempMsg])
     setMessages(prev => [...prev, tempMsg])
     try {
+      const { sendReply: chatSendReply } = await import('@/services/chat.service')
       await chatSendReply({ phone: selectedPhone, text, senderName: me.username })
     } catch(e) {
       setReplyText(text)
@@ -718,201 +312,43 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     }
   }
 
-  const LIMITE_PLANTILLA_HORAS = 24
-
-  const sendTemplate=async(template:'recontacto'|'primer_contacto_esp'|'ayuda_economica')=>{
-    if(!selectedPhone||!me) return
+  const sendTemplate = async (template: 'recontacto'|'primer_contacto_esp'|'ayuda_economica') => {
+    if(!selectedPhone || !me) return
+    const { puedeEnviarPlantilla, sendTemplate: chatSendTemplate } = await import('@/services/chat.service')
     const check = await puedeEnviarPlantilla(selectedPhone)
     if(!check.ok) {
-      alert(`🚫 No se puede enviar la plantilla.
-
-Ya se le envió una plantilla a este número en las últimas ${LIMITE_PLANTILLA_HORAS} horas. Podrás volver a enviarle en aprox. ${check.horasRestantes}hs.
-
-Este límite protege el número de WhatsApp de la empresa.`)
+      alert(`🚫 No se puede enviar la plantilla.\n\nYa se le envió una plantilla a este número en las últimas ${LIMITE_PLANTILLA_HORAS} horas. Podrás volver a enviarle en aprox. ${check.horasRestantes}hs.\n\nEste límite protege el número de WhatsApp de la empresa.`)
       return
     }
-
-    // Auto-asignación: si el lead no tiene dueño, asignarlo al operador que envía
     if(currentLead && !currentLead.assigned_to) {
-      const resAsign = await autoAsignarLead(currentLead.id, selectedPhone, me.username)
-      if(resAsign.ok) {
-        setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
-        setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
-        setColaTotal(t => Math.max(0, t - 1))
+      const { autoAsignarLead } = await import('@/services/lead.service')
+      const res = await autoAsignarLead(currentLead.id, selectedPhone, me.username)
+      if(res.ok) {
+        bandeja.setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
+        bandeja.setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
+        bandeja.setColaTotal(t => Math.max(0, t - 1))
       }
     }
-
     setSending(true)
-    const lead = bandejaLeads.find(l=>l.phone_number===selectedPhone)
-      || baseLeads.find(l=>l.phone_number===selectedPhone)
+    const lead = bandeja.bandejaLeads.find(l=>l.phone_number===selectedPhone) || base.baseLeads.find(l=>l.phone_number===selectedPhone)
     await chatSendTemplate({ phone: selectedPhone, template, senderName: me.username, dni: lead?.dni })
     setSending(false)
   }
 
-  // ═══ FUNCIÓN ÚNICA DE CAMBIO DE ESTADO ═══
-  const cambiarEstado = async (
-    lead: LoanLead,
-    nuevoStatus: string,
-    opts?: { notes?: string; situacion?: string; extraFields?: Record<string,any> }
-  ) => {
-    const { ok, esFinal } = await cambiarEstadoLead(lead, nuevoStatus, opts)
-    if(!ok) {
-      alert('❌ No se pudo cambiar el estado. Intentá de nuevo.')
-      return
-    }
-
-    const upd: any = {
-      status: nuevoStatus,
-      updated_at: new Date().toISOString(),
-      ...(esFinal && { archived: true }),
-      ...(opts?.notes !== undefined && { notes: opts.notes }),
-      ...(opts?.extraFields || {}),
-    }
-
-    if(esFinal) {
-      setBotLeads(prev => prev.filter(l => l.id !== lead.id))
-      if(nuevoStatus === 'closed' || nuevoStatus === 'resolved') setCerradosHoyCount(c => c + 1)
-      if(selectedPhone === lead.phone_number) setSelectedPhone(null)
-    } else {
-      setBotLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
-      setColaLeadsState(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
-    }
-  }
-
-  // Compatibilidad con llamadas existentes
-  const updateStatus = async (id: number, status: string, notes?: string) => {
-    const lead = bandejaLeads.find(l=>l.id===id) || colaLeadsState.find(l=>l.id===id) || baseLeads.find(l=>l.id===id)
-    if(!lead) {
-      const esFinal = ESTADOS_FINALES.includes(status)
-      const upd: any = { status, updated_at: new Date().toISOString(), ...(esFinal && { archived: true }) }
-      if(notes !== undefined) upd.notes = notes
-      const { ok } = await cambiarEstadoLead({ id } as LoanLead, status, { notes })
-      if(!ok) alert('❌ No se pudo actualizar el estado. Intentá de nuevo.')
-      return
-    }
-    await cambiarEstado(lead, status, { notes })
-  }
-
-  const LIMITE_BANDEJA = 50
-
-  const tomarConversacion = async (lead: LoanLead) => {
-    if(!me) return
-    const misActivas = bandejaLeads.filter(l =>
-      l.assigned_to === me.username &&
-      !['closed','rejected','not_interested','resolved','unresolved','finalizado','sin_respuesta'].includes(l.status||'')
-    ).length
-    if(misActivas >= LIMITE_BANDEJA) {
-      alert(`Tenés ${misActivas} conversaciones activas. El límite es ${LIMITE_BANDEJA}. Cerrá alguna antes de tomar una nueva.`)
-      return
-    }
-
-    const { ok } = await tomarLead(lead, me.username)
-    if(!ok) {
-      alert('❌ No se pudo tomar la conversación. Intentá de nuevo.')
-      return
-    }
-
-    setColaTotal(t => Math.max(0, t - 1))
-    setColaLeadsState(prev => prev.filter(l => l.id !== lead.id))
-    setBotLeads(prev => {
-      const existe = prev.find(l => l.id === lead.id)
-      if(existe) return prev.map(l => l.id === lead.id ? { ...l, assigned_to: me.username, status: 'contacted' } : l)
-      return [...prev, { ...lead, assigned_to: me.username, status: 'contacted' }]
-    })
-    setSelectedPhone(lead.phone_number)
-    setVistaMode('mis_chats')
-    if(lead.phone_number) cargarMensajes(lead.phone_number)
-  }
-
-  // Helper: cargar mensajes de un phone
-  const cargarMensajes = (phone: string) => {
-    fetchMensajesPhone(phone).then(msgs => {
-      setCurrentChatMsgs(msgs)
-      setMessages(prev => [
-        ...prev.filter(m => m.phone_number !== phone),
-        ...msgs
-      ])
-    })
-  }
-
-  const abrirChat = (lead: LoanLead) => {
-    setCurrentChatMsgs([])
-    setSelectedPhone(lead.phone_number)
-    if(lead.phone_number) cargarMensajes(lead.phone_number)
-    // Refrescar datos frescos del lead desde DB al abrir el chat
-    if(lead.id) {
-      fetchLeadById(lead.id).then(res => {
-        if(res.ok && res.data) {
-          setBotLeads(prev => prev.map(l => l.id === res.data!.id ? res.data! : l))
-          setBaseLeads(prev => prev.map(l => l.id === res.data!.id ? res.data! : l))
-        }
-      })
-    }
-  }
-
-  const finalizarConversacion = async (nota?: string) => {
-    if(!currentLead) return
-    // Usar el estado elegido en el modal, o el actual si ya es final
-    const statusFinal = finalizarEstado || (ESTADOS_FINALES.includes(currentLead.status||'') ? currentLead.status! : 'not_interested')
-    await cambiarEstado(currentLead, statusFinal, { situacion: nota })
-    setShowFinalizarModal(false)
-    setFinalizarEstado('')
-    setFinalizarNota('')
-  }
-
-  const guardarVenta = async () => {
-    if(!currentLead||!me) return
-    await cambiarEstado(currentLead, 'closed', {
-      notes: ventaForm.notas || undefined,
-      situacion: `Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${parseInt(ventaForm.monto).toLocaleString('es-AR')} en ${ventaForm.cuotas} cuotas · Valor cuota: $${parseFloat(ventaForm.valor_cuota).toLocaleString('es-AR')}`,
-      extraFields: {
-        entidad:          ventaForm.entidad,
-        linea:            ventaForm.linea,
-        reparticion:      ventaForm.reparticion || currentLead.reparticion,
-        monto_solicitado: parseInt(ventaForm.monto)||0,
-        cant_cuotas:      parseInt(ventaForm.cuotas)||0,
-        valor_cuota:      parseFloat(ventaForm.valor_cuota)||0,
-      },
-    })
-    setShowVentaModal(false)
-    setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
-  }
-
-  const openEdit=(lead:LoanLead)=>{
-    setEditTarget(lead)
-    setEditForm({full_name:lead.full_name,dni:lead.dni,phone_number:lead.phone_number,reparticion:lead.reparticion,bank:lead.bank,amount:lead.amount,installments:lead.installments,status:lead.status,assigned_to:lead.assigned_to,notes:lead.notes})
-    setShowEditModal(true)
-  }
-
-  const saveEdit=async()=>{
-    if(!editTarget) return
-    setEditSaving(true)
-    const { ok } = await editLead(editTarget.id, editTarget.phone_number, editForm)
-    if(!ok) {
-      alert('❌ No se pudo guardar los cambios. Intentá de nuevo.')
-      setEditSaving(false)
-      return
-    }
-    if(editForm.status && ESTADOS_FINALES.includes(editForm.status)) {
-      setBotLeads(prev => prev.filter(l => l.id !== editTarget.id))
-    }
-    setEditSaving(false); setShowEditModal(false); setEditTarget(null)
-    if(tab==='base') loadBase()
-  }
-
-  const saveNote=async()=>{
-    const lead=currentLead||editTarget
+  const saveNote = async () => {
+    const lead = currentLead || editTarget
     if(!lead) return
+    const { saveLeadNote } = await import('@/services/lead.service')
     const res = await saveLeadNote(lead.id, noteText)
     if(!res.ok) { alert('❌ No se pudo guardar la nota. Intentá de nuevo.'); return }
     setShowNoteModal(false)
   }
 
-  const handleReject=async()=>{
-    const lead=currentLead||editTarget
-    if(!lead||!rejectReason) return
-    const note=`Rechazado: ${rejectReason}`
-    await updateStatus(lead.id,'rejected',lead.notes?lead.notes+'\n'+note:note)
+  const handleReject = async () => {
+    const lead = currentLead || editTarget
+    if(!lead || !rejectReason) return
+    const note = `Rechazado: ${rejectReason}`
+    await bandeja.updateStatus(lead.id, 'rejected', lead.notes ? lead.notes + '\n' + note : note)
     setShowRejectModal(false); setRejectReason('')
   }
 
@@ -921,69 +357,63 @@ Este límite protege el número de WhatsApp de la empresa.`)
     if(!ok) alert(error || 'Error al exportar')
   }
 
-  const openTemplate=(lead:LoanLead)=>{
+  const openTemplate = (lead: LoanLead) => {
     setEditTarget(lead)
     setSelectedTemplate(null)
     setTemplateVars({})
     setShowTemplateModal(true)
   }
 
-  const applyTemplate=(tpl:typeof TEMPLATES[0],lead:LoanLead)=>{
+  const applyTemplate = (tpl: typeof TEMPLATES[0], lead: LoanLead) => {
     setSelectedTemplate(tpl)
-    const vars:Record<string,string>={}
-    tpl.variables.forEach(v=>{
-      if(v==='nombre') vars[v]=(lead.full_name||'').split(' ')[0]||''
-      if(v==='reparticion') vars[v]=lead.reparticion||''
+    const vars: Record<string,string> = {}
+    tpl.variables.forEach(v => {
+      if(v==='nombre')     vars[v] = (lead.full_name||'').split(' ')[0] || ''
+      if(v==='reparticion') vars[v] = lead.reparticion || ''
     })
     setTemplateVars(vars)
   }
 
-  // ── DATOS DERIVADOS ───────────────────────
-  // FIX 3: deduplicar allLeads como red de seguridad final antes del render
-  const seenLeads = new Set<string>()
-  const allLeads = botLeads.filter(l => {
-    const key = l.phone_number || String(l.id)
-    if(seenLeads.has(key)) return false
-    seenLeads.add(key)
-    return true
-  })
+  const finalizarConversacion = async (nota?: string) => {
+    if(!currentLead) return
+    const statusFinal = finalizarEstado || (ESTADOS_FINALES.includes(currentLead.status||'') ? currentLead.status! : 'not_interested')
+    await bandeja.cambiarEstado(currentLead, statusFinal, { situacion: nota })
+    setShowFinalizarModal(false)
+    setFinalizarEstado('')
+    setFinalizarNota('')
+  }
 
-  // Bandeja: solo leads con conversación (mensajes)
-  const phonesConMensajes=[...new Set(messages.map(m=>m.phone_number))]
-  const ESTADOS_FINALES_BANDEJA = ['finalizado','closed','rejected','not_interested','resolved','unresolved','sin_respuesta']
-  const bandejaLeads=allLeads.filter(l=>{
-    if(!l.phone_number) return false
-    // Leads asignados al usuario siempre aparecen aunque sus mensajes no estén en el batch
-    if(!phonesConMensajes.includes(l.phone_number) && l.assigned_to !== me?.username) return false
-    if(ESTADOS_FINALES_BANDEJA.includes(l.status||'')) return false
-    const q=bandejaSearch.toLowerCase()
-    const m=!q||(l.full_name||'').toLowerCase().includes(q)||(l.phone_number||'').includes(q)||(l.dni||'').includes(q)
-    if(soloNoLeidos) {
-      const hasUnread = messages.some(msg =>
-        msg.phone_number === l.phone_number &&
-        msg.direction === 'in' &&
-        new Date(msg.created_at) > new Date(l.updated_at)
-      )
-      if(!hasUnread) return false
-    }
-    return m
-  }).sort((a, b) => {
-    // Usar updated_at del lead para evitar iterar mensajes en cada sort
-    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-  })
-  
-  const currentLead=allLeads.find(l=>l.phone_number===selectedPhone)||colaLeadsState.find(l=>l.phone_number===selectedPhone)||baseLeads.find(l=>l.phone_number===selectedPhone)
-  // currentMsgs: priorizar currentChatMsgs (ya vienen ordenados de cargarMensajes)
-  // Solo hacer filter+sort como fallback si no hay currentChatMsgs del phone actual
+  const guardarVenta = async () => {
+    if(!currentLead || !me) return
+    await bandeja.cambiarEstado(currentLead, 'closed', {
+      notes: ventaForm.notas || undefined,
+      situacion: `Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${parseInt(ventaForm.monto).toLocaleString('es-AR')} en ${ventaForm.cuotas} cuotas · Valor cuota: $${parseFloat(ventaForm.valor_cuota).toLocaleString('es-AR')}`,
+      extraFields: {
+        entidad:          ventaForm.entidad,
+        linea:            ventaForm.linea,
+        reparticion:      ventaForm.reparticion || currentLead.reparticion,
+        monto_solicitado: parseInt(ventaForm.monto) || 0,
+        cant_cuotas:      parseInt(ventaForm.cuotas) || 0,
+        valor_cuota:      parseFloat(ventaForm.valor_cuota) || 0,
+      },
+    })
+    setShowVentaModal(false)
+    setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
+  }
+
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const currentLead = allLeads.find(l=>l.phone_number===selectedPhone)
+    || colaLeadsState.find(l=>l.phone_number===selectedPhone)
+    || baseLeads.find(l=>l.phone_number===selectedPhone)
+
   const currentMsgs = (
     currentChatMsgs.length > 0 && currentChatMsgs[0]?.phone_number === selectedPhone
   )
-    ? currentChatMsgs  // ya están ordenados asc por cargarMensajes
+    ? currentChatMsgs
     : messages
         .filter(m=>m.phone_number===selectedPhone)
         .sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())
 
-  // stats memoizado — no recalcular en cada render/keystroke
   const stats = useMemo(()=>({
     inbound:  bandejaLeads.length,
     activos:  bandejaLeads.filter(l=>['contacted','new'].includes(l.status||'')).length,
@@ -2733,15 +2163,11 @@ Este límite protege el número de WhatsApp de la empresa.`)
                   const nuevoStatus = consultaStatusToLeadStatus(consultaEdit.estado, consultaSelected.flujo || 'solicitud')
                   const esFinal = ESTADOS_FINALES.includes(nuevoStatus)
 
-                  const resLead = await fetchLeadById
-                    ? await (async () => {
-                        const { data } = await supabase.from('amat_loan_leads')
-                          .select('id,archived,assigned_to,status')
-                          .eq('phone_number', consultaSelected.phone)
-                          .single()
-                        return { ok: !!data, data }
-                      })()
-                    : { ok: false, data: null }
+                  const { data: _ld } = await supabase.from('amat_loan_leads')
+                    .select('id,archived,assigned_to,status')
+                    .eq('phone_number', consultaSelected.phone)
+                    .single()
+                  const resLead = { ok: !!_ld, data: _ld }
 
                   if(resLead.ok && resLead.data) {
                     const existingLead = resLead.data as any
