@@ -2,10 +2,11 @@
 //  HOOKS · USE CONSULTAS
 //  Maneja el tab de consultas: estado, filtros, carga y acciones del modal.
 //
-//  Por qué existe: loadConsultas, los filtros de consultas, y el modal de
-//  gestión vivían en BandejaClient. Este hook los encapsula.
-//
-//  Qué ocurriría si desaparece: el tab de consultas dejaría de funcionar.
+//  Optimización: los datos se cachean en memoria — cambiar de tab y volver
+//  no relanza la query si los filtros no cambiaron. Solo relanza cuando:
+//    - Los filtros cambian (search, flujo, estado, rep, orden)
+//    - Se llama loadConsultas() explícitamente (ej: después de guardar)
+//    - Es la primera vez que se entra al tab en la sesión
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef } from 'react'
@@ -36,6 +37,9 @@ export function useConsultas(tab: string, flujoMap: Record<string,string>) {
   const cOrdenRef  = useRef(cOrden)
   const loadConsultasSeq = useRef(0)
   const consultasTimer   = useRef<ReturnType<typeof setTimeout>|null>(null)
+
+  // Cache: si ya cargamos al menos una vez, no volver a cargar al cambiar de tab
+  const cargadoRef = useRef(false)
 
   useEffect(()=>{ cSearchRef.current = cSearch },[cSearch])
   useEffect(()=>{ cFlujoRef.current  = cFlujo  },[cFlujo])
@@ -118,21 +122,33 @@ export function useConsultas(tab: string, flujoMap: Record<string,string>) {
       return cOrdenRef.current === 'asc' ? ta - tb : tb - ta
     })
     setConsultas(ordenadas)
+    cargadoRef.current = true
     setConsultasLoading(false)
   }
 
-  // Disparar carga al cambiar tab o filtros
+  // Efecto 1: cambio de tab — solo carga si es la primera vez en la sesión
   useEffect(()=>{
     if(tab !== 'consultas') return
-    setCSearchInput(cSearch)
-    setConsultasLoading(true)
+    if(cargadoRef.current) return  // ya hay datos en memoria, no recargar
     if(consultasTimer.current) clearTimeout(consultasTimer.current)
     consultasTimer.current = setTimeout(()=>{
-      loadConsultas(cRep, cFlujo, cEstado, cSearch)
+      loadConsultas()
       fetchCampanasRecientes(60).then(map => setCampanas(map))
     }, 50)
     return ()=>{ if(consultasTimer.current) clearTimeout(consultasTimer.current) }
-  },[tab, cSearch, cFlujo, cEstado, cRep, cOrden]) // eslint-disable-line
+  },[tab]) // eslint-disable-line
+
+  // Efecto 2: cambio de filtros — siempre recarga porque los datos cambiarían
+  useEffect(()=>{
+    if(tab !== 'consultas') return
+    if(!cargadoRef.current) return  // la primera carga la maneja el efecto 1
+    setCSearchInput(cSearch)
+    if(consultasTimer.current) clearTimeout(consultasTimer.current)
+    consultasTimer.current = setTimeout(()=>{
+      loadConsultas(cRep, cFlujo, cEstado, cSearch)
+    }, 300)
+    return ()=>{ if(consultasTimer.current) clearTimeout(consultasTimer.current) }
+  },[cSearch, cFlujo, cEstado, cRep, cOrden]) // eslint-disable-line
 
   return {
     consultas, setConsultas,
