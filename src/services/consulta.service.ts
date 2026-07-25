@@ -70,11 +70,23 @@ export async function fetchConsultas(
     q = q.eq('estado', 'cola')
   } else if (estado === 'pendiente') {
     q = q.eq('estado', 'pendiente')
+  } else if (estado === 'contactado') {
+    q = q.eq('estado', 'contactado')
+  } else if (estado === 'vendido') {
+    // Vendido = resuelto en solicitudes (excluye cobranzas)
+    q = q.eq('estado', 'resuelto').neq('flujo', 'cobranzas')
+  } else if (estado === 'rechazado') {
+    q = q.eq('estado', 'cerrado_rechazado')
+  } else if (estado === 'no_interesado') {
+    q = q.eq('estado', 'cerrado_no_interesado')
+  } else if (estado === 'sin_respuesta') {
+    // Sin respuesta = cerrado en solicitudes (excluye cobranzas)
+    q = q.eq('estado', 'cerrado').neq('flujo', 'cobranzas')
   } else if (estado === 'resuelto_cob') {
-    // Resuelto cobranzas → en amat_consultas se guarda como 'resuelto' con flujo cobranzas
+    // Resuelto cobranzas
     q = q.eq('estado', 'resuelto').eq('flujo', 'cobranzas')
-  } else if (estado === 'cerrado_cob') {
-    // No resuelto cobranzas → en amat_consultas se guarda como 'cerrado' con flujo cobranzas
+  } else if (estado === 'no_resuelto_cob') {
+    // No resuelto cobranzas = cerrado en cobranzas
     q = q.eq('estado', 'cerrado').eq('flujo', 'cobranzas')
   } else if (estado !== 'all') {
     q = q.eq('estado', estado)
@@ -209,67 +221,4 @@ export async function syncConsultaVendedor(phone: string, vendedor: string) {
       updated_at: new Date().toISOString(),
     }).eq('phone', phone)
   )
-}
-
-// ── Sincronización masiva de estados ─────────────────────────────────────────
-// Corrige desincronizaciones entre amat_loan_leads y amat_consultas.
-// Solo disponible para administradores. Llamar desde la UI con un botón.
-
-export type SyncResult = {
-  corregidos: number
-  detalle: { phone: string; de: string; a: string }[]
-  error?: string
-}
-
-export async function sincronizarEstados(): Promise<SyncResult> {
-  // Mapeo canónico: status de lead → estado esperado en consulta
-  const MAPEO: Record<string, string> = {
-    new:            'cola',
-    contacted:      'pendiente',
-    contactado:     'contactado',
-    closed:         'resuelto',
-    resolved:       'resuelto',
-    rejected:       'cerrado_rechazado',
-    not_interested: 'cerrado_no_interesado',
-    sin_respuesta:  'cerrado',
-    unresolved:     'cerrado',
-    finalizado:     'cerrado',
-  }
-
-  try {
-    // Traer todos los leads activos con su consulta
-    const { data, error } = await supabase
-      .from('amat_loan_leads')
-      .select('id, phone_number, status, assigned_to, amat_consultas!inner(phone, estado, vendedor)')
-      .eq('archived', false)
-      .not('phone_number', 'is', null)
-
-    if(error) return { corregidos: 0, detalle: [], error: error.message }
-
-    const desincronizados = (data || []).filter((l: any) => {
-      const consulta = l.amat_consultas?.[0]
-      if(!consulta) return false
-      const esperado = MAPEO[l.status || '']
-      return esperado && consulta.estado !== esperado
-    })
-
-    if(desincronizados.length === 0) return { corregidos: 0, detalle: [] }
-
-    const detalle: SyncResult['detalle'] = []
-
-    for(const lead of desincronizados) {
-      const consulta = (lead as any).amat_consultas[0]
-      const estadoEsperado = MAPEO[lead.status || '']
-      const upd: any = { estado: estadoEsperado, updated_at: new Date().toISOString() }
-      // Si el lead volvió a cola, limpiar el vendedor
-      if(estadoEsperado === 'cola') upd.vendedor = null
-
-      await supabase.from('amat_consultas').update(upd).eq('phone', lead.phone_number)
-      detalle.push({ phone: lead.phone_number!, de: consulta.estado, a: estadoEsperado })
-    }
-
-    return { corregidos: detalle.length, detalle }
-  } catch(e: any) {
-    return { corregidos: 0, detalle: [], error: e.message }
-  }
 }

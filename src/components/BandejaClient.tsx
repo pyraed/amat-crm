@@ -242,7 +242,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [rejectReason, setRejectReason]           = useState('')
   const [selectedTemplate, setSelectedTemplate]   = useState<typeof TEMPLATES[0]|null>(null)
   const [templateVars, setTemplateVars]           = useState<Record<string,string>>({})
-  const cSearchTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
 
   // ── Scroll effect ─────────────────────────────────────────────────────────
   const prevPhone    = useRef<string|null>(null)
@@ -1151,27 +1150,40 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               <input className="si" placeholder="Nombre, DNI o teléfono..." value={cSearchInput}
                 onChange={e=>{
                   setCSearchInput(e.target.value)
-                  if(cSearchTimer.current) clearTimeout(cSearchTimer.current)
-                  cSearchTimer.current=setTimeout(()=>{ setCSearch(e.target.value) },400)
+                  setCSearch(e.target.value)
                 }}
               />
             </div>
-            <select className="fsel" value={cFlujo} onChange={e=>setCFlujo(e.target.value)}>
+            <select className="fsel" value={cFlujo} onChange={e=>{
+              const nuevoFlujo = e.target.value
+              setCFlujo(nuevoFlujo)
+              // Si el estado actual no aplica al nuevo flujo, resetearlo
+              const soloVentas = ['vendido','rechazado','no_interesado','sin_respuesta']
+              const soloCobranzas = ['resuelto_cob','no_resuelto_cob']
+              if(nuevoFlujo === 'cobranzas' && soloVentas.includes(cEstado)) setCEstado('all')
+              if(nuevoFlujo === 'solicitud' && soloCobranzas.includes(cEstado)) setCEstado('all')
+            }}>
               <option value="all">Todos los flujos</option>
               <option value="solicitud">Solicitud</option>
               <option value="cobranzas">Cobranzas</option>
             </select>
-            <select className="fsel" value={cEstado} onChange={e=>setCEstado(e.target.value)}>
+            <select className="fsel" value={cEstado} onChange={e=>{ setCEstado(e.target.value) }}>
               <option value="all">Todos los estados</option>
-              <option value="cola">Cola</option>
-              <option value="pendiente">Pendiente</option>
-              <option value="contactado">Contactado</option>
-              <option value="cerrado">Sin respuesta</option>
-              <option value="resuelto">Vendido</option>
-              <option value="cerrado_rechazado">Rechazado</option>
-              <option value="cerrado_no_interesado">No interesado</option>
-              <option value="resuelto_cob">Resuelto (cobranzas)</option>
-              <option value="cerrado_cob">No resuelto (cobranzas)</option>
+              <option value="cola">🟡 Cola</option>
+              <option value="pendiente">🔵 Pendiente</option>
+              <option value="contactado">🔵 Contactado</option>
+              {/* Opciones ventas — solo cuando el flujo no es cobranzas */}
+              {cFlujo !== 'cobranzas' && (<>
+                <option value="vendido">✅ Vendido</option>
+                <option value="rechazado">❌ Rechazado</option>
+                <option value="no_interesado">⚫ No interesado</option>
+                <option value="sin_respuesta">⚫ Sin respuesta</option>
+              </>)}
+              {/* Opciones cobranzas — solo cuando el flujo no es solicitud */}
+              {cFlujo !== 'solicitud' && (<>
+                <option value="resuelto_cob">✅ Resuelto (cobranzas)</option>
+                <option value="no_resuelto_cob">❌ No resuelto (cobranzas)</option>
+              </>)}
             </select>
             <select className="fsel" value={cRep} onChange={e=>setCRep(e.target.value)}>
               <option value="all">Todas las reparticiones</option>
@@ -1182,7 +1194,13 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               <option value="desc">📅 Más nuevas primero</option>
               <option value="asc">📅 Más viejas primero</option>
             </select>
-            <button className="btn" onClick={()=>{setCSearch('');setCSearchInput('');setCFlujo('all');setCEstado('all');setCRep('all');setCOrden('desc')}}>✕ Limpiar</button>
+            <button className="btn" onClick={()=>{
+              setCSearch(''); setCSearchInput('')
+              setCFlujo('all'); setCEstado('all')
+              setCRep('all'); setCOrden('desc')
+              // Forzar recarga con filtros limpios
+              setTimeout(()=>loadConsultas('all','all','all',''), 50)
+            }}>✕ Limpiar</button>
             <button className="btn" style={{borderColor:'#BBF7D0',color:'#065F46',background:'#ECFDF5'}} onClick={exportVentas}>🎉 Exportar ventas</button>
             <span style={{fontSize:12,color:'#94A3B8',marginLeft:'auto',fontFamily:"'DM Mono',monospace"}}>{consultasTotal>consultas.length?`${consultas.length} de ${consultasTotal.toLocaleString('es-AR')}`:consultas.length} consultas</span>
           </div>
