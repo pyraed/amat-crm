@@ -150,11 +150,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     baseLeads, setBaseLeads, baseTotal, baseLoading,
     basePage, setBasePage,
     baseSearch, setBaseSearch, baseSearchInput, setBaseSearchInput,
+    setBaseSearchDebounced, commitBaseSearch,
     baseRep, setBaseRep, baseBanco, setBaseBanco,
     baseStatus, setBaseStatus, baseTel, setBaseTel,
     baseAssigned, setBaseAssigned, baseFlujo, setBaseFlujo,
     baseOrdenCol, setBaseOrdenCol, baseOrdenDir, setBaseOrdenDir,
-    baseSearchTimer,
     showEditModal, setShowEditModal,
     editTarget, setEditTarget,
     editForm, setEditForm, editSaving,
@@ -989,13 +989,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             <div style={{position:'relative',flex:'1',minWidth:200}}>
               <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'#94A3B8',fontSize:13,pointerEvents:'none'}}>🔍</span>
               <input className="si" placeholder="Nombre, DNI o teléfono..." value={baseSearchInput}
-                onChange={e=>{
-                  const v=e.target.value
-                  setBaseSearchInput(v)
-                  if(baseSearchTimer.current) clearTimeout(baseSearchTimer.current)
-                  baseSearchTimer.current=setTimeout(()=>{ setBaseSearch(v); setBasePage(0) },400)
-                }}
-                onKeyDown={e=>{ if(e.key==='Enter'){ if(baseSearchTimer.current) clearTimeout(baseSearchTimer.current); setBaseSearch(baseSearchInput); setBasePage(0) } }}
+                onChange={e=>setBaseSearchDebounced(e.target.value)}
+                onKeyDown={e=>{ if(e.key==='Enter') commitBaseSearch(baseSearchInput) }}
               />
             </div>
             <button className="btn pri" onClick={()=>{setBaseSearch(baseSearchInput);setBasePage(0)}}>Buscar</button>

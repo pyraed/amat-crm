@@ -145,12 +145,27 @@ export function useBase(tab: string, setters: BaseSetters) {
     setShowNoteModal(false)
   }
 
+  // Debounced search — encapsula el timer para que el JSX no acceda al ref directamente
+  const setBaseSearchDebounced = (value: string) => {
+    setBaseSearchInput(value)
+    if(baseSearchTimer.current) clearTimeout(baseSearchTimer.current)
+    baseSearchTimer.current = setTimeout(()=>{ setBaseSearch(value); setBasePage(0) }, 400)
+  }
+
+  const commitBaseSearch = (value: string) => {
+    if(baseSearchTimer.current) clearTimeout(baseSearchTimer.current)
+    setBaseSearch(value)
+    setBasePage(0)
+  }
+
   return {
     baseLeads, setBaseLeads,
     baseTotal, baseLoading,
     basePage, setBasePage,
     baseSearch, setBaseSearch,
     baseSearchInput, setBaseSearchInput,
+    setBaseSearchDebounced,
+    commitBaseSearch,
     baseRep, setBaseRep,
     baseBanco, setBaseBanco,
     baseStatus, setBaseStatus,
@@ -159,7 +174,6 @@ export function useBase(tab: string, setters: BaseSetters) {
     baseFlujo, setBaseFlujo,
     baseOrdenCol, setBaseOrdenCol,
     baseOrdenDir, setBaseOrdenDir,
-    baseSearchTimer,
     showEditModal, setShowEditModal,
     editTarget, setEditTarget,
     editForm, setEditForm,
