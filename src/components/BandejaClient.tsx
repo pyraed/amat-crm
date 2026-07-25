@@ -1,28 +1,29 @@
 'use client'
 
 import { useState, useRef, useEffect, useMemo } from 'react'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line, Area, AreaChart, RadialBarChart, RadialBar
-} from 'recharts'
 import ImportExport from '@/components/ImportExport'
 import CampanaModal from '@/components/CampanaModal'
 import CalculadorOferta from '@/components/CalculadorOferta'
+import LoginScreen from '@/components/LoginScreen'
+import TopBar from '@/components/TopBar'
+import TabReportes from '@/components/tabs/TabReportes'
+import {
+  ModalCambiarEstado, ModalAsignar, ModalNota, ModalRechazar,
+  ModalEditar, ModalPlantillas, ModalFinalizar, ModalVenta, ModalGestionarConsulta,
+} from '@/components/modals/Modals'
 import { supabase } from '@/lib/supabase'
 import { LoanLead, Message } from '@/lib/types'
 import { USERS, SysUser } from '@/domain/entities/users'
 import {
   LEAD_STATUS, COBRANZA_STATUS, ESTADOS_FINALES,
-  OPCIONES_VENTAS, OPCIONES_VENTAS_INTERMEDIOS, OPCIONES_COBRANZAS,
   getStatusMeta, getEstadosFinalesPorFlujo, getFlujoLabel,
 } from '@/domain/entities/leadStatus'
-import { REPARTICIONES, BANCOS, REJECTION_REASONS, TEMPLATES } from '@/domain/entities/catalogs'
-import { STATUS_A_CONSULTA, consultaStatusToLeadStatus } from '@/domain/workflows/statusMapping'
-import { TABLAS_CUOTA, calcularCuotaAMAT } from '@/domain/calculations/cuotas'
-import { updateConsulta, insertConsulta, syncConsultaEstado, fetchFlujoMap } from '@/services/consulta.service'
+import { REPARTICIONES, BANCOS, TEMPLATES } from '@/domain/entities/catalogs'
+import { STATUS_A_CONSULTA } from '@/domain/workflows/statusMapping'
+import { TABLAS_CUOTA } from '@/domain/calculations/cuotas'
+import { fetchFlujoMap } from '@/services/consulta.service'
 import { fetchMensajesPhone } from '@/services/chat.service'
 import { exportarVentas } from '@/services/export.service'
-import { registrarCampana } from '@/services/chat.service'
 import { useAuth } from '@/hooks/useAuth'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useBandeja } from '@/hooks/useBandeja'
@@ -439,43 +440,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const getEstadosFinalesFor = (phone:string|null) => getEstadosFinalesPorFlujo(phone ? flujoMap[phone] : 'solicitud')
   const getFlujoLabelFor = (phone:string|null) => getFlujoLabel(phone ? flujoMap[phone] : 'solicitud')
 
-  // ══════════════════════════════════════════
-  //  PANTALLA DE LOGIN
-  // ══════════════════════════════════════════
   if(!me) return (
-    <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0A0F1E 0%,#0F172A 50%,#0D1B2A 100%)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'DM Sans',system-ui,sans-serif"}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');.li{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:13px 16px;color:#F1F5F9;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;transition:all .2s}.li:focus{border-color:#3B82F6;background:rgba(59,130,246,.08)}.li::placeholder{color:#334155}.mono{font-family:'DM Mono',monospace}`}</style>
-      <div style={{background:'rgba(255,255,255,.03)',backdropFilter:'blur(24px)',border:'1px solid rgba(255,255,255,.07)',borderRadius:24,padding:'48px 44px',width:420,position:'relative',zIndex:1}}>
-        <div style={{textAlign:'center',marginBottom:36}}>
-          <div style={{width:60,height:60,background:'linear-gradient(135deg,#B45309,#F59E0B)',borderRadius:18,display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,margin:'0 auto 18px',boxShadow:'0 8px 24px rgba(245,158,11,.3)'}}>🏦</div>
-          <div style={{fontSize:22,fontWeight:600,color:'#F1F5F9',marginBottom:4}}>AMAT · CRM</div>
-          <div style={{fontSize:13,color:'#475569'}}>Sistema de gestión de consultas</div>
-        </div>
-        <div style={{marginBottom:16}}>
-          <label style={{display:'block',fontSize:11,fontWeight:500,color:'#64748B',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:8}}>Usuario</label>
-          <input ref={userRef} className="li mono" placeholder="Usuario" value={loginUser} onChange={e=>setLoginUser(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleLogin()} disabled={locked}/>
-        </div>
-        <div style={{marginBottom:16}}>
-          <label style={{display:'block',fontSize:11,fontWeight:500,color:'#64748B',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:8}}>Contraseña</label>
-          <div style={{position:'relative'}}>
-            <input className="li" type={showPass?'text':'password'} placeholder="••••••••••••" value={loginPass} onChange={e=>setLoginPass(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleLogin()} disabled={locked}/>
-            <button onClick={()=>setShowPass(p=>!p)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#475569',fontSize:16}} tabIndex={-1}>{showPass?'🙈':'👁'}</button>
-          </div>
-        </div>
-        {loginErr&&<div style={{background:'rgba(239,68,68,.1)',border:'1px solid rgba(239,68,68,.2)',borderRadius:10,padding:'10px 14px',marginBottom:16,fontSize:13,color:'#FCA5A5'}}>⚠️ {loginErr}</div>}
-        {locked&&<div style={{background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.2)',borderRadius:10,padding:'10px 14px',marginBottom:16,fontSize:13,color:'#FCD34D',textAlign:'center'}}>🔒 {countdown}s...</div>}
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
-          <input type="checkbox" id="rememberMe" checked={rememberMe} onChange={e=>{
-            setRememberMe(e.target.checked)
-            if(!e.target.checked){ localStorage.removeItem('amat_remember_user'); localStorage.removeItem('amat_remember_pass') }
-          }} style={{width:15,height:15,accentColor:'#F59E0B',cursor:'pointer'}}/>
-          <label htmlFor="rememberMe" style={{fontSize:12,color:'#475569',cursor:'pointer',userSelect:'none'}}>Recordar usuario</label>
-        </div>
-        <button onClick={handleLogin} disabled={locked} style={{width:'100%',background:'linear-gradient(135deg,#B45309,#F59E0B)',border:'none',borderRadius:12,padding:14,color:'white',fontSize:14,fontWeight:600,cursor:locked?'not-allowed':'pointer',fontFamily:'inherit',opacity:locked?.5:1}}>
-          {locked?'🔒 Bloqueado':'Iniciar sesión'}
-        </button>
-      </div>
-    </div>
+    <LoginScreen
+      userRef={userRef}
+      loginUser={loginUser} setLoginUser={setLoginUser}
+      loginPass={loginPass} setLoginPass={setLoginPass}
+      loginErr={loginErr}
+      showPass={showPass} setShowPass={setShowPass}
+      locked={locked} countdown={countdown}
+      rememberMe={rememberMe} handleRememberMe={handleRememberMe}
+      handleLogin={handleLogin}
+    />
   )
 
   // ══════════════════════════════════════════
@@ -541,31 +516,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       `}</style>
 
       {/* ── TOP BAR ── */}
-      <div style={{display:'flex',alignItems:'center',gap:10,padding:'9px 20px',background:'white',borderBottom:'1px solid #E2E8F0',flexShrink:0,minHeight:56}}>
-        <div style={{width:34,height:34,background:'linear-gradient(135deg,#B45309,#F59E0B)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>🏦</div>
-        <span style={{fontWeight:700,fontSize:15,color:'#0F172A',marginRight:6,whiteSpace:'nowrap'}}>AMAT · CRM</span>
-        <div style={{display:'flex',gap:2,background:'#F1F5F9',padding:3,borderRadius:10}}>
-          {([['bandeja','💬','Bandeja'],['consultas','📥','Consultas'],['base','👥','Base'],['reportes','📊','Reportes']] as const).map(([t,i,l])=>(
-            <button key={t} className={`tabbtn ${tab===t?'on':''}`} onClick={()=>{ if(tab!==t){ const tieneSpinnerPropio=['consultas','base','reportes'].includes(t); if(tieneSpinnerPropio){ setTab(t) } else { setTabLoading(true); setTimeout(()=>{ setTab(t); setTabLoading(false) },30) } } }}>{i} {l}</button>
-          ))}
-        </div>
-        <div style={{display:'flex',gap:16,marginLeft:16}}>
-          {[{v:stats.inbound,l:'Inbound',c:'#F59E0B'},{v:stats.activos,l:'Activos',c:'#8B5CF6'},{v:stats.sinResp,l:'Sin resp.',c:'#EF4444'},{v:stats.cerrados,l:'Cerrados hoy',c:'#10B981'}].map(s=>(
-            <div key={s.l} style={{textAlign:'center',lineHeight:1}}>
-              <div style={{fontSize:17,fontWeight:700,color:s.c}}>{s.v}</div>
-              <div style={{fontSize:10,color:'#94A3B8',marginTop:2,whiteSpace:'nowrap'}}>{s.l}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:32,height:32,borderRadius:'50%',background:me.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:11,fontWeight:700}}>{me.initials}</div>
-          <div style={{lineHeight:1.3}}>
-            <div style={{fontSize:12,fontWeight:600,color:'#1E293B'}}>{me.username}</div>
-            <span style={{fontSize:10,padding:'2px 7px',borderRadius:99,fontWeight:600,background:me.role==='Administrador'?'#EFF6FF':me.role==='Vendedor'?'#F0FDF4':'#F5F3FF',color:me.role==='Administrador'?'#1D4ED8':me.role==='Vendedor'?'#15803D':'#6D28D9'}}>{me.role}</span>
-          </div>
-          <button onClick={()=>setMe(null)} style={{padding:'5px 12px',border:'1px solid #E2E8F0',borderRadius:8,background:'white',fontSize:12,cursor:'pointer',color:'#64748B',fontFamily:'inherit',fontWeight:500}}>Salir</button>
-        </div>
-      </div>
+      <TopBar
+        me={me} tab={tab} setTab={setTab} setTabLoading={setTabLoading}
+        stats={stats} handleLogout={handleLogout}
+      />
 
       {/* ══ BANDEJA ══ */}
       {tabLoading && (
@@ -1326,890 +1280,124 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
       {/* ══ PIPELINE ══ */}
       {/* ══ REPORTES ══ */}
-      {tab==='reportes'&&(()=>{
-        const getFlujo = (phone:string|null) => pipelineFlujoMap[phone||''] || flujoMap[phone||''] || 'solicitud'
-        const rLeadsVentas = reporteLeads.filter(l=>getFlujo(l.phone_number)!=='cobranzas')
-        const rLeadsCob    = reporteLeads.filter(l=>getFlujo(l.phone_number)==='cobranzas')
-        const esAdminR     = me?.role==='Administrador'
-        const modoR        = esAdminR ? reporteMode : (me?.role==='Cobranza' ? 'cobranzas' : 'ventas')
-        const rLeadsFinal  = modoR==='cobranzas' ? rLeadsCob : rLeadsVentas
-        return (
-        <div style={{flex:1,overflow:'auto',padding:'20px 24px',background:'#F8FAFC'}}>
-          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20,flexWrap:'wrap'}}>
-            <span style={{fontWeight:700,fontSize:16,color:'#0F172A'}}>Reportes</span>
-            {esAdminR && (
-              <div style={{display:'flex',gap:4,background:'#F1F5F9',padding:3,borderRadius:8}}>
-                {(['ventas','cobranzas'] as const).map(m=>(
-                  <button key={m} onClick={()=>setReporteMode(m)}
-                    style={{padding:'5px 16px',borderRadius:6,border:'none',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',
-                      background:reporteMode===m?'white':'transparent',
-                      color:reporteMode===m?'#0F172A':'#64748B',
-                      boxShadow:reporteMode===m?'0 1px 3px rgba(0,0,0,.1)':'none'}}>
-                    {m==='ventas'?'💼 Ventas':'🔔 Cobranzas'}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div style={{display:'flex',gap:8,alignItems:'center',marginLeft:'auto',flexWrap:'wrap'}}>
-              <select value={reportePeriodo} onChange={e=>{
-                setReportePeriodo(e.target.value)
-                loadReportes(e.target.value)
-              }} style={{padding:'6px 10px',borderRadius:8,border:'1px solid #E2E8F0',fontSize:12,fontWeight:600,color:'#374151',cursor:'pointer',outline:'none'}}>
-                <option value="mes_actual">📅 Este mes</option>
-                <option value="mes_pasado">📅 Mes pasado</option>
-              </select>
-              <button onClick={()=>loadReportes(reportePeriodo,reporteDesde,reporteHasta)}
-                style={{padding:'6px 12px',borderRadius:8,border:'1px solid #E2E8F0',background:'white',fontSize:12,fontWeight:600,cursor:'pointer',color:'#374151'}}>
-                ↻ Actualizar
-              </button>
-            </div>
-          </div>
+      {tab==='reportes'&&(
+        <TabReportes
+          reporteLeads={reporteLeads}
+          pipelineFlujoMap={pipelineFlujoMap}
+          reporteMode={reporteMode}
+          setReporteMode={setReporteMode}
+          reportePeriodo={reportePeriodo}
+          setReportePeriodo={setReportePeriodo}
+          reporteDesde={reporteDesde}
+          setReporteDesde={setReporteDesde}
+          reporteHasta={reporteHasta}
+          setReporteHasta={setReporteHasta}
+          loadReportes={loadReportes}
+        />
+      )}
 
-          <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:12,marginBottom:20}}>
-            {(modoR==='cobranzas' ? [
-              {label:'Total casos',val:rLeadsFinal.length,color:'#7C3AED',icon:'◈',sub:'Histórico total'},
-              {label:'Resueltos',val:rLeadsFinal.filter(l=>l.status==='resolved').length,color:'#10B981',icon:'✓',sub:'Casos resueltos'},
-              {label:'No resueltos',val:rLeadsFinal.filter(l=>l.status==='unresolved').length,color:'#EF4444',icon:'✗',sub:'Sin resolución'},
-              {label:'Contactados',val:rLeadsFinal.filter(l=>l.status==='contacted').length,color:'#06B6D4',icon:'◉',sub:'Conversaciones iniciadas'},
-              {label:'Tasa resolución',val:rLeadsFinal.length>0?Math.round(rLeadsFinal.filter(l=>l.status==='resolved').length/rLeadsFinal.length*100)+'%':'0%',color:'#EC4899',icon:'%',sub:'Resueltos vs total'},
-            ] : [
-              {label:'Total leads',val:rLeadsFinal.length,color:'#F59E0B',icon:'◈',sub:reportePeriodo==='mes_actual'?'Este mes':reportePeriodo==='mes_pasado'?'Mes pasado':reportePeriodo==='historico'?'Histórico total':'Período seleccionado'},
-              {label:'Cerrados',val:rLeadsFinal.filter(l=>l.status==='closed').length,color:'#10B981',icon:'✓',sub:'Operaciones concretadas'},
-              {label:'Contactados',val:rLeadsFinal.filter(l=>l.status==='contacted').length,color:'#06B6D4',icon:'◉',sub:'Conversaciones iniciadas'},
-              {label:'Sin contactar',val:rLeadsFinal.filter(l=>l.status==='new').length,color:'#F59E0B',icon:'·',sub:'Estado nuevo'},
-              {label:'Tasa conversión',val:rLeadsFinal.length>0?Math.round(rLeadsFinal.filter(l=>l.status==='closed').length/rLeadsFinal.length*100)+'%':'0%',color:'#EC4899',icon:'%',sub:'Cerrados vs total'},
-            ]).map(k=>(
-              <div key={k.label} style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'16px 18px',borderTop:`3px solid ${k.color}`,boxShadow:'0 1px 3px rgba(0,0,0,0.05)'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
-                  <span style={{fontSize:11,fontWeight:600,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'0.07em',fontFamily:"'DM Mono',monospace"}}>{k.label}</span>
-                  <span style={{fontSize:18,color:k.color,opacity:0.6}}>{k.icon}</span>
-                </div>
-                <div style={{fontSize:28,fontWeight:700,color:k.color,lineHeight:1}}>{k.val}</div>
-                <div style={{fontSize:11,color:'#94A3B8',marginTop:6,fontFamily:"'DM Mono',monospace"}}>{k.sub}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{display:'grid',gridTemplateColumns:'1.4fr 1fr',gap:16,marginBottom:16}}>
-            <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'20px 20px 12px'}}>
-              <div style={{marginBottom:16}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Distribución por estado</div>
-                <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Cantidad de leads en cada etapa del proceso</div>
-              </div>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart
-                  data={(modoR==='cobranzas'?Object.entries(COBRANZA_STATUS):Object.entries(LEAD_STATUS)).map(([k,v])=>({name:v.label,value:rLeadsFinal.filter(l=>l.status===k).length,color:v.color}))}
-                  margin={{top:0,right:10,left:-10,bottom:40}}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-                  <XAxis dataKey="name" tick={{fontSize:10,fill:'#94A3B8'}} angle={-35} textAnchor="end" interval={0} tickLine={false} axisLine={false}/>
-                  <YAxis tick={{fontSize:11,fill:'#94A3B8'}} tickLine={false} axisLine={false} allowDecimals={false}/>
-                  <Tooltip contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12}} cursor={{fill:'rgba(59,130,246,0.05)'}} formatter={(val:any)=>[`${val} leads`,'']}/>
-                  <Bar dataKey="value" radius={[4,4,0,0]}>
-                    {Object.entries(LEAD_STATUS).map(([k,v],i)=>(<Cell key={i} fill={v.color}/>))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'20px 20px 12px'}}>
-              <div style={{marginBottom:16}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Por repartición</div>
-                <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Composición del segmento activo</div>
-              </div>
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={REPARTICIONES.map(r=>({name:r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB'),value:rLeadsFinal.filter(l=>l.reparticion===r).length})).filter(d=>d.value>0)}
-                    cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={2} dataKey="value">
-                    {REPARTICIONES.map((_,i)=>(<Cell key={i} fill={['#F59E0B','#8B5CF6','#10B981','#F59E0B','#EF4444','#06B6D4','#EC4899'][i%7]}/>))}
-                  </Pie>
-                  <Tooltip contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12}} formatter={(val:any)=>[`${val} leads`,'']}/>
-                  <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:11}}/>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
-            <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'20px 20px 12px'}}>
-              <div style={{marginBottom:16}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Embudo de conversión</div>
-                <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Leads que avanzan por cada etapa</div>
-              </div>
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart
-                  data={modoR==='cobranzas' ? [
-                    {etapa:'Nuevos',leads:rLeadsFinal.filter(l=>l.status==='new').length},
-                    {etapa:'Contactados',leads:rLeadsFinal.filter(l=>l.status==='contacted').length},
-                    {etapa:'Resueltos',leads:rLeadsFinal.filter(l=>l.status==='resolved').length},
-                    {etapa:'No resueltos',leads:rLeadsFinal.filter(l=>l.status==='unresolved').length},
-                  ] : [
-                    {etapa:'Nuevos',leads:rLeadsFinal.filter(l=>l.status==='new').length},
-                    {etapa:'Contactados',leads:rLeadsFinal.filter(l=>l.status==='contacted').length},
-                    {etapa:'No interesados',leads:rLeadsFinal.filter(l=>l.status==='not_interested').length},
-                    {etapa:'Rechazados',leads:rLeadsFinal.filter(l=>l.status==='rejected').length},
-                    {etapa:'Cerrados',leads:rLeadsFinal.filter(l=>l.status==='closed').length},
-                  ]}
-                  margin={{top:5,right:20,left:-10,bottom:5}}>
-                  <defs>
-                    <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.15}/>
-                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.02}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false}/>
-                  <XAxis dataKey="etapa" tick={{fontSize:11,fill:'#94A3B8'}} tickLine={false} axisLine={false}/>
-                  <YAxis tick={{fontSize:11,fill:'#94A3B8'}} tickLine={false} axisLine={false} allowDecimals={false}/>
-                  <Tooltip contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12}} formatter={(val:any)=>[`${val} leads`,'']}/>
-                  <Area type="monotone" dataKey="leads" stroke="#3B82F6" strokeWidth={2} fill="url(#colorLeads)" dot={{fill:'#F59E0B',strokeWidth:0,r:4}}/>
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-            <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'20px 20px 12px'}}>
-              <div style={{marginBottom:16}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Rendimiento por asesor</div>
-                <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Leads asignados y cerrados por usuario</div>
-              </div>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart layout="vertical"
-                  data={USERS.filter(u=>u.username!=='Nicolas'&&u.role!=='Administrador').map(u=>{
-                    const leads = rLeadsFinal.filter(l=>l.assigned_to===u.username)
-                    const cerrados = modoR==='cobranzas'
-                      ? leads.filter(l=>l.status==='resolved').length
-                      : leads.filter(l=>l.status==='closed').length
-                    const montoCerrado = leads
-                      .filter(l=>l.status==='closed')
-                      .reduce((acc:number,l:any)=>(acc+(l.monto_solicitado||0)),0)
-                    return {
-                      name:u.username,
-                      asignados:leads.length,
-                      cerrados,
-                      montoCerrado,
-                      color:u.color,
-                    }
-                  }).filter(u=>u.asignados>0||u.cerrados>0)}
-                  margin={{top:0,right:20,left:10,bottom:0}}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false}/>
-                  <XAxis type="number" tick={{fontSize:11,fill:'#94A3B8'}} tickLine={false} axisLine={false} allowDecimals={false}/>
-                  <YAxis type="category" dataKey="name" tick={{fontSize:11,fill:'#64748B'}} tickLine={false} axisLine={false} width={60}/>
-                  <Tooltip contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12}}/>
-                  <Legend iconType="square" iconSize={8} wrapperStyle={{fontSize:11}}/>
-                  <Bar dataKey="asignados" name="Asignados" fill="#BFDBFE" radius={[0,4,4,0]}/>
-                  <Bar dataKey="cerrados" name="Cerrados" fill="#2563EB" radius={[0,4,4,0]}/>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,overflow:'hidden',marginBottom:16}}>
-            <div style={{padding:'16px 20px',borderBottom:'1px solid #F1F5F9'}}>
-              <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Resumen por repartición</div>
-            </div>
-            <div style={{overflowX:'auto'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5}}>
-                <thead>
-                  <tr style={{background:'#F8FAFC'}}>
-                    {(modoR==='cobranzas'
-                      ? ['Repartición','Total','Nuevos','Contactados','Resueltos','No resueltos','% Resolución']
-                      : ['Repartición','Total','Nuevos','Contactados','No interesados','Cerrados','Rechazados','% Cierre']
-                    ).map(h=>(<th key={h} style={{textAlign:'left',padding:'10px 14px',fontSize:10.5,fontWeight:600,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.07em',borderBottom:'1px solid #E2E8F0',whiteSpace:'nowrap'}}>{h}</th>))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {REPARTICIONES.map(r=>{
-                    const leads_r=rLeadsFinal.filter(l=>l.reparticion===r)
-                    if(leads_r.length===0) return null
-                    const total=leads_r.length
-                    const exito=modoR==='cobranzas'?leads_r.filter(l=>l.status==='resolved').length:leads_r.filter(l=>l.status==='closed').length
-                    const pctCierre=total>0?Math.round(exito/total*100):0
-                    return (
-                      <tr key={r} style={{borderBottom:'1px solid #F8FAFC'}} onMouseEnter={e=>(e.currentTarget.style.background='#F8FAFC')} onMouseLeave={e=>(e.currentTarget.style.background='white')}>
-                        <td style={{padding:'10px 14px',fontWeight:600,color:'#0F172A'}}>{r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB')}</td>
-                        <td style={{padding:'10px 14px',fontWeight:700,color:modoR==='cobranzas'?'#7C3AED':'#F59E0B',fontFamily:"'DM Mono',monospace"}}>{total}</td>
-                        <td style={{padding:'10px 14px',color:'#94A3B8',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='new').length}</td>
-                        <td style={{padding:'10px 14px',color:'#06B6D4',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='contacted').length}</td>
-                        {modoR==='cobranzas' ? <>
-                          <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='resolved').length}</td>
-                          <td style={{padding:'10px 14px',color:'#EF4444',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='unresolved').length}</td>
-                        </> : <>
-                          <td style={{padding:'10px 14px',color:'#6B7280',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='not_interested').length}</td>
-                          <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{exito}</td>
-                          <td style={{padding:'10px 14px',color:'#EF4444',fontFamily:"'DM Mono',monospace"}}>{leads_r.filter(l=>l.status==='rejected').length}</td>
-                        </>}
-                        <td style={{padding:'10px 14px'}}>
-                          <div style={{display:'flex',alignItems:'center',gap:8}}>
-                            <div style={{flex:1,height:4,background:'#F1F5F9',borderRadius:99,overflow:'hidden',minWidth:40}}>
-                              <div style={{height:'100%',width:`${pctCierre}%`,background:'#10B981',borderRadius:99}}/>
-                            </div>
-                            <span style={{fontSize:11,fontWeight:700,color:pctCierre>20?'#10B981':pctCierre>10?'#F59E0B':'#94A3B8',minWidth:30}}>{pctCierre}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                  <tr style={{background:'#F8FAFC',borderTop:'2px solid #E2E8F0'}}>
-                    <td style={{padding:'10px 14px',fontWeight:700,color:'#0F172A',fontSize:11,textTransform:'uppercase'}}>TOTAL</td>
-                    <td style={{padding:'10px 14px',fontWeight:700,color:modoR==='cobranzas'?'#7C3AED':'#F59E0B',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.length}</td>
-                    <td style={{padding:'10px 14px',color:'#94A3B8',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='new').length}</td>
-                    <td style={{padding:'10px 14px',color:'#06B6D4',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='contacted').length}</td>
-                    {modoR==='cobranzas' ? <>
-                      <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='resolved').length}</td>
-                      <td style={{padding:'10px 14px',color:'#EF4444',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='unresolved').length}</td>
-                    </> : <>
-                      <td style={{padding:'10px 14px',color:'#6B7280',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='not_interested').length}</td>
-                      <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='closed').length}</td>
-                      <td style={{padding:'10px 14px',color:'#EF4444',fontFamily:"'DM Mono',monospace"}}>{rLeadsFinal.filter(l=>l.status==='rejected').length}</td>
-                    </>}
-                    <td style={{padding:'10px 14px'}}>
-                      <span style={{fontSize:11,fontWeight:700,color:'#10B981',fontFamily:"'DM Mono',monospace"}}>
-                        {rLeadsFinal.length>0?Math.round((modoR==='cobranzas'?rLeadsFinal.filter(l=>l.status==='resolved').length:rLeadsFinal.filter(l=>l.status==='closed').length)/rLeadsFinal.length*100):0}%
-                      </span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr',gap:16,marginBottom:20}}>
-            <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,padding:'20px 20px 12px'}}>
-              <div style={{marginBottom:8}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Salud de la operación</div>
-                <div style={{fontSize:11,color:'#94A3B8',marginTop:2,fontFamily:"'DM Mono',monospace"}}>Estados positivos vs negativos</div>
-              </div>
-              <ResponsiveContainer width="100%" height={200}>
-                <RadialBarChart innerRadius="25%" outerRadius="90%"
-                  data={modoR==='cobranzas' ? [
-                    {name:'Resueltos',value:rLeadsFinal.filter(l=>l.status==='resolved').length,fill:'#10B981'},
-                    {name:'Contactados',value:rLeadsFinal.filter(l=>l.status==='contacted').length,fill:'#06B6D4'},
-                    {name:'No resueltos',value:rLeadsFinal.filter(l=>l.status==='unresolved').length,fill:'#EF4444'},
-                  ] : [
-                    {name:'Cerrados',value:rLeadsFinal.filter(l=>l.status==='closed').length,fill:'#10B981'},
-                    {name:'Contactados',value:rLeadsFinal.filter(l=>l.status==='contacted').length,fill:'#06B6D4'},
-                    {name:'No interesados',value:rLeadsFinal.filter(l=>l.status==='not_interested').length,fill:'#6B7280'},
-                    {name:'Rechazados',value:rLeadsFinal.filter(l=>l.status==='rejected').length,fill:'#EF4444'},
-                  ]}
-                  startAngle={90} endAngle={-270}>
-                  <RadialBar dataKey="value" cornerRadius={4} background={{fill:'#F8FAFC'}}/>
-                  <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:11}}/>
-                  <Tooltip contentStyle={{background:'white',border:'1px solid #E2E8F0',borderRadius:8,fontSize:12}}/>
-                </RadialBarChart>
-              </ResponsiveContainer>
-            </div>
-            <div style={{background:'white',border:'1px solid #E2E8F0',borderRadius:12,overflow:'hidden'}}>
-              <div style={{padding:'16px 20px',borderBottom:'1px solid #F1F5F9'}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#0F172A'}}>Detalle por asesor</div>
-              </div>
-              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5}}>
-                <thead>
-                  <tr style={{background:'#F8FAFC'}}>
-                    {['Asesor','Asignados','Contactados','Cerrados','% Cierre'].map(h=>(
-                      <th key={h} style={{textAlign:'left',padding:'9px 14px',fontSize:10.5,fontWeight:600,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.07em',borderBottom:'1px solid #E2E8F0'}}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {USERS.filter(u=>u.username!=='Nicolas').map(u=>{
-                    const asignados=rLeadsFinal.filter(l=>l.assigned_to===u.username).length
-                    const exitoStatus=modoR==='cobranzas'?'resolved':'closed'
-                    const contactados=rLeadsFinal.filter(l=>l.assigned_to===u.username&&['contacted',exitoStatus].includes(l.status)).length
-                    const cerrados=rLeadsFinal.filter(l=>l.assigned_to===u.username&&l.status===exitoStatus).length
-                    const pct=asignados>0?Math.round(cerrados/asignados*100):0
-                    return (
-                      <tr key={u.id} style={{borderBottom:'1px solid #F8FAFC'}} onMouseEnter={e=>(e.currentTarget.style.background='#F8FAFC')} onMouseLeave={e=>(e.currentTarget.style.background='white')}>
-                        <td style={{padding:'10px 14px'}}>
-                          <div style={{display:'flex',alignItems:'center',gap:8}}>
-                            <div style={{width:28,height:28,borderRadius:'50%',background:u.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:10,fontWeight:700,flexShrink:0}}>{u.initials}</div>
-                            <div>
-                              <div style={{fontWeight:600,color:'#0F172A',fontSize:12.5}}>{u.username}</div>
-                              <div style={{fontSize:10.5,color:'#94A3B8'}}>{u.role}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td style={{padding:'10px 14px',fontWeight:500,color:'#374151',fontFamily:"'DM Mono',monospace"}}>{asignados}</td>
-                        <td style={{padding:'10px 14px',color:'#06B6D4',fontFamily:"'DM Mono',monospace"}}>{contactados}</td>
-                        <td style={{padding:'10px 14px',color:'#10B981',fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{cerrados}</td>
-                        <td style={{padding:'10px 14px'}}>
-                          <div style={{display:'flex',alignItems:'center',gap:6}}>
-                            <div style={{width:50,height:4,background:'#F1F5F9',borderRadius:99,overflow:'hidden'}}>
-                              <div style={{height:'100%',width:`${pct}%`,background:u.color,borderRadius:99}}/>
-                            </div>
-                            <span style={{fontSize:11,fontWeight:700,color:u.color,fontFamily:"'DM Mono',monospace"}}>{pct}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-        )
-      })()}
-
-      {/* ══ MODAL: CAMBIAR ESTADO ══ */}
+      {/* ══ MODALES ══ */}
       {showStatusModal&&currentLead&&(
-        <div className="movo" onClick={()=>setShowStatusModal(false)}>
-          <div className="mod" onClick={e=>e.stopPropagation()}>
-            <h3>Cambiar estado</h3>
-            {[...(flujoMap[currentLead.phone_number||'']==='cobranzas' ? OPCIONES_COBRANZAS : []), ...OPCIONES_VENTAS_INTERMEDIOS, ...(flujoMap[currentLead.phone_number||'']==='cobranzas' ? [] : OPCIONES_VENTAS)]
-              .map(k => [k, LEAD_STATUS[k] || COBRANZA_STATUS[k]] as [string, typeof LEAD_STATUS[keyof typeof LEAD_STATUS]])
-              .filter(([,v])=>v)
-              .map(([k,v])=>{
-                const esCobranza = flujoMap[currentLead.phone_number||'']==='cobranzas'
-                return (
-                <div key={k} className="mopt"
-                  onClick={()=>{
-                    if(!esCobranza&&k==='rejected'){
-                      setShowStatusModal(false)
-                      setEditTarget(currentLead)
-                      setShowRejectModal(true)
-                    } else if(!esCobranza&&k==='closed'){
-                      setShowStatusModal(false)
-                      setVentaForm({entidad:'',linea:'',reparticion:currentLead.reparticion||'',monto:'',cuotas:'',valor_cuota:'',notas:''})
-                      setShowVentaModal(true)
-                    } else {
-                      updateStatus(currentLead.id,k)
-                      setShowStatusModal(false)
-                    }
-                  }}>
-                  <div style={{width:10,height:10,borderRadius:'50%',background:v.color,flexShrink:0}}/>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight:500,color:'#1E293B'}}>
-                      {v.label}
-                      {!esCobranza&&k==='rejected'&&<span style={{fontSize:11,color:'#94A3B8',marginLeft:6}}>→ elegí motivo</span>}
-                      {!esCobranza&&k==='closed'&&<span style={{fontSize:11,color:'#065F46',marginLeft:6}}>→ registrá la venta</span>}
-                    </div>
-                    <div style={{fontSize:11,color:'#94A3B8'}}>{v.desc}</div>
-                  </div>
-                  {currentLead.status===k&&<span style={{color:'#F59E0B',fontSize:16}}>✓</span>}
-                </div>
-              )})}
-            <button className="btn" style={{width:'100%',justifyContent:'center',marginTop:14}} onClick={()=>setShowStatusModal(false)}>Cancelar</button>
-          </div>
-        </div>
+        <ModalCambiarEstado
+          currentLead={currentLead}
+          flujoMap={flujoMap}
+          updateStatus={updateStatus}
+          setShowStatusModal={setShowStatusModal}
+          setEditTarget={setEditTarget}
+          setShowRejectModal={setShowRejectModal}
+          setVentaForm={setVentaForm}
+          setShowVentaModal={setShowVentaModal}
+        />
       )}
 
-      {/* ══ MODAL: ASIGNAR ══ */}
       {showAssignModal&&currentLead&&(
-        <div className="movo" onClick={()=>setShowAssignModal(false)}>
-          <div className="mod" onClick={e=>e.stopPropagation()}>
-            <h3>Asignar a un asesor</h3>
-            {USERS.map(u=>(
-              <div key={u.id} className="mopt" onClick={async()=>{
-                const res = await tomarLead({...currentLead, assigned_to: null}, u.username)
-                if(!res.ok) { alert('❌ No se pudo asignar. Intentá de nuevo.'); return }
-                setShowAssignModal(false)
-              }}>
-                <div className="av" style={{width:34,height:34,fontSize:11,background:u.color,color:'white'}}>{u.initials}</div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:600,color:'#1E293B'}}>{u.username}</div>
-                  <div style={{fontSize:11,color:'#94A3B8'}}>{u.role}</div>
-                </div>
-                {currentLead.assigned_to===u.username&&<span style={{color:'#F59E0B',fontSize:18}}>✓</span>}
-              </div>
-            ))}
-            <div className="mopt" style={{border:'1px solid #E2E8F0',borderRadius:10,marginTop:6}} onClick={async()=>{
-              const { error } = await supabase.from('amat_loan_leads').update({assigned_to:null,updated_at:new Date().toISOString()}).eq('id',currentLead.id)
-              if(error) { alert('❌ No se pudo quitar la asignación. Intentá de nuevo.'); return }
-              setShowAssignModal(false)
-            }}>
-              <span style={{fontSize:13,color:'#EF4444'}}>Quitar asignación</span>
-            </div>
-            <button className="btn" style={{width:'100%',justifyContent:'center',marginTop:8}} onClick={()=>setShowAssignModal(false)}>Cancelar</button>
-          </div>
-        </div>
+        <ModalAsignar
+          currentLead={currentLead}
+          setBotLeads={setBotLeads}
+          setShowAssignModal={setShowAssignModal}
+        />
       )}
 
-      {/* ══ MODAL: NOTA ══ */}
       {showNoteModal&&(
-        <div className="movo" onClick={()=>setShowNoteModal(false)}>
-          <div className="mod" onClick={e=>e.stopPropagation()}>
-            <h3>📝 Nota interna</h3>
-            <p style={{fontSize:12,color:'#64748B',margin:'0 0 12px'}}>Solo visible para el equipo.</p>
-            <textarea className="ta" placeholder="Ej: Cliente interesado, llamar lunes a las 10hs." value={noteText} onChange={e=>setNoteText(e.target.value)}/>
-            <div style={{display:'flex',gap:8,marginTop:14}}>
-              <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={saveNote}>Guardar nota</button>
-              <button className="btn" style={{flex:1,justifyContent:'center'}} onClick={()=>setShowNoteModal(false)}>Cancelar</button>
-            </div>
-          </div>
-        </div>
+        <ModalNota
+          noteText={noteText}
+          setNoteText={setNoteText}
+          saveNote={saveNote}
+          setShowNoteModal={setShowNoteModal}
+        />
       )}
 
-      {/* ══ MODAL: RECHAZAR ══ */}
       {showRejectModal&&editTarget&&(
-        <div className="movo" onClick={()=>setShowRejectModal(false)}>
-          <div className="mod" onClick={e=>e.stopPropagation()}>
-            <h3>✕ Motivo de rechazo</h3>
-            {REJECTION_REASONS.map(r=>(
-              <div key={r} className="mopt" style={{background:rejectReason===r?'#FEF2F2':'',borderColor:rejectReason===r?'#FECACA':''}} onClick={()=>setRejectReason(r)}>
-                <div style={{width:16,height:16,borderRadius:'50%',border:`2px solid ${rejectReason===r?'#EF4444':'#E2E8F0'}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  {rejectReason===r&&<div style={{width:8,height:8,borderRadius:'50%',background:'#EF4444'}}/>}
-                </div>
-                <span style={{fontSize:13,color:'#1E293B'}}>{r}</span>
-              </div>
-            ))}
-            <div style={{display:'flex',gap:8,marginTop:16}}>
-              <button className="btn dan" style={{flex:1,justifyContent:'center'}} onClick={handleReject} disabled={!rejectReason}>Confirmar rechazo</button>
-              <button className="btn" style={{flex:1,justifyContent:'center'}} onClick={()=>setShowRejectModal(false)}>Cancelar</button>
-            </div>
-          </div>
-        </div>
+        <ModalRechazar
+          editTarget={editTarget}
+          rejectReason={rejectReason}
+          setRejectReason={setRejectReason}
+          handleReject={handleReject}
+          setShowRejectModal={setShowRejectModal}
+        />
       )}
 
-      {/* ══ MODAL: EDITAR ══ */}
       {showEditModal&&editTarget&&(
-        <div className="movo" onClick={()=>setShowEditModal(false)}>
-          <div className="mod" onClick={e=>e.stopPropagation()}>
-            <h3>✏️ Editar contacto</h3>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-              <div style={{gridColumn:'1/-1'}}>
-                <label className="fl">Nombre completo</label>
-                <input className="fi" value={editForm.full_name||''} onChange={e=>setEditForm(f=>({...f,full_name:e.target.value}))}/>
-              </div>
-              <div>
-                <label className="fl">DNI</label>
-                <input className="fi mono" value={editForm.dni||''} onChange={e=>setEditForm(f=>({...f,dni:e.target.value}))}/>
-              </div>
-              <div>
-                <label className="fl">Teléfono</label>
-                <input className="fi mono" placeholder="5491112345678" value={editForm.phone_number||''} onChange={e=>setEditForm(f=>({...f,phone_number:e.target.value}))}/>
-              </div>
-              <div>
-                <label className="fl">Email</label>
-                <input className="fi" type="email" value={editForm.email||''} onChange={e=>setEditForm(f=>({...f,email:e.target.value}))}/>
-              </div>
-              <div>
-                <label className="fl">Repartición</label>
-                <select className="fs" value={editForm.reparticion||''} onChange={e=>setEditForm(f=>({...f,reparticion:e.target.value}))}>
-                  <option value="">Sin repartición</option>
-                  {REPARTICIONES.map(r=><option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="fl">Banco</label>
-                <select className="fs" value={editForm.bank||''} onChange={e=>setEditForm(f=>({...f,bank:e.target.value}))}>
-                  <option value="">Sin banco</option>
-                  {BANCOS.map(b=><option key={b} value={b}>{b}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="fl">Monto solicitado</label>
-                <input className="fi" type="number" value={editForm.amount||''} onChange={e=>setEditForm(f=>({...f,amount:Number(e.target.value)||undefined}))}/>
-              </div>
-              <div>
-                <label className="fl">Cuotas</label>
-                <input className="fi" type="number" value={editForm.installments||''} onChange={e=>setEditForm(f=>({...f,installments:Number(e.target.value)||undefined}))}/>
-              </div>
-              <div>
-                <label className="fl">Estado</label>
-                <select className="fs" value={editForm.status||'new'} onChange={e=>setEditForm(f=>({...f,status:e.target.value as any}))}>
-                  <option value="new">Pendiente</option>
-              <option value="contacted">En bandeja</option>
-              <option value="contactado">Contactado</option>
-              <option value="closed">Vendido</option>
-              <option value="rejected">Rechazado</option>
-              <option value="not_interested">No interesado</option>
-                </select>
-              </div>
-              {me?.role==='Administrador'&&(
-              <div>
-                <label className="fl">Asignado a</label>
-                <select className="fs" value={editForm.assigned_to||''} onChange={e=>setEditForm(f=>({...f,assigned_to:e.target.value}))}>
-                  <option value="">Sin asignar</option>
-                  {USERS.map(u=><option key={u.id} value={u.username}>{u.username} — {u.role}</option>)}
-                </select>
-              </div>
-              )}
-              <div style={{gridColumn:'1/-1'}}>
-                <label className="fl">Nota interna</label>
-                <textarea className="ta" style={{minHeight:60}} value={editForm.notes||''} onChange={e=>setEditForm(f=>({...f,notes:e.target.value}))}/>
-              </div>
-            </div>
-            <div style={{display:'flex',gap:8,marginTop:16,paddingTop:16,borderTop:'1px solid #F1F5F9'}}>
-              <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={saveEdit} disabled={editSaving}>{editSaving?'Guardando...':'💾 Guardar'}</button>
-              <button className="btn" style={{flex:1,justifyContent:'center'}} onClick={()=>setShowEditModal(false)}>Cancelar</button>
-            </div>
-          </div>
-        </div>
+        <ModalEditar
+          editTarget={editTarget}
+          editForm={editForm}
+          setEditForm={setEditForm}
+          editSaving={editSaving}
+          saveEdit={saveEdit}
+          setShowEditModal={setShowEditModal}
+          isAdmin={me.role==='Administrador'}
+        />
       )}
 
-      {/* ══ MODAL: PLANTILLAS ══ */}
       {showTemplateModal&&editTarget&&(
-        <div className="movo" onClick={()=>setShowTemplateModal(false)}>
-          <div className="mod" onClick={e=>e.stopPropagation()}>
-            <h3>💬 Plantillas de mensaje</h3>
-            {!selectedTemplate?(
-              <>
-                <p style={{fontSize:13,color:'#64748B',marginBottom:14}}>Seleccioná una plantilla para contactar a <strong>{editTarget.full_name}</strong>:</p>
-                {TEMPLATES.filter(t=>['ayuda_economica','recontacto'].includes(t.id)).map(tpl=>(
-                  <div key={tpl.id} className="tcard" onClick={()=>applyTemplate(tpl,editTarget)}>
-                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                      <span style={{fontSize:12,fontWeight:600,color:'#1E293B'}}>{tpl.name}</span>
-                      <span style={{fontSize:10,padding:'2px 7px',borderRadius:99,background:'#EFF6FF',color:'#1D4ED8',fontWeight:600}}>{tpl.category}</span>
-                    </div>
-                    <div style={{fontSize:12,color:'#64748B',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{tpl.body.substring(0,120)}...</div>
-                  </div>
-                ))}
-              </>
-            ):(
-              <>
-                <div style={{marginBottom:14}}>
-                  <button className="btn" onClick={()=>setSelectedTemplate(null)} style={{marginBottom:14}}>← Volver</button>
-                  <div style={{fontWeight:600,fontSize:14,color:'#0F172A',marginBottom:8}}>{selectedTemplate.name}</div>
-                  {selectedTemplate.variables.map(v=>(
-                    <div key={v} style={{marginBottom:10}}>
-                      <label className="fl">Variable: {`{{${v}}}`}</label>
-                      <input className="fi" value={templateVars[v]||''} onChange={e=>setTemplateVars(tv=>({...tv,[v]:e.target.value}))}/>
-                    </div>
-                  ))}
-                  <label className="fl" style={{marginTop:12}}>Vista previa</label>
-                  <div style={{background:'#F8FAFC',border:'1px solid #E2E8F0',borderRadius:10,padding:'12px 14px',fontSize:13,lineHeight:1.6,color:'#1E293B',whiteSpace:'pre-wrap'}}>
-                    {selectedTemplate.body.replace(/\{\{(\w+)\}\}/g,(_,k)=>templateVars[k]||`[${k}]`)}
-                  </div>
-                </div>
-                <div style={{display:'flex',gap:8}}>
-                  <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={async()=>{
-                    if(!editTarget?.phone_number||!me) return
-                    try {
-                      const controller = new AbortController()
-                      const timeout = setTimeout(()=>controller.abort(), 8000)
-                      await fetch('/api/send-message',{
-                        method:'POST',headers:{'Content-Type':'application/json'},
-                        body:JSON.stringify({
-                          phone: editTarget.phone_number,
-                          template: selectedTemplate.id,
-                          senderName: me.username
-                        }),
-                        signal: controller.signal,
-                      })
-                      clearTimeout(timeout)
-                    } catch(e) {
-                      console.error('[plantilla modal] timeout o error:', e)
-                    } finally {
-                      await registrarCampana({
-                        phone:     editTarget.phone_number!,
-                        dni:       editTarget.dni,
-                        plantilla: selectedTemplate.id,
-                        operador:  me.username,
-                      })
-                      await updateStatus(editTarget.id,'contacted')
-                      setShowTemplateModal(false)
-                      alert(`✅ Plantilla enviada a ${editTarget.full_name}`)
-                    }
-                  }}>
-                    ✈️ Enviar plantilla
-                  </button>
-                  <button className="btn" style={{flex:1,justifyContent:'center'}} onClick={()=>setShowTemplateModal(false)}>Cerrar</button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        <ModalPlantillas
+          editTarget={editTarget}
+          selectedTemplate={selectedTemplate}
+          setSelectedTemplate={setSelectedTemplate}
+          templateVars={templateVars}
+          setTemplateVars={setTemplateVars}
+          applyTemplate={applyTemplate}
+          updateStatus={updateStatus}
+          setShowTemplateModal={setShowTemplateModal}
+          operadorName={me.username}
+        />
       )}
 
-      {/* ══ MODAL: FINALIZAR CONVERSACIÓN ══ */}
-      {showFinalizarModal&&currentLead&&(()=>{
-        const flujo = flujoMap[currentLead.phone_number||'']||'solicitud'
-        const estadosFinales = flujo==='cobranzas' ? ['resolved','unresolved'] : ['not_interested','rejected','closed']
-        const yaFinalizado = estadosFinales.includes(currentLead.status||'')
-        const statusOpts = flujo==='cobranzas'
-          ? Object.entries(COBRANZA_STATUS).filter(([k])=>['resolved','unresolved'].includes(k))
-          : [
-              ['rejected',      {label:'Rechazado',     bg:'#FEF2F2', text:'#991B1B'}],
-              ['not_interested', {label:'No interesado', bg:'#F9FAFB', text:'#374151'}],
-            ] as [string, {label:string;bg:string;text:string}][]
-        const puedeConfirmar = yaFinalizado || !!finalizarEstado
-        const estadoLabel = (flujo==='cobranzas'?COBRANZA_STATUS:LEAD_STATUS)[currentLead.status||'']?.label || currentLead.status
-        return (
-          <div className="movo" onClick={()=>{ setShowFinalizarModal(false); setFinalizarEstado('') }}>
-            <div className="mod" onClick={e=>e.stopPropagation()} style={{width:420}}>
-              <h3>✓ Finalizar conversación</h3>
-              <p style={{fontSize:13,color:'#64748B',marginBottom:16,lineHeight:1.6}}>
-                Al finalizar, la conversación con <strong>{currentLead.full_name||currentLead.phone_number}</strong> se cerrará y saldrá de tu bandeja.
-              </p>
-              {yaFinalizado ? (
-                <div style={{background:'#F0FDF4',border:'1px solid #BBF7D0',borderRadius:10,padding:'12px 14px',marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
-                  <span style={{fontSize:18}}>✅</span>
-                  <div>
-                    <div style={{fontSize:11,color:'#166534',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:2}}>Estado registrado</div>
-                    <div style={{fontSize:14,fontWeight:600,color:'#166534'}}>{estadoLabel}</div>
-                  </div>
-                </div>
-              ) : (
-                <div style={{background:'#FFF7ED',border:'1px solid #FED7AA',borderRadius:10,padding:'12px 14px',marginBottom:16}}>
-                  <div style={{fontSize:12,color:'#C2410C',fontWeight:600,marginBottom:8}}>⚠️ Debés elegir un estado final antes de cerrar</div>
-                  <label className="fl">Estado final</label>
-                  <select className="fs" value={finalizarEstado} onChange={e=>setFinalizarEstado(e.target.value)}>
-                    <option value="">— Seleccioná un estado —</option>
-                    {statusOpts.map(([k,v])=>(<option key={k} value={k}>{v.label}</option>))}
-                  </select>
-                </div>
-              )}
-              {!yaFinalizado && (
-                <div style={{marginBottom:12}}>
-                  <label className="fl">Anotación <span style={{color:'#94A3B8',fontWeight:400}}>(opcional)</span></label>
-                  <textarea className="ta" style={{minHeight:64}} placeholder="Describí qué se resolvió, motivo de cierre..." value={finalizarNota} onChange={e=>setFinalizarNota(e.target.value)}/>
-                </div>
-              )}
-              <div style={{display:'flex',gap:8}}>
-                <button className="btn pri" style={{flex:1,justifyContent:'center',opacity:puedeConfirmar?1:0.4}} disabled={!puedeConfirmar}
-                  onClick={async()=>{
-                    if(!yaFinalizado&&finalizarEstado) await updateStatus(currentLead.id,finalizarEstado)
-                    await finalizarConversacion(yaFinalizado?undefined:finalizarNota)
-                  }}>
-                  ✓ {yaFinalizado ? 'Sí, cerrar conversación' : 'Confirmar y finalizar'}
-                </button>
-                <button className="btn" onClick={()=>{ setShowFinalizarModal(false); setFinalizarEstado(''); setFinalizarNota('') }}>Cancelar</button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
+      {showFinalizarModal&&currentLead&&(
+        <ModalFinalizar
+          currentLead={currentLead}
+          flujoMap={flujoMap}
+          finalizarEstado={finalizarEstado}
+          setFinalizarEstado={setFinalizarEstado}
+          finalizarNota={finalizarNota}
+          setFinalizarNota={setFinalizarNota}
+          updateStatus={updateStatus}
+          finalizarConversacion={finalizarConversacion}
+          setShowFinalizarModal={setShowFinalizarModal}
+        />
+      )}
 
-      {/* ══ MODAL: VENTA CERRADA ══ */}
-      {showVentaModal&&currentLead&&(()=>{
-        const montoNum = parseInt(ventaForm.monto)||0
-        const cuotasNum = parseInt(ventaForm.cuotas)||0
-        const calcCuota = ventaForm.entidad&&ventaForm.linea&&ventaForm.reparticion&&montoNum&&cuotasNum
-          ? calcularCuotaAMAT(ventaForm.entidad,ventaForm.linea,ventaForm.reparticion,montoNum,cuotasNum) : 0
-        const fmtP = (n:number) => n>0 ? '$ '+n.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.') : '—'
-        return (
-        <div className="movo" onClick={()=>setShowVentaModal(false)}>
-          <div className="mod" onClick={e=>e.stopPropagation()} style={{width:540}}>
-            <h3>🎉 Registrar venta cerrada</h3>
-            <p style={{fontSize:12,color:'#64748B',marginBottom:14}}>El valor de cuota se calcula automáticamente con la grilla AMAT.</p>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-              <div>
-                <label className="fl">Entidad</label>
-                <div style={{display:'flex',gap:6}}>
-                  {['AMAT','DOS DE AGOSTO'].map(e=>(
-                    <button key={e} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.entidad===e?'#B45309':'#E2E8F0',background:ventaForm.entidad===e?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.entidad===e?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm(f=>({...f,entidad:e}))}>
-                      {e}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="fl">Línea</label>
-                <div style={{display:'flex',gap:5}}>
-                  {['Haberes','Ayuda','BAPRO'].map(l=>(
-                    <button key={l} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.linea===l?'#B45309':'#E2E8F0',background:ventaForm.linea===l?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.linea===l?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm(f=>({...f,linea:l}))}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div style={{gridColumn:'1/-1'}}>
-                <label className="fl">Repartición</label>
-                <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                  {REPARTICIONES.map(r=>(
-                    <button key={r} style={{padding:'6px 10px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.reparticion===r?'#B45309':'#E2E8F0',background:ventaForm.reparticion===r?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.reparticion===r?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm(f=>({...f,reparticion:r}))}>
-                      {r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="fl">Monto</label>
-                <select className="fs" value={ventaForm.monto||''} onChange={e=>setVentaForm(f=>({...f,monto:e.target.value}))}>
-                  <option value="">— Seleccioná un monto —</option>
-                  {Object.keys(TABLAS_CUOTA[parseInt(ventaForm.cuotas)||12]||TABLAS_CUOTA[12]).map(Number).sort((a,b)=>a-b).map(m=>(
-                    <option key={m} value={m}>
-                      {'$' + m.toLocaleString('es-AR') + (ventaForm.cuotas && TABLAS_CUOTA[parseInt(ventaForm.cuotas)]?.[m] ? ' → $' + TABLAS_CUOTA[parseInt(ventaForm.cuotas)][m].toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}) : '')}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="fl">Cuotas</label>
-                <div style={{display:'flex',gap:5}}>
-                  {[6,12,18,24].map(n=>(
-                    <button key={n} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:parseInt(ventaForm.cuotas)===n?'#F59E0B':'#E2E8F0',background:parseInt(ventaForm.cuotas)===n?'#FFFBEB':'white',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'DM Mono',monospace",color:parseInt(ventaForm.cuotas)===n?'#B45309':'#374151'}}
-                      onClick={()=>setVentaForm(f=>({...f,cuotas:String(n)}))}>
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            {calcCuota>0&&(
-              <div style={{background:'#ECFDF5',border:'1px solid #BBF7D0',borderRadius:10,padding:'12px 16px',marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <div>
-                  <div style={{fontSize:11,color:'#065F46',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}}>Total por cuota</div>
-                  <div style={{fontSize:26,fontWeight:700,color:'#065F46'}}>{fmtP(calcCuota)}</div>
-                </div>
-                <div style={{textAlign:'right',fontSize:12,color:'#047857'}}>
-                  <div>{ventaForm.entidad} · {ventaForm.linea}</div>
-                  <div>${parseInt(ventaForm.monto).toLocaleString('es-AR')} · {ventaForm.cuotas} cuotas</div>
-                </div>
-              </div>
-            )}
-            <div style={{marginBottom:12}}>
-              <label className="fl">Notas (opcional)</label>
-              <textarea className="ta" style={{minHeight:56}} value={ventaForm.notas} onChange={e=>setVentaForm(f=>({...f,notas:e.target.value}))}/>
-            </div>
-            <div style={{display:'flex',gap:8}}>
-              <button style={{flex:2,padding:'10px',background:'linear-gradient(135deg,#059669,#10B981)',color:'white',border:'none',borderRadius:9,fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:(!ventaForm.entidad||!ventaForm.linea||!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas)?0.4:1}}
-                disabled={!ventaForm.entidad||!ventaForm.linea||!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas}
-                onClick={()=>{ setVentaForm(f=>({...f,valor_cuota:String(calcCuota)})); setTimeout(guardarVenta,50) }}>
-                💾 Guardar venta
-              </button>
-              <button className="btn" style={{flex:1}} onClick={()=>setShowVentaModal(false)}>Cancelar</button>
-            </div>
-          </div>
-        </div>
-        )
-      })()}
+      {showVentaModal&&currentLead&&(
+        <ModalVenta
+          currentLead={currentLead}
+          ventaForm={ventaForm}
+          setVentaForm={setVentaForm}
+          guardarVenta={guardarVenta}
+          setShowVentaModal={setShowVentaModal}
+        />
+      )}
 
-      {/* ══ MODAL: GESTIONAR CONSULTA ══ */}
       {showConsultaModal&&consultaSelected&&(
-        <div className="movo" onClick={()=>setShowConsultaModal(false)}>
-          <div className="mod" onClick={e=>e.stopPropagation()} style={{width:560}}>
-            <h3>📥 Gestionar consulta</h3>
-            <div style={{background:'#F8FAFC',border:'1px solid #E2E8F0',borderRadius:10,padding:'14px 16px',marginBottom:16}}>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                {[
-                  ['Nombre',       consultaSelected.nombre_apellido],
-                  ['DNI',          consultaSelected.dni],
-                  ['Teléfono',     consultaSelected.phone],
-                  ['Email',        consultaSelected.email],
-                  ['Repartición',  consultaSelected.reparticion_label],
-                  ['Flujo',        consultaSelected.flujo==='cobranzas'?'Cobranzas':'Solicitud'],
-                  ['Prestación',   consultaSelected.prestacion||'—'],
-                  ['Afiliado',     consultaSelected.afiliado?'Sí':'No'],
-                  ['Fecha',        new Date(consultaSelected.created_at).toLocaleString('es-AR')],
-                  ['Message ID',   consultaSelected.message_id||'—'],
-                ].map(([l,v])=>(
-                  <div key={l as string}>
-                    <div style={{fontSize:10,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:2}}>{l}</div>
-                    <div style={{fontSize:13,color:'#0F172A',fontWeight:500}}>{v as string}</div>
-                  </div>
-                ))}
-              </div>
-              {consultaSelected.consulta_texto&&(
-                <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid #E2E8F0'}}>
-                  <div style={{fontSize:10,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:4}}>Detalle consulta</div>
-                  <div style={{fontSize:13,color:'#374151',lineHeight:1.6}}>{consultaSelected.consulta_texto}</div>
-                </div>
-              )}
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-              <div>
-                <label className="fl">Vendedor asignado</label>
-                <select className="fs" value={consultaEdit.vendedor} onChange={e=>setConsultaEdit(f=>({...f,vendedor:e.target.value}))}>
-                  <option value="">Sin asignar</option>
-                  {USERS.map(u=><option key={u.id} value={u.username}>{u.username} — {u.role}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="fl">Estado</label>
-                <select className="fs" value={consultaEdit.estado} onChange={e=>setConsultaEdit(f=>({...f,estado:e.target.value}))}>
-                  <option value="pendiente">Pendiente</option>
-                  <option value="contactado">Contactado</option>
-                  {consultaSelected.flujo==='cobranzas' ? (<>
-                    <option value="resuelto">Resuelto</option>
-                    <option value="cerrado">No resuelto</option>
-                  </>) : (<>
-                    <option value="resuelto">Vendido</option>
-                    <option value="cerrado_rechazado">Rechazado</option>
-                    <option value="cerrado_no_interesado">No interesado</option>
-                    <option value="cerrado">Sin respuesta</option>
-                  </>)}
-                </select>
-              </div>
-            </div>
-            <div style={{marginBottom:16}}>
-              <label className="fl">Situación / Resolución</label>
-              <textarea className="ta" placeholder="Describí qué pasó con esta consulta..." value={consultaEdit.situacion} onChange={e=>setConsultaEdit(f=>({...f,situacion:e.target.value}))}/>
-            </div>
-            <div style={{display:'flex',gap:8,paddingTop:14,borderTop:'1px solid #F1F5F9'}}>
-              <button className="btn pri" style={{flex:1,justifyContent:'center'}} onClick={async()=>{
-                // 1. Guardar consulta — INSERT o UPDATE según corresponda
-                let resConsulta
-                if(String(consultaSelected.id).startsWith('lead_')) {
-                  resConsulta = await insertConsulta({
-                    phone:            consultaSelected.phone,
-                    nombre_apellido:  consultaSelected.nombre_apellido,
-                    dni:              consultaSelected.dni,
-                    reparticion_label:consultaSelected.reparticion_label,
-                    flujo:            consultaSelected.flujo||'solicitud',
-                    vendedor:         consultaEdit.vendedor,
-                    situacion:        consultaEdit.situacion,
-                    estado:           consultaEdit.estado,
-                  })
-                } else {
-                  resConsulta = await updateConsulta(consultaSelected.id, {
-                    vendedor:  consultaEdit.vendedor,
-                    situacion: consultaEdit.situacion,
-                    estado:    consultaEdit.estado,
-                  })
-                }
-                if(!resConsulta.ok) {
-                  alert('❌ No se pudo guardar la consulta. Intentá de nuevo.')
-                  return
-                }
-
-                // 2. Sincronizar amat_loan_leads con el estado elegido
-                if(consultaSelected.phone) {
-                  const esCob = consultaSelected.flujo === 'cobranzas'
-                  const nuevoStatus = consultaStatusToLeadStatus(consultaEdit.estado, consultaSelected.flujo || 'solicitud')
-                  const esFinal = ESTADOS_FINALES.includes(nuevoStatus)
-
-                  const { data: _ld } = await supabase.from('amat_loan_leads')
-                    .select('id,archived,assigned_to,status')
-                    .eq('phone_number', consultaSelected.phone)
-                    .single()
-                  const resLead = { ok: !!_ld, data: _ld }
-
-                  if(resLead.ok && resLead.data) {
-                    const existingLead = resLead.data as any
-                    const updateData: any = {
-                      status:      nuevoStatus,
-                      updated_at:  new Date().toISOString(),
-                    }
-                    if(esFinal) {
-                      updateData.archived = true
-                    } else {
-                      updateData.archived = false
-                      if(consultaEdit.vendedor) updateData.assigned_to = consultaEdit.vendedor
-                    }
-
-                    const resUpdate = await (async () => {
-                      const { error } = await supabase.from('amat_loan_leads').update(updateData).eq('id', existingLead.id)
-                      return { ok: !error }
-                    })()
-
-                    if(resUpdate.ok) {
-                      // UI solo después de confirmar todas las ops en DB
-                      if(esFinal) {
-                        setBotLeads(prev => prev.filter(l => l.id !== existingLead.id))
-                        if(selectedPhone === consultaSelected.phone) setSelectedPhone(null)
-                      } else if(consultaEdit.vendedor) {
-                        setBotLeads(prev => {
-                          const exists = prev.find(l=>l.id===existingLead.id)
-                          if(exists) return prev.map(l=>l.id===existingLead.id?{...l,...updateData}:l)
-                          supabase.from('amat_loan_leads').select('*').eq('id',existingLead.id).single()
-                            .then(({data})=>{ if(data) setBotLeads(p=>p.find(x=>x.id===(data as any).id)?p:[data as any,...p]) })
-                          return prev
-                        })
-                      }
-                    } else {
-                      console.warn('[gestionar] Consulta guardada pero lead no sincronizado:', consultaSelected.phone)
-                    }
-                  }
-                }
-
-                setShowConsultaModal(false)
-                loadConsultas()
-              }}>💾 Guardar</button>
-              <button className="btn" style={{flex:1,justifyContent:'center'}} onClick={()=>setShowConsultaModal(false)}>Cancelar</button>
-            </div>
-          </div>
-        </div>
+        <ModalGestionarConsulta
+          consultaSelected={consultaSelected}
+          consultaEdit={consultaEdit}
+          setConsultaEdit={setConsultaEdit}
+          setShowConsultaModal={setShowConsultaModal}
+          setBotLeads={setBotLeads}
+          setSelectedPhone={setSelectedPhone}
+          selectedPhone={selectedPhone}
+          loadConsultas={loadConsultas}
+        />
       )}
 
       {/* ══ MODAL: CAMPAÑA WHATSAPP ══ */}
