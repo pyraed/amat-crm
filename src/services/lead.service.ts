@@ -105,37 +105,43 @@ export async function fetchBandejaLeads(username: string) {
       .not('status', 'in', `(${EXCLUIDOS.join(',')})`)
       .order('updated_at', { ascending: false }),
 
-    // Cola: solo leads con al menos un mensaje ENTRANTE — excluye leads de campaña sin respuesta
-    supabase.from('amat_loan_leads').select('*, amat_messages!inner(direction)')
+    supabase.from('amat_loan_leads').select('*')
       .is('assigned_to', null)
       .eq('archived', false)
       .in('status', ['new', 'contacted'])
-      .eq('amat_messages.direction', 'in')
       .order('created_at', { ascending: true })
-      .limit(50),
+      .limit(200),
 
     supabase.from('amat_loan_leads')
       .select('id', { count: 'exact', head: true })
       .is('assigned_to', null)
       .eq('archived', false)
-      .in('status', ['new', 'contacted'])
-      .not('phone_number', 'is', null),
+      .in('status', ['new', 'contacted']),
   ])
 
-  // El JOIN con amat_messages puede traer duplicados — deduplicar por id
-  const colaRaw = (colaRes.data || []) as any[]
-  const colaVista = new Map<number, LoanLead>()
-  colaRaw.forEach(l => {
-    if(!colaVista.has(l.id)) {
-      // Remover el campo amat_messages que trajo el JOIN antes de guardar
-      const { amat_messages: _, ...lead } = l
-      colaVista.set(l.id, lead as LoanLead)
-    }
-  })
+  // Filtrar cola: solo leads que tienen al menos un mensaje entrante
+  // Esto excluye leads de campaña que nunca respondieron
+  const todasLasCola = (colaRes.data || []) as LoanLead[]
+
+  // Traer phones con mensajes entrantes para filtrar
+  const phonesEnCola = todasLasCola.map(l => l.phone_number).filter(Boolean) as string[]
+  let phonesConRespuesta = new Set<string>()
+
+  if(phonesEnCola.length > 0) {
+    const { data: msgsIn } = await supabase
+      .from('amat_messages')
+      .select('phone_number')
+      .in('phone_number', phonesEnCola)
+      .eq('direction', 'in')
+      .limit(1000)
+    ;(msgsIn || []).forEach((m: any) => { if(m.phone_number) phonesConRespuesta.add(m.phone_number) })
+  }
+
+  const cola = todasLasCola.filter(l => l.phone_number && phonesConRespuesta.has(l.phone_number)).slice(0, 50)
 
   return {
     asignados:  (asignadosRes.data || []) as LoanLead[],
-    cola:       [...colaVista.values()],
+    cola,
     colaTotal:  countRes.count || 0,
   }
 }
