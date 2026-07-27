@@ -214,3 +214,96 @@ export function getMontosDisponibles(cuotas: number): number[] {
   const tabla = TABLAS_CUOTA[cuotas] ?? TABLAS_CUOTA[12]
   return Object.keys(tabla).map(Number).sort((a, b) => a - b)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GRILLA INTEGRA FIN (AMAT + Integra Fin — fuente: Integra_Fin_1412_052026.xlsx)
+//  Para: EJERCITO ARGENTINO, GENDARMERIA, FUERZAS ARMADAS
+//
+//  Estructura: Capital (monto total) → Monto neto (lo que recibe el cliente)
+//  El cliente recibe Capital − $20.000 (cuota social fija de $50.000/mes)
+//  Cuotas disponibles: 12, 18, 24 únicamente
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const REPARTICIONES_INTEGRA = [
+  'EJERCITO ARGENTINO',
+  'GENDARMERIA',
+  'FUERZAS ARMADAS',
+] as const
+
+export type ReparticionIntegra = typeof REPARTICIONES_INTEGRA[number]
+
+export const CUOTA_SOCIAL_INTEGRA = 50000
+
+// Grilla: Record<plazo, Record<capital, valor_cuota>>
+// La cuota ya incluye la cuota social de $50.000
+export const TABLA_INTEGRA: Record<number, Record<number, number>> = {
+  12: {
+    100000:12553.59, 150000:18830.38, 200000:25107.18, 250000:31383.97,
+    300000:37660.76, 350000:43937.56, 400000:50214.35, 450000:56491.15,
+    500000:62767.94, 550000:69044.73, 600000:75321.53, 650000:81598.32,
+    700000:87875.12, 750000:94151.91, 800000:100428.70, 850000:106705.50,
+    900000:112982.29, 950000:119259.09, 1000000:125535.88, 1050000:131812.67,
+    1100000:138089.47, 1150000:144366.26, 1200000:150643.06, 1250000:156919.85,
+    1300000:163196.64, 1350000:169473.44, 1400000:175750.23, 1450000:182027.03,
+    1500000:188303.82,
+  },
+  18: {
+    100000:9902.12, 150000:14853.18, 200000:19804.24, 250000:24755.30,
+    300000:29706.36, 350000:34657.42, 400000:39608.48, 450000:44559.54,
+    500000:49510.60, 550000:54461.66, 600000:59412.72, 650000:64363.78,
+    700000:69314.84, 750000:74265.90, 800000:79216.96, 850000:84168.02,
+    900000:89119.08, 950000:94070.14, 1000000:99021.20, 1050000:103972.26,
+    1100000:108923.32, 1150000:113874.38, 1200000:118825.44, 1250000:123776.50,
+    1300000:128727.56, 1350000:133678.62, 1400000:138629.68, 1450000:143580.74,
+    1500000:148531.80,
+  },
+  24: {
+    100000:8677.16, 150000:13015.73, 200000:17354.31, 250000:21692.89,
+    300000:26031.47, 350000:30370.05, 400000:34708.63, 450000:39047.20,
+    500000:43385.78, 550000:47724.36, 600000:52062.94, 650000:56401.52,
+    700000:60740.09, 750000:65078.67, 800000:69417.25, 850000:73755.83,
+    900000:78094.41, 950000:82432.99, 1000000:86771.56, 1050000:91110.14,
+    1100000:95448.72, 1150000:99787.30, 1200000:104125.88, 1250000:108464.46,
+    1300000:112803.03, 1350000:117141.61, 1400000:121480.19, 1450000:125818.77,
+    1500000:130157.35,
+  },
+}
+
+/**
+ * Verifica si una repartición usa la grilla Integra Fin.
+ */
+export function esReparticionIntegra(reparticion: string): boolean {
+  return REPARTICIONES_INTEGRA.includes(reparticion as ReparticionIntegra)
+}
+
+/**
+ * Calcula el monto neto que recibe el cliente para la grilla Integra.
+ * Capital − $20.000 (cuota social es $50.000, de los cuales $20.000 van al capital)
+ */
+export function getMontoNetoIntegra(capital: number): number {
+  return capital - 20000
+}
+
+/**
+ * Calcula el valor de cuota para la grilla Integra Fin.
+ * @returns { cuota, montoNeto } o null si no hay datos en la grilla.
+ */
+export function calcularCuotaIntegra(
+  capital: number,
+  cuotas:  number
+): { cuota: number; montoNeto: number } | null {
+  const cuota = TABLA_INTEGRA[cuotas]?.[capital]
+  if(!cuota) return null
+  return {
+    cuota,
+    montoNeto: getMontoNetoIntegra(capital),
+  }
+}
+
+/**
+ * Devuelve los capitales disponibles en la grilla Integra para un plazo dado.
+ */
+export function getCapitalesIntegra(cuotas: number): number[] {
+  const tabla = TABLA_INTEGRA[cuotas] ?? TABLA_INTEGRA[12]
+  return Object.keys(tabla).map(Number).sort((a, b) => a - b)
+}

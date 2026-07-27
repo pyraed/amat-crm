@@ -18,7 +18,7 @@ import {
   OPCIONES_VENTAS, OPCIONES_VENTAS_INTERMEDIOS, OPCIONES_COBRANZAS,
 } from '@/domain/entities/leadStatus'
 import { REPARTICIONES, BANCOS, REJECTION_REASONS, TEMPLATES } from '@/domain/entities/catalogs'
-import { TABLAS_CUOTA, calcularCuotaAMAT } from '@/domain/calculations/cuotas'
+import { TABLAS_CUOTA, calcularCuotaAMAT, esReparticionIntegra, calcularCuotaIntegra, getCapitalesIntegra, CUOTA_SOCIAL_INTEGRA } from '@/domain/calculations/cuotas'
 import { consultaStatusToLeadStatus } from '@/domain/workflows/statusMapping'
 import { supabase } from '@/lib/supabase'
 import { updateConsulta, insertConsulta } from '@/services/consulta.service'
@@ -453,65 +453,123 @@ type ModalVentaProps = {
 export function ModalVenta({ currentLead, ventaForm, setVentaForm, guardarVenta, setShowVentaModal }: ModalVentaProps) {
   const montoNum  = parseInt(ventaForm.monto)||0
   const cuotasNum = parseInt(ventaForm.cuotas)||0
-  const calcCuota = ventaForm.entidad&&ventaForm.linea&&ventaForm.reparticion&&montoNum&&cuotasNum
-    ? calcularCuotaAMAT(ventaForm.entidad, ventaForm.linea, ventaForm.reparticion, montoNum, cuotasNum) : 0
   const fmtP = (n:number) => n>0 ? '$ '+n.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.') : '—'
+  const fmt  = (n:number) => '$ '+n.toLocaleString('es-AR')
+
+  // Detectar si la repartición usa grilla Integra Fin
+  const esIntegra = esReparticionIntegra(ventaForm.reparticion)
+
+  // Cálculo según grilla
+  const resultadoIntegra = esIntegra && montoNum && cuotasNum
+    ? calcularCuotaIntegra(montoNum, cuotasNum) : null
+  const calcCuota = esIntegra
+    ? (resultadoIntegra?.cuota || 0)
+    : (ventaForm.entidad&&ventaForm.linea&&ventaForm.reparticion&&montoNum&&cuotasNum
+        ? calcularCuotaAMAT(ventaForm.entidad, ventaForm.linea, ventaForm.reparticion, montoNum, cuotasNum) : 0)
+
+  // Cuotas disponibles según grilla
+  const cuotasDisponibles = esIntegra ? [12,18,24] : [6,12,18,24]
+
+  // Selector de capital/monto
+  const capitalesIntegra = esIntegra ? getCapitalesIntegra(cuotasNum||12) : []
 
   return (
     <div className="movo" onClick={()=>setShowVentaModal(false)}>
-      <div className="mod" onClick={e=>e.stopPropagation()} style={{width:540}}>
+      <div className="mod" onClick={e=>e.stopPropagation()} style={{width:560}}>
         <h3>🎉 Registrar venta cerrada</h3>
-        <p style={{fontSize:12,color:'#64748B',marginBottom:14}}>El valor de cuota se calcula automáticamente con la grilla AMAT.</p>
+        <p style={{fontSize:12,color:'#64748B',marginBottom:14}}>
+          {esIntegra
+            ? '📋 Grilla Integra Fin — Ejército / Gendarmería / FFAA'
+            : 'El valor de cuota se calcula automáticamente con la grilla AMAT.'}
+        </p>
+
+        {/* Badge de grilla activa */}
+        {esIntegra&&(
+          <div style={{background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:8,padding:'8px 12px',marginBottom:14,fontSize:12,color:'#1D4ED8',display:'flex',alignItems:'center',gap:6}}>
+            ℹ️ Esta repartición usa la grilla <strong>AMAT + Integra Fin</strong>. Cuota social fija: {fmt(CUOTA_SOCIAL_INTEGRA)}/mes incluida en la cuota.
+          </div>
+        )}
+
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-          <div>
-            <label className="fl">Entidad</label>
-            <div style={{display:'flex',gap:6}}>
-              {['AMAT','DOS DE AGOSTO'].map(e=>(
-                <button key={e} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.entidad===e?'#B45309':'#E2E8F0',background:ventaForm.entidad===e?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.entidad===e?'#B45309':'#374151'}}
-                  onClick={()=>setVentaForm(f=>({...f,entidad:e}))}>
-                  {e}
-                </button>
-              ))}
+          {/* Entidad y línea — solo para grilla AMAT */}
+          {!esIntegra&&(<>
+            <div>
+              <label className="fl">Entidad</label>
+              <div style={{display:'flex',gap:6}}>
+                {['AMAT','DOS DE AGOSTO'].map(e=>(
+                  <button key={e} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.entidad===e?'#B45309':'#E2E8F0',background:ventaForm.entidad===e?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.entidad===e?'#B45309':'#374151'}}
+                    onClick={()=>setVentaForm(f=>({...f,entidad:e}))}>
+                    {e}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="fl">Línea</label>
-            <div style={{display:'flex',gap:5}}>
-              {['Haberes','Ayuda','BAPRO'].map(l=>(
-                <button key={l} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.linea===l?'#B45309':'#E2E8F0',background:ventaForm.linea===l?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.linea===l?'#B45309':'#374151'}}
-                  onClick={()=>setVentaForm(f=>({...f,linea:l}))}>
-                  {l}
-                </button>
-              ))}
+            <div>
+              <label className="fl">Línea</label>
+              <div style={{display:'flex',gap:5}}>
+                {['Haberes','Ayuda','BAPRO'].map(l=>(
+                  <button key={l} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.linea===l?'#B45309':'#E2E8F0',background:ventaForm.linea===l?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.linea===l?'#B45309':'#374151'}}
+                    onClick={()=>setVentaForm(f=>({...f,linea:l}))}>
+                    {l}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          </>)}
+
+          {/* Repartición */}
           <div style={{gridColumn:'1/-1'}}>
             <label className="fl">Repartición</label>
             <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
               {REPARTICIONES.map(r=>(
-                <button key={r} style={{padding:'6px 10px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:ventaForm.reparticion===r?'#B45309':'#E2E8F0',background:ventaForm.reparticion===r?'#FFFBEB':'white',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',color:ventaForm.reparticion===r?'#B45309':'#374151'}}
-                  onClick={()=>setVentaForm(f=>({...f,reparticion:r}))}>
+                <button key={r}
+                  style={{padding:'6px 10px',borderRadius:7,borderWidth:1,borderStyle:'solid',
+                    borderColor:ventaForm.reparticion===r?'#B45309':'#E2E8F0',
+                    background:ventaForm.reparticion===r?'#FFFBEB':'white',
+                    fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',
+                    color:ventaForm.reparticion===r?'#B45309':'#374151'}}
+                  onClick={()=>setVentaForm(f=>({...f,reparticion:r,monto:'',cuotas:'',entidad:esReparticionIntegra(r)?'AMAT+INTEGRA':f.entidad,linea:esReparticionIntegra(r)?'Haberes':f.linea}))}>
                   {r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB')}
+                  {esReparticionIntegra(r)&&<span style={{marginLeft:4,fontSize:9,color:'#1D4ED8'}}>★</span>}
                 </button>
               ))}
             </div>
+            <div style={{fontSize:10,color:'#94A3B8',marginTop:4}}>★ Grilla Integra Fin</div>
           </div>
+
+          {/* Capital (Integra) o Monto (AMAT) */}
           <div>
-            <label className="fl">Monto</label>
-            <select className="fs" value={ventaForm.monto||''} onChange={e=>setVentaForm(f=>({...f,monto:e.target.value}))}>
-              <option value="">— Seleccioná un monto —</option>
-              {Object.keys(TABLAS_CUOTA[parseInt(ventaForm.cuotas)||12]||TABLAS_CUOTA[12]).map(Number).sort((a,b)=>a-b).map(m=>(
-                <option key={m} value={m}>
-                  {'$'+m.toLocaleString('es-AR')+(ventaForm.cuotas&&TABLAS_CUOTA[parseInt(ventaForm.cuotas)]?.[m]?' → $'+TABLAS_CUOTA[parseInt(ventaForm.cuotas)][m].toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}):'')}
-                </option>
-              ))}
-            </select>
+            <label className="fl">{esIntegra ? 'Capital' : 'Monto'}</label>
+            {esIntegra ? (
+              <select className="fs" value={ventaForm.monto||''} onChange={e=>setVentaForm(f=>({...f,monto:e.target.value}))}>
+                <option value="">— Seleccioná el capital —</option>
+                {capitalesIntegra.map(cap=>{
+                  const res = calcularCuotaIntegra(cap, cuotasNum||12)
+                  return (
+                    <option key={cap} value={cap}>
+                      {fmt(cap)} → neto {fmt(cap-20000)}{res?` · cuota ${fmtP(res.cuota)}`:''}
+                    </option>
+                  )
+                })}
+              </select>
+            ) : (
+              <select className="fs" value={ventaForm.monto||''} onChange={e=>setVentaForm(f=>({...f,monto:e.target.value}))}>
+                <option value="">— Seleccioná un monto —</option>
+                {Object.keys(TABLAS_CUOTA[cuotasNum||12]||TABLAS_CUOTA[12]).map(Number).sort((a,b)=>a-b).map(m=>(
+                  <option key={m} value={m}>
+                    {'$'+m.toLocaleString('es-AR')+(ventaForm.cuotas&&TABLAS_CUOTA[cuotasNum]?.[m]?' → $'+TABLAS_CUOTA[cuotasNum][m].toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}):'')}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
+
+          {/* Cuotas */}
           <div>
             <label className="fl">Cuotas</label>
             <div style={{display:'flex',gap:5}}>
-              {[6,12,18,24].map(n=>(
-                <button key={n} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:parseInt(ventaForm.cuotas)===n?'#F59E0B':'#E2E8F0',background:parseInt(ventaForm.cuotas)===n?'#FFFBEB':'white',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'DM Mono',monospace",color:parseInt(ventaForm.cuotas)===n?'#B45309':'#374151'}}
+              {cuotasDisponibles.map(n=>(
+                <button key={n} style={{flex:1,padding:'8px 4px',borderRadius:7,borderWidth:1,borderStyle:'solid',borderColor:cuotasNum===n?'#F59E0B':'#E2E8F0',background:cuotasNum===n?'#FFFBEB':'white',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'DM Mono',monospace",color:cuotasNum===n?'#B45309':'#374151'}}
                   onClick={()=>setVentaForm(f=>({...f,cuotas:String(n)}))}>
                   {n}
                 </button>
@@ -519,25 +577,48 @@ export function ModalVenta({ currentLead, ventaForm, setVentaForm, guardarVenta,
             </div>
           </div>
         </div>
+
+        {/* Panel de resultado — muestra capital + neto para Integra, solo cuota para AMAT */}
         {calcCuota>0&&(
-          <div style={{background:'#ECFDF5',border:'1px solid #BBF7D0',borderRadius:10,padding:'12px 16px',marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div>
-              <div style={{fontSize:11,color:'#065F46',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}}>Total por cuota</div>
-              <div style={{fontSize:26,fontWeight:700,color:'#065F46'}}>{fmtP(calcCuota)}</div>
-            </div>
-            <div style={{textAlign:'right',fontSize:12,color:'#047857'}}>
-              <div>{ventaForm.entidad} · {ventaForm.linea}</div>
-              <div>${parseInt(ventaForm.monto).toLocaleString('es-AR')} · {ventaForm.cuotas} cuotas</div>
-            </div>
+          <div style={{background:'#ECFDF5',border:'1px solid #BBF7D0',borderRadius:10,padding:'12px 16px',marginBottom:12}}>
+            {esIntegra&&resultadoIntegra ? (
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+                <div>
+                  <div style={{fontSize:10,color:'#065F46',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}}>Capital</div>
+                  <div style={{fontSize:18,fontWeight:700,color:'#065F46'}}>{fmt(montoNum)}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:'#065F46',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}}>Monto neto cliente</div>
+                  <div style={{fontSize:18,fontWeight:700,color:'#1D4ED8'}}>{fmt(resultadoIntegra.montoNeto)}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:'#065F46',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}}>Cuota mensual</div>
+                  <div style={{fontSize:18,fontWeight:700,color:'#065F46'}}>{fmtP(calcCuota)}</div>
+                </div>
+              </div>
+            ) : (
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div>
+                  <div style={{fontSize:11,color:'#065F46',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}}>Total por cuota</div>
+                  <div style={{fontSize:26,fontWeight:700,color:'#065F46'}}>{fmtP(calcCuota)}</div>
+                </div>
+                <div style={{textAlign:'right',fontSize:12,color:'#047857'}}>
+                  <div>{ventaForm.entidad} · {ventaForm.linea}</div>
+                  <div>${montoNum.toLocaleString('es-AR')} · {ventaForm.cuotas} cuotas</div>
+                </div>
+              </div>
+            )}
           </div>
         )}
+
         <div style={{marginBottom:12}}>
           <label className="fl">Notas (opcional)</label>
           <textarea className="ta" style={{minHeight:56}} value={ventaForm.notas} onChange={e=>setVentaForm(f=>({...f,notas:e.target.value}))}/>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button style={{flex:2,padding:'10px',background:'linear-gradient(135deg,#059669,#10B981)',color:'white',border:'none',borderRadius:9,fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:(!ventaForm.entidad||!ventaForm.linea||!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas)?0.4:1}}
-            disabled={!ventaForm.entidad||!ventaForm.linea||!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas}
+          <button style={{flex:2,padding:'10px',background:'linear-gradient(135deg,#059669,#10B981)',color:'white',border:'none',borderRadius:9,fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',
+            opacity:((!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas)||(esIntegra?false:(!ventaForm.entidad||!ventaForm.linea)))?0.4:1}}
+            disabled={!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas||(esIntegra?false:(!ventaForm.entidad||!ventaForm.linea))}
             onClick={()=>{ setVentaForm(f=>({...f,valor_cuota:String(calcCuota)})); setTimeout(guardarVenta,50) }}>
             💾 Guardar venta
           </button>
