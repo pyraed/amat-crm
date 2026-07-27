@@ -38,7 +38,7 @@ export default function CampanaModal({ onClose }: Props) {
   const [step, setStep] = useState<'config' | 'preview' | 'running' | 'done'>('config')
 
   // Filtros de segmento
-  const [filterRep, setFilterRep]     = useState('all')
+  const [filterReps, setFilterReps]   = useState<Set<string>>(new Set()) // vacío = todas
   const [filterBanco, setFilterBanco] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterTel, setFilterTel]     = useState<'con' | 'all'>('con')
@@ -117,7 +117,7 @@ export default function CampanaModal({ onClose }: Props) {
       .not('phone_number', 'is', null)
       .neq('phone_number', '')
 
-    if (filterRep !== 'all')      q = q.eq('reparticion', filterRep)
+    if (filterReps.size > 0)      q = q.in('reparticion', [...filterReps])
     if (filterBanco !== 'all')    q = q.eq('bank', filterBanco)
     if (filterStatus !== 'all')   q = q.eq('status', filterStatus)
     if (filterAssigned !== 'all') q = q.eq('assigned_to', filterAssigned)
@@ -535,12 +535,41 @@ export default function CampanaModal({ onClose }: Props) {
                   <span>🎯</span> Segmento de contactos
                 </div>
                 <div style={s.grid2}>
-                  <div>
-                    <label style={s.label}>Repartición</label>
-                    <select style={s.select} value={filterRep} onChange={e => setFilterRep(e.target.value)}>
-                      <option value="all">Todas</option>
-                      {REPARTICIONES_CAMPANA.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
+                  <div style={{gridColumn:'1/-1'}}>
+                    <label style={s.label}>
+                      Reparticiones
+                      {filterReps.size > 0 && (
+                        <span style={{marginLeft:6,fontSize:10,color:'#3B82F6',fontWeight:400,cursor:'pointer'}}
+                          onClick={()=>setFilterReps(new Set())}>
+                          (limpiar — {filterReps.size} seleccionadas)
+                        </span>
+                      )}
+                    </label>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
+                      {REPARTICIONES_CAMPANA.map(r=>{
+                        const sel = filterReps.has(r)
+                        return (
+                          <button key={r}
+                            onClick={()=>{
+                              setFilterReps(prev=>{
+                                const next = new Set(prev)
+                                sel ? next.delete(r) : next.add(r)
+                                return next
+                              })
+                            }}
+                            style={{padding:'5px 10px',borderRadius:7,border:`1px solid ${sel?'#3B82F6':'#E2E8F0'}`,
+                              background:sel?'#EFF6FF':'white',color:sel?'#1D4ED8':'#374151',
+                              fontSize:11,fontWeight:sel?700:500,cursor:'pointer',fontFamily:'inherit',
+                              display:'flex',alignItems:'center',gap:4}}>
+                            {sel&&<span style={{fontSize:10}}>✓</span>}
+                            {r.replace('MINISTERIO DE ','Min. ').replace('SERVICIO PENITENCIARIO BONAERENSE','SPB')}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div style={{fontSize:10,color:'#94A3B8',marginTop:4}}>
+                      {filterReps.size===0 ? 'Sin filtro — incluye todas las reparticiones' : `Filtrando por ${filterReps.size} repartición${filterReps.size!==1?'es':''}`}
+                    </div>
                   </div>
                   <div>
                     <label style={s.label}>Estado actual</label>
