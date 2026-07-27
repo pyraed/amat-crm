@@ -105,10 +105,12 @@ export async function fetchBandejaLeads(username: string) {
       .not('status', 'in', `(${EXCLUIDOS.join(',')})`)
       .order('updated_at', { ascending: false }),
 
-    supabase.from('amat_loan_leads').select('*')
+    // Cola: solo leads con al menos un mensaje ENTRANTE — excluye leads de campaña sin respuesta
+    supabase.from('amat_loan_leads').select('*, amat_messages!inner(direction)')
       .is('assigned_to', null)
       .eq('archived', false)
       .in('status', ['new', 'contacted'])
+      .eq('amat_messages.direction', 'in')
       .order('created_at', { ascending: true })
       .limit(50),
 
@@ -116,12 +118,24 @@ export async function fetchBandejaLeads(username: string) {
       .select('id', { count: 'exact', head: true })
       .is('assigned_to', null)
       .eq('archived', false)
-      .in('status', ['new', 'contacted']),
+      .in('status', ['new', 'contacted'])
+      .not('phone_number', 'is', null),
   ])
+
+  // El JOIN con amat_messages puede traer duplicados — deduplicar por id
+  const colaRaw = (colaRes.data || []) as any[]
+  const colaVista = new Map<number, LoanLead>()
+  colaRaw.forEach(l => {
+    if(!colaVista.has(l.id)) {
+      // Remover el campo amat_messages que trajo el JOIN antes de guardar
+      const { amat_messages: _, ...lead } = l
+      colaVista.set(l.id, lead as LoanLead)
+    }
+  })
 
   return {
     asignados:  (asignadosRes.data || []) as LoanLead[],
-    cola:       (colaRes.data || []) as LoanLead[],
+    cola:       [...colaVista.values()],
     colaTotal:  countRes.count || 0,
   }
 }
