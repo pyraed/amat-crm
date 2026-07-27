@@ -57,6 +57,7 @@ export type Template = {
   category:  'MARKETING' | 'UTILITY'
   body:      string
   variables: string[]
+  metaName:  string   // nombre exacto registrado en Meta Business Manager
 }
 
 export const TEMPLATES: Template[] = [
@@ -64,6 +65,7 @@ export const TEMPLATES: Template[] = [
     id:       'ayuda_economica',
     name:     'Ayuda Económica — Primer contacto',
     category: 'MARKETING',
+    metaName: 'primer_contacto_esp',
     body:     `Hola {{nombre}} 👋 Te contactamos desde *AMAT* (Asociación Mutual Amarilla de Trabajadores).\n\nComo empleado/a de {{reparticion}}, podés acceder a una *Ayuda Económica* con descuento directo en tu recibo de sueldo.\n\n¿Te interesa que te contemos más? Respondé *SI* para continuar.`,
     variables: ['nombre', 'reparticion'],
   },
@@ -71,6 +73,7 @@ export const TEMPLATES: Template[] = [
     id:       'recontacto',
     name:     'Recontacto — Sin respuesta previa',
     category: 'MARKETING',
+    metaName: 'recontacto',
     body:     `Hola {{nombre}}, te escribimos nuevamente desde *AMAT*.\n\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Es sin garante y con descuento por recibo. ¿Podemos ayudarte?`,
     variables: ['nombre'],
   },
@@ -78,6 +81,7 @@ export const TEMPLATES: Template[] = [
     id:       'info_general',
     name:     'Información general',
     category: 'UTILITY',
+    metaName: 'recontacto',
     body:     `Hola {{nombre}} 👋 Desde *AMAT* te informamos que contamos con Ayudas Económicas para empleados públicos de la Provincia de Buenos Aires.\n\n✅ Sin garante\n✅ Descuento por recibo\n✅ Aprobación rápida\n\nEscribinos al *[número]* para más info.`,
     variables: ['nombre'],
   },
