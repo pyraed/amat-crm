@@ -207,18 +207,8 @@ export default function CampanaModal({ onClose }: Props) {
         return { ok: false, error: json.error || 'Error de Meta' }
       }
 
-      // Actualizar estado del lead + sincronizar amat_consultas
-      await supabase
-        .from('amat_loan_leads')
-        .update({ status: 'contacted', updated_at: new Date().toISOString() })
-        .eq('id', lead.id)
-
-      // Bug 2 fix: sincronizar amat_consultas al mismo tiempo
-      if (lead.phone_number) {
-        await supabase.from('amat_consultas')
-          .update({ estado: 'pendiente', updated_at: new Date().toISOString() })
-          .eq('phone', lead.phone_number)
-      }
+      // NO actualizamos el status — el lead queda en 'new' hasta que la persona responda.
+      // Cuando responde, el bot lo reactiva y recién ahí aparece en la cola.
 
       // Registrar en amat_campanas
       await supabase.from('amat_campanas').insert({
