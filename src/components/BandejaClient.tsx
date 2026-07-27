@@ -885,25 +885,90 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 </div>
                 </div>
 
-                <div style={{padding:'12px 18px',background:'white',borderTop:'1px solid #E2E8F0',display:'flex',gap:8,alignItems:'flex-end',flexShrink:0}}>
-                  {/* Botones de plantillas Meta */}
-                  <div style={{display:'flex',gap:6,marginBottom:6}}>
-                    <button onClick={()=>sendTemplate('ayuda_economica')} disabled={sending}
-                      style={{flex:1,padding:'6px 8px',border:'1px solid #DDD6FE',borderRadius:7,background:'#F5F3FF',color:'#6D28D9',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
-                      👋 Primer contacto
-                    </button>
-                    <button onClick={()=>sendTemplate('recontacto')} disabled={sending}
-                      style={{flex:1,padding:'6px 8px',border:'1px solid #FDE68A',borderRadius:7,background:'#FFFBEB',color:'#B45309',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
-                      🔄 Recontacto
-                    </button>
-                  </div>
-                  <textarea value={replyText} onChange={e=>setReplyText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendReply()}}}
-                    placeholder={`Respondé como ${me.username}... (Enter envía, Shift+Enter nueva línea)`}
-                    style={{flex:1,border:'1px solid #E2E8F0',borderRadius:10,padding:'10px 14px',fontSize:13,resize:'none',fontFamily:'inherit',color:'#1E293B',background:'#F8FAFC'}} rows={2}/>
-                  <button onClick={sendReply} disabled={sending||!replyText.trim()} className="btn pri" style={{padding:'10px 20px',fontSize:13,fontWeight:600,alignSelf:'stretch'}}>
-                    {sending?'...':'↑ Enviar'}
-                  </button>
-                </div>
+                {(()=>{
+                  const ahora = Date.now()
+                  const ultimoEntrante = currentMsgs
+                    .filter(m=>m.direction==='in')
+                    .sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
+                  const ventanaAbierta = ultimoEntrante
+                    ? (ahora - new Date(ultimoEntrante.created_at).getTime()) < 24*60*60*1000
+                    : false
+                  const horasRestantes = ventanaAbierta && ultimoEntrante
+                    ? Math.round((24*60*60*1000 - (ahora - new Date(ultimoEntrante.created_at).getTime())) / (60*60*1000))
+                    : null
+
+                  return (
+                    <div style={{padding:'12px 18px',background:'white',borderTop:'1px solid #E2E8F0',flexShrink:0}}>
+
+                      {/* Aviso ventana cerrada */}
+                      {!ventanaAbierta&&(
+                        <div style={{background:'#FFF7ED',border:'1px solid #FED7AA',borderRadius:8,padding:'8px 12px',marginBottom:10,display:'flex',alignItems:'flex-start',gap:8}}>
+                          <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
+                          <div>
+                            <div style={{fontSize:12,fontWeight:700,color:'#C2410C',marginBottom:2}}>
+                              {ultimoEntrante ? 'Ventana de 24hs cerrada' : 'Sin mensajes entrantes'}
+                            </div>
+                            <div style={{fontSize:11,color:'#9A3412',lineHeight:1.5}}>
+                              {ultimoEntrante
+                                ? 'El cliente no escribió en las últimas 24hs. Los mensajes de texto libre no llegan. Usá una plantilla para retomar el contacto.'
+                                : 'Este cliente nunca escribió. Para iniciar la conversación usá una plantilla de Meta.'}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Aviso ventana por cerrarse pronto */}
+                      {ventanaAbierta&&horasRestantes!==null&&horasRestantes<=6&&(
+                        <div style={{background:'#FFFBEB',border:'1px solid #FDE68A',borderRadius:8,padding:'6px 12px',marginBottom:8,fontSize:11,color:'#92400E',display:'flex',alignItems:'center',gap:6}}>
+                          ⏱️ Ventana de 24hs: quedan <strong style={{marginLeft:3,marginRight:3}}>{horasRestantes}hs</strong> para responder libremente.
+                        </div>
+                      )}
+
+                      {/* Plantillas — siempre visibles, resaltadas cuando ventana cerrada */}
+                      <div style={{display:'flex',gap:6,marginBottom:8}}>
+                        <button onClick={()=>sendTemplate('ayuda_economica')} disabled={sending}
+                          style={{flex:1,padding:'7px 8px',borderRadius:7,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',
+                            border:ventanaAbierta?'1px solid #DDD6FE':'2px solid #7C3AED',
+                            background:ventanaAbierta?'#F5F3FF':'#EDE9FE',
+                            color:'#6D28D9',
+                            boxShadow:ventanaAbierta?'none':'0 0 0 3px rgba(124,58,237,0.15)',
+                          }}>
+                          👋 Primer contacto
+                        </button>
+                        <button onClick={()=>sendTemplate('recontacto')} disabled={sending}
+                          style={{flex:1,padding:'7px 8px',borderRadius:7,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',
+                            border:ventanaAbierta?'1px solid #FDE68A':'2px solid #B45309',
+                            background:ventanaAbierta?'#FFFBEB':'#FEF3C7',
+                            color:'#B45309',
+                            boxShadow:ventanaAbierta?'none':'0 0 0 3px rgba(180,83,9,0.15)',
+                          }}>
+                          🔄 Recontacto
+                        </button>
+                      </div>
+
+                      {/* Input — deshabilitado si ventana cerrada */}
+                      <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
+                        <textarea value={replyText} onChange={e=>setReplyText(e.target.value)}
+                          onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&ventanaAbierta){e.preventDefault();sendReply()}}}
+                          disabled={!ventanaAbierta}
+                          placeholder={ventanaAbierta
+                            ? `Respondé como ${me.username}... (Enter envía, Shift+Enter nueva línea)`
+                            : 'Ventana cerrada — usá una plantilla para contactar al cliente'}
+                          style={{flex:1,border:`1px solid ${ventanaAbierta?'#E2E8F0':'#FED7AA'}`,borderRadius:10,padding:'10px 14px',
+                            fontSize:13,resize:'none',fontFamily:'inherit',
+                            color:ventanaAbierta?'#1E293B':'#9A3412',
+                            background:ventanaAbierta?'#F8FAFC':'#FFF7ED',
+                            opacity:ventanaAbierta?1:0.7,
+                            cursor:ventanaAbierta?'text':'not-allowed',
+                          }} rows={2}/>
+                        <button onClick={sendReply} disabled={sending||!replyText.trim()||!ventanaAbierta}
+                          className="btn pri" style={{padding:'10px 20px',fontSize:13,fontWeight:600,alignSelf:'stretch',opacity:ventanaAbierta?1:0.4}}>
+                          {sending?'...':'↑ Enviar'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })()}
               </>
             ):(
               <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:'#94A3B8',flexDirection:'column',gap:10,background:'#F8FAFC'}}>
