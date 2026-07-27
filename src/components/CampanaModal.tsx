@@ -115,6 +115,7 @@ export default function CampanaModal({ onClose }: Props) {
       .from('amat_loan_leads')
       .select('*')
       .not('phone_number', 'is', null)
+      .neq('phone_number', '')
 
     if (filterRep !== 'all')      q = q.eq('reparticion', filterRep)
     if (filterBanco !== 'all')    q = q.eq('bank', filterBanco)
@@ -200,16 +201,24 @@ export default function CampanaModal({ onClose }: Props) {
       })
       clearTimeout(timeout)
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        return { ok: false, error: err.error || `HTTP ${res.status}` }
+      // La route siempre devuelve HTTP 200 — hay que leer el body para saber si Meta aceptó
+      const json = await res.json().catch(() => ({}))
+      if (!json.ok) {
+        return { ok: false, error: json.error || 'Error de Meta' }
       }
 
-      // Actualizar estado del lead
+      // Actualizar estado del lead + sincronizar amat_consultas
       await supabase
         .from('amat_loan_leads')
         .update({ status: 'contacted', updated_at: new Date().toISOString() })
         .eq('id', lead.id)
+
+      // Bug 2 fix: sincronizar amat_consultas al mismo tiempo
+      if (lead.phone_number) {
+        await supabase.from('amat_consultas')
+          .update({ estado: 'pendiente', updated_at: new Date().toISOString() })
+          .eq('phone', lead.phone_number)
+      }
 
       // Registrar en amat_campanas
       await supabase.from('amat_campanas').insert({
