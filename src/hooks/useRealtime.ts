@@ -87,18 +87,29 @@ export function useRealtime(me: SysUser | null, setters: Setters) {
                 const lead   = data as LoanLead
                 const status = (lead.status || '') as string
 
-                // Reactivación: la persona vuelve a escribir después de un estado final
+                // Reactivación caso 1: lead en estado final (not_interested, sin_respuesta, unresolved)
                 // closed/rejected → NUNCA se reactivan
-                // not_interested, sin_respuesta, unresolved → resetear a new y volver a cola
                 if(ESTADOS_FINALES.includes(status)) {
                   if(status === 'closed' || status === 'rejected') return
-                  reactivarLead(lead.id).then(res => {
+                  reactivarLead(lead.id, lead.phone_number).then(res => {
                     if(!res.ok) return
                     const r = {...lead, status:'new' as any, archived:false, assigned_to:null}
                     setColaLeadsState(p2=>p2.find(l=>l.id===lead.id)?p2:[r as LoanLead,...p2])
                     setColaTotal(t=>t+1)
                   })
-                  if(lead.phone_number) syncConsultaEstado(lead.phone_number, 'cola')
+                  fetchFlujoMap([msg.phone_number]).then(map => setFlujoMap(prev=>({...prev,...map})))
+                  return
+                }
+
+                // Reactivación caso 2: lead archivado por campaña (status: new, archived: true)
+                // La persona respondió la campaña → desarchivar y poner en cola
+                if((lead as any).archived && status === 'new') {
+                  reactivarLead(lead.id, lead.phone_number).then(res => {
+                    if(!res.ok) return
+                    const r = {...lead, status:'new' as any, archived:false, assigned_to:null}
+                    setColaLeadsState(p2=>p2.find(l=>l.id===lead.id)?p2:[r as LoanLead,...p2])
+                    setColaTotal(t=>t+1)
+                  })
                   fetchFlujoMap([msg.phone_number]).then(map => setFlujoMap(prev=>({...prev,...map})))
                   return
                 }

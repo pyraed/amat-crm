@@ -207,8 +207,12 @@ export default function CampanaModal({ onClose }: Props) {
         return { ok: false, error: json.error || 'Error de Meta' }
       }
 
-      // NO actualizamos el status — el lead queda en 'new' hasta que la persona responda.
-      // Cuando responde, el bot lo reactiva y recién ahí aparece en la cola.
+      // Archivar el lead temporalmente — no debe aparecer en cola hasta que la persona responda.
+      // reactivarLead() lo desarchiva automáticamente cuando llega un mensaje entrante.
+      await supabase
+        .from('amat_loan_leads')
+        .update({ archived: true, updated_at: new Date().toISOString() })
+        .eq('id', lead.id)
 
       // Registrar en amat_campanas
       await supabase.from('amat_campanas').insert({
