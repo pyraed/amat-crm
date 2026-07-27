@@ -70,23 +70,11 @@ export async function fetchConsultas(
     q = q.eq('estado', 'cola')
   } else if (estado === 'pendiente') {
     q = q.eq('estado', 'pendiente')
-  } else if (estado === 'contactado') {
-    q = q.eq('estado', 'contactado')
-  } else if (estado === 'vendido') {
-    // Vendido = resuelto en solicitudes (excluye cobranzas)
-    q = q.eq('estado', 'resuelto').neq('flujo', 'cobranzas')
-  } else if (estado === 'rechazado') {
-    q = q.eq('estado', 'cerrado_rechazado')
-  } else if (estado === 'no_interesado') {
-    q = q.eq('estado', 'cerrado_no_interesado')
-  } else if (estado === 'sin_respuesta') {
-    // Sin respuesta = cerrado en solicitudes (excluye cobranzas)
-    q = q.eq('estado', 'cerrado').neq('flujo', 'cobranzas')
   } else if (estado === 'resuelto_cob') {
-    // Resuelto cobranzas
+    // Resuelto cobranzas → en amat_consultas se guarda como 'resuelto' con flujo cobranzas
     q = q.eq('estado', 'resuelto').eq('flujo', 'cobranzas')
-  } else if (estado === 'no_resuelto_cob') {
-    // No resuelto cobranzas = cerrado en cobranzas
+  } else if (estado === 'cerrado_cob') {
+    // No resuelto cobranzas → en amat_consultas se guarda como 'cerrado' con flujo cobranzas
     q = q.eq('estado', 'cerrado').eq('flujo', 'cobranzas')
   } else if (estado !== 'all') {
     q = q.eq('estado', estado)
@@ -224,8 +212,6 @@ export async function syncConsultaVendedor(phone: string, vendedor: string) {
 }
 
 // ── Sincronización masiva de estados ─────────────────────────────────────────
-// Corrige desincronizaciones entre amat_loan_leads y amat_consultas.
-// Solo disponible para administradores.
 
 export type SyncResult = {
   corregidos: number
@@ -248,32 +234,40 @@ export async function sincronizarEstados(): Promise<SyncResult> {
   }
 
   try {
-    const { data, error } = await supabase
+    // Query separada — sin JOIN para evitar el error de foreign key
+    const { data: leads, error: leadsError } = await supabase
       .from('amat_loan_leads')
-      .select('id, phone_number, status, assigned_to, amat_consultas!inner(phone, estado, vendedor)')
+      .select('id, phone_number, status, assigned_to')
       .eq('archived', false)
       .not('phone_number', 'is', null)
 
-    if(error) return { corregidos: 0, detalle: [], error: error.message }
+    if(leadsError) return { corregidos: 0, detalle: [], error: leadsError.message }
+    if(!leads?.length) return { corregidos: 0, detalle: [] }
 
-    const desincronizados = (data || []).filter((l: any) => {
-      const consulta = l.amat_consultas?.[0]
-      if(!consulta) return false
-      const esperado = MAPEO[l.status || '']
-      return esperado && consulta.estado !== esperado
-    })
+    const phones = leads.map((l:any) => l.phone_number).filter(Boolean)
 
-    if(desincronizados.length === 0) return { corregidos: 0, detalle: [] }
+    const { data: consultas, error: consultasError } = await supabase
+      .from('amat_consultas')
+      .select('phone, estado')
+      .in('phone', phones)
+
+    if(consultasError) return { corregidos: 0, detalle: [], error: consultasError.message }
+
+    const consultaMap: Record<string, string> = {}
+    ;(consultas || []).forEach((c:any) => { if(c.phone) consultaMap[c.phone] = c.estado })
 
     const detalle: SyncResult['detalle'] = []
 
-    for(const lead of desincronizados) {
-      const consulta = (lead as any).amat_consultas[0]
+    for(const lead of leads as any[]) {
       const estadoEsperado = MAPEO[lead.status || '']
+      const estadoActual   = consultaMap[lead.phone_number]
+      if(!estadoEsperado || !estadoActual || estadoActual === estadoEsperado) continue
+
       const upd: any = { estado: estadoEsperado, updated_at: new Date().toISOString() }
       if(estadoEsperado === 'cola') upd.vendedor = null
+
       await supabase.from('amat_consultas').update(upd).eq('phone', lead.phone_number)
-      detalle.push({ phone: lead.phone_number!, de: consulta.estado, a: estadoEsperado })
+      detalle.push({ phone: lead.phone_number, de: estadoActual, a: estadoEsperado })
     }
 
     return { corregidos: detalle.length, detalle }

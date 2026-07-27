@@ -23,6 +23,7 @@ type Props = {
   setTabLoading: (v: boolean) => void
   stats:       Stats
   handleLogout: () => void
+  onSync?:     () => void
 }
 
 const TABS = [
@@ -32,7 +33,7 @@ const TABS = [
   ['reportes',  '📊', 'Reportes'],
 ] as const
 
-export default function TopBar({ me, tab, setTab, setTabLoading, stats, handleLogout }: Props) {
+export default function TopBar({ me, tab, setTab, setTabLoading, stats, handleLogout, onSync }: Props) {
   const handleTabClick = (t: Tab) => {
     if(tab === t) return
     const tieneSpinnerPropio = ['consultas','base','reportes'].includes(t)
@@ -83,6 +84,12 @@ export default function TopBar({ me, tab, setTab, setTabLoading, stats, handleLo
             {me.role}
           </span>
         </div>
+        {onSync&&(
+          <button onClick={onSync} title="Sincronizar estados desincronizados"
+            style={{padding:'5px 12px',border:'1px solid #E2E8F0',borderRadius:8,background:'white',fontSize:12,cursor:'pointer',color:'#64748B',fontFamily:'inherit',fontWeight:500}}>
+            🔄 Sync
+          </button>
+        )}
         <button onClick={handleLogout}
           style={{padding:'5px 12px',border:'1px solid #E2E8F0',borderRadius:8,background:'white',fontSize:12,cursor:'pointer',color:'#64748B',fontFamily:'inherit',fontWeight:500}}>
           Salir

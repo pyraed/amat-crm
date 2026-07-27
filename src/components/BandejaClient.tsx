@@ -517,36 +517,18 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       <TopBar
         me={me} tab={tab} setTab={setTab} setTabLoading={setTabLoading}
         stats={stats} handleLogout={handleLogout}
+        onSync={me.role==='Administrador' ? async()=>{
+          const resultado = await sincronizarEstados()
+          if(resultado.error) alert(`❌ Error al sincronizar: ${resultado.error}`)
+          else if(resultado.corregidos===0) alert('✅ Todo sincronizado.')
+          else {
+            alert(`✅ Se corrigieron ${resultado.corregidos} registros desincronizados.`)
+            if(tab==='consultas') loadConsultas()
+          }
+        } : undefined}
       />
 
-      {/* ── Botón de sincronización — solo administradores ── */}
-      {me.role === 'Administrador' && (
-        <div style={{position:'fixed',bottom:16,right:16,zIndex:50}}>
-          <button
-            onClick={async () => {
-              const resultado = await sincronizarEstados()
-              if(resultado.error) {
-                alert(`❌ Error al sincronizar: ${resultado.error}`)
-              } else if(resultado.corregidos === 0) {
-                alert('✅ Todo sincronizado. No hay inconsistencias.')
-              } else {
-                alert(`✅ Se corrigieron ${resultado.corregidos} registro${resultado.corregidos !== 1 ? 's' : ''} desincronizados.`)
-                // Recargar consultas si estamos en ese tab
-                if(tab === 'consultas') loadConsultas()
-              }
-            }}
-            title="Verificar y corregir estados desincronizados"
-            style={{
-              padding:'8px 14px',borderRadius:10,border:'1px solid #E2E8F0',
-              background:'white',fontSize:12,fontWeight:600,cursor:'pointer',
-              fontFamily:'inherit',color:'#64748B',
-              boxShadow:'0 2px 8px rgba(0,0,0,0.1)',
-              display:'flex',alignItems:'center',gap:6,
-            }}>
-            🔄 Sincronizar estados
-          </button>
-        </div>
-      )}
+
 
       {/* ══ BANDEJA ══ */}
       {tabLoading && (
