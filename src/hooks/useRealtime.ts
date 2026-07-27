@@ -73,6 +73,10 @@ export function useRealtime(me: SysUser | null, setters: Setters) {
           return [...prev, msg]
         })
 
+        // Solo procesar lógica de leads para mensajes ENTRANTES.
+        // Los mensajes salientes (campañas, respuestas del operador) no deben mover leads a la cola.
+        if(msg.direction !== 'in') return
+
         // Manejar el lead asociado al mensaje entrante
         setBotLeads(prev=>{
           if(!prev.find(l=>l.phone_number===msg.phone_number)){
