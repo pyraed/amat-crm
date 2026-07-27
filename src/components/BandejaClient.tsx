@@ -377,6 +377,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   const guardarVenta = async () => {
     if(!currentLead || !me) return
+    // Capturamos el phone antes de que cambiarEstado limpie el estado
+    const phone = currentLead.phone_number
     await bandeja.cambiarEstado(currentLead, 'closed', {
       notes: ventaForm.notas || undefined,
       situacion: `Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${parseInt(ventaForm.monto).toLocaleString('es-AR')} en ${ventaForm.cuotas} cuotas · Valor cuota: $${parseFloat(ventaForm.valor_cuota).toLocaleString('es-AR')}`,
@@ -389,8 +391,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         valor_cuota:      parseFloat(ventaForm.valor_cuota) || 0,
       },
     })
+    // Cerramos el modal y limpiamos el chat después de que cambiarEstado terminó
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
+    if(phone) setSelectedPhone(null)
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────

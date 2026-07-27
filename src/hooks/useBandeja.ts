@@ -134,7 +134,12 @@ export function useBandeja(
 
   const bandejaLeads = allLeads.filter(l => {
     if(!l.phone_number) return false
-    if(!phonesConMensajes.includes(l.phone_number) && l.assigned_to !== me?.username) return false
+    // Mostrar si: tiene mensajes en memoria, está asignado al operador actual,
+    // o acaba de ser tomado (status contacted con assigned_to recién seteado)
+    const tieneMsg    = phonesConMensajes.includes(l.phone_number)
+    const esDelOp     = l.assigned_to === me?.username
+    const recienTomado = l.status === 'contacted' && l.assigned_to === me?.username
+    if(!tieneMsg && !esDelOp && !recienTomado) return false
     if(ESTADOS_FINALES_BANDEJA.includes(l.status||'')) return false
     const q = bandejaSearch.toLowerCase()
     const m = !q || (l.full_name||'').toLowerCase().includes(q) || (l.phone_number||'').includes(q) || (l.dni||'').includes(q)
@@ -170,7 +175,8 @@ export function useBandeja(
     if(esFinal) {
       setBotLeads(prev => prev.filter(l => l.id !== lead.id))
       if(nuevoStatus === 'closed' || nuevoStatus === 'resolved') setCerradosHoyCount(c => c + 1)
-      if(lead.phone_number) setSelectedPhone(null)
+      // No limpiamos selectedPhone acá — el componente que llama lo hace
+      // después de terminar su flujo (ej: guardarVenta cierra el modal primero)
     } else {
       setBotLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
       setColaLeadsState(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
