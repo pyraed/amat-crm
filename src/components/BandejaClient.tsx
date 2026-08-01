@@ -549,12 +549,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                 <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='cola'?'white':'transparent',color:vistaMode==='cola'?'#0F172A':'#64748B',boxShadow:vistaMode==='cola'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
                   onClick={()=>{setVistaMode('cola');setSelectedPhone(null)}}>
                   📥 Cola {(()=>{
-                    const n = colaLeadsState.filter(l=>{
-                      const fl=flujoMap[l.phone_number||'']||'solicitud'
-                      if(me?.role==='Vendedor') return fl!=='cobranzas'
-                      if(me?.role==='Cobranza') return fl==='cobranzas'
-                      return true
-                    }).length
+                    const n = colaLeadsState.length
                     const total = n > 0 ? n : 0
                     return total>0&&<span style={{background:'#F59E0B',color:'white',borderRadius:99,padding:'1px 6px',fontSize:10,fontWeight:700,marginLeft:3}}>{total}</span>
                   })()}
@@ -578,13 +573,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
             <div style={{flex:1,overflowY:'auto'}}>
               {vistaMode==='cola'&&(()=>{
-                let leads = colaLeadsState.filter(l=>{
-                  const fl=flujoMap[l.phone_number||'']||'solicitud'
-                  if(me?.role==='Vendedor') return fl!=='cobranzas'
-                  if(me?.role==='Cobranza') return fl==='cobranzas'
-                  if(me?.role==='Administrador') return fl!=='cobranzas'
-                  return fl!=='cobranzas'
-                })
+                let leads = [...colaLeadsState]
                 if(bandejaSearch) leads=leads.filter(l=>(l.full_name||'').toLowerCase().includes(bandejaSearch.toLowerCase())||(l.phone_number||'').includes(bandejaSearch)||(l.dni||'').includes(bandejaSearch))
                 if(leads.length===0) return (
                   <div style={{padding:32,textAlign:'center',color:'#94A3B8',fontSize:13}}>
@@ -679,14 +668,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
               {vistaMode==='mis_chats'&&(()=>{
                 let leads = bandejaLeads.filter(l=>{
                   if(l.assigned_to!==me?.username||l.status==='finalizado') return false
-                  if(me?.role==='Vendedor'){
-                    const fl=flujoMap[l.phone_number||'']||'solicitud'
-                    return fl!=='cobranzas'
-                  }
-                  if(me?.role==='Cobranza'){
-                    const fl=flujoMap[l.phone_number||'']||'solicitud'
-                    return fl==='cobranzas'
-                  }
                   return true
                 })
                 if(bandejaSearch) leads=leads.filter(l=>(l.full_name||'').toLowerCase().includes(bandejaSearch.toLowerCase())||(l.phone_number||'').includes(bandejaSearch)||(l.dni||'').includes(bandejaSearch))
