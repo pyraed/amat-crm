@@ -164,10 +164,20 @@ export function useRealtime(me: SysUser | null, setters: Setters) {
           // Siempre actualizar en la base
           setBaseLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
         } else if(p.eventType==='INSERT'){
-          // Lead nuevo sin asignar → a la cola
-          if(['new','contacted'].includes(updated.status||'') && !(updated as any).archived && !updated.assigned_to) {
-            setColaLeadsState(prev => prev.find(l=>l.id===updated.id) ? prev : [updated as LoanLead, ...prev])
-            setColaTotal(t => t + 1)
+          // Lead nuevo sin asignar → a la cola SOLO si el cliente ya nos escribió
+          // Esto evita que leads de campaña (solo mensajes salientes) aparezcan en cola
+          if(['new','contacted'].includes(updated.status||'') && !(updated as any).archived && !updated.assigned_to && updated.phone_number) {
+            supabase.from('amat_messages')
+              .select('id', { count: 'exact', head: true })
+              .eq('phone_number', updated.phone_number)
+              .eq('direction', 'in')
+              .limit(1)
+              .then(({ count }) => {
+                if((count || 0) > 0) {
+                  setColaLeadsState(prev => prev.find(l=>l.id===updated.id) ? prev : [updated as LoanLead, ...prev])
+                  setColaTotal(t => t + 1)
+                }
+              })
           }
         }
       }).subscribe()
