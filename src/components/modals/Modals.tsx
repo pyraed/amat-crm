@@ -11,6 +11,7 @@
 //    ModalEditar, ModalFinalizar, ModalVenta, ModalGestionarConsulta
 // ─────────────────────────────────────────────────────────────────────────────
 
+import React from 'react'
 import { LoanLead } from '@/lib/types'
 import { USERS } from '@/domain/entities/users'
 import {
@@ -48,45 +49,73 @@ export function ModalCambiarEstado({
   setShowStatusModal, setEditTarget, setShowRejectModal,
   setVentaForm, setShowVentaModal,
 }: ModalCambiarEstadoProps) {
-  const esCobranza = flujoMap[currentLead.phone_number||''] === 'cobranzas'
-  const opciones = [
+  const [flujoSeleccionado, setFlujoSeleccionado] = React.useState<'solicitud'|'cobranzas'|null>(null)
+
+  const esCobranza = flujoSeleccionado === 'cobranzas'
+  const opciones = flujoSeleccionado ? [
     ...(esCobranza ? OPCIONES_COBRANZAS : []),
     ...OPCIONES_VENTAS_INTERMEDIOS,
     ...(esCobranza ? [] : OPCIONES_VENTAS),
-  ]
+  ] : []
 
   return (
-    <div className="movo" onClick={()=>setShowStatusModal(false)}>
+    <div className="movo" onClick={()=>{ setShowStatusModal(false); setFlujoSeleccionado(null) }}>
       <div className="mod" onClick={e=>e.stopPropagation()}>
         <h3>Cambiar estado</h3>
-        {opciones
-          .map(k => [k, LEAD_STATUS[k] || COBRANZA_STATUS[k]] as [string, typeof LEAD_STATUS[keyof typeof LEAD_STATUS]])
-          .filter(([,v])=>v)
-          .map(([k,v])=>(
-            <div key={k} className="mopt" onClick={()=>{
-              if(!esCobranza && k==='rejected') {
-                setShowStatusModal(false); setEditTarget(currentLead); setShowRejectModal(true)
-              } else if(!esCobranza && k==='closed') {
-                setShowStatusModal(false)
-                setVentaForm({entidad:'',linea:'',reparticion:currentLead.reparticion||'',monto:'',cuotas:'',valor_cuota:'',notas:''})
-                setShowVentaModal(true)
-              } else {
-                updateStatus(currentLead.id, k); setShowStatusModal(false)
-              }
-            }}>
-              <div style={{width:10,height:10,borderRadius:'50%',background:v.color,flexShrink:0}}/>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13,fontWeight:500,color:'#1E293B'}}>
-                  {v.label}
-                  {!esCobranza&&k==='rejected'&&<span style={{fontSize:11,color:'#94A3B8',marginLeft:6}}>→ elegí motivo</span>}
-                  {!esCobranza&&k==='closed'&&<span style={{fontSize:11,color:'#065F46',marginLeft:6}}>→ registrá la venta</span>}
-                </div>
-                <div style={{fontSize:11,color:'#94A3B8'}}>{v.desc}</div>
-              </div>
-              {currentLead.status===k&&<span style={{color:'#F59E0B',fontSize:16}}>✓</span>}
+
+        {!flujoSeleccionado && (<>
+          <div style={{fontSize:12,color:'#64748B',marginBottom:12}}>¿A qué flujo corresponde esta gestión?</div>
+          <div className="mopt" onClick={()=>setFlujoSeleccionado('solicitud')}>
+            <div style={{width:10,height:10,borderRadius:'50%',background:'#2563EB',flexShrink:0}}/>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:500,color:'#1E293B'}}>💼 Ventas</div>
+              <div style={{fontSize:11,color:'#94A3B8'}}>Vendido, rechazado, no interesado, sin respuesta</div>
             </div>
-          ))}
-        <button className="btn" style={{width:'100%',justifyContent:'center',marginTop:14}} onClick={()=>setShowStatusModal(false)}>Cancelar</button>
+          </div>
+          <div className="mopt" onClick={()=>setFlujoSeleccionado('cobranzas')}>
+            <div style={{width:10,height:10,borderRadius:'50%',background:'#7C3AED',flexShrink:0}}/>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:500,color:'#1E293B'}}>🔔 Cobranzas</div>
+              <div style={{fontSize:11,color:'#94A3B8'}}>Resuelto, no resuelto</div>
+            </div>
+          </div>
+        </>)}
+
+        {flujoSeleccionado && (<>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+            <button onClick={()=>setFlujoSeleccionado(null)} style={{background:'none',border:'none',cursor:'pointer',color:'#64748B',fontSize:18,padding:0,lineHeight:1}}>←</button>
+            <span style={{fontSize:12,color:'#64748B'}}>{esCobranza ? '🔔 Cobranzas' : '💼 Ventas'}</span>
+          </div>
+          {opciones
+            .map(k => [k, LEAD_STATUS[k] || COBRANZA_STATUS[k]] as [string, typeof LEAD_STATUS[keyof typeof LEAD_STATUS]])
+            .filter(([,v])=>v)
+            .map(([k,v])=>(
+              <div key={k} className="mopt" onClick={()=>{
+                if(!esCobranza && k==='rejected') {
+                  setShowStatusModal(false); setFlujoSeleccionado(null); setEditTarget(currentLead); setShowRejectModal(true)
+                } else if(!esCobranza && k==='closed') {
+                  setShowStatusModal(false); setFlujoSeleccionado(null)
+                  setVentaForm({entidad:'',linea:'',reparticion:currentLead.reparticion||'',monto:'',cuotas:'',valor_cuota:'',notas:''})
+                  setShowVentaModal(true)
+                } else {
+                  updateStatus(currentLead.id, k); setShowStatusModal(false); setFlujoSeleccionado(null)
+                }
+              }}>
+                <div style={{width:10,height:10,borderRadius:'50%',background:v.color,flexShrink:0}}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:500,color:'#1E293B'}}>
+                    {v.label}
+                    {!esCobranza&&k==='rejected'&&<span style={{fontSize:11,color:'#94A3B8',marginLeft:6}}>→ elegí motivo</span>}
+                    {!esCobranza&&k==='closed'&&<span style={{fontSize:11,color:'#065F46',marginLeft:6}}>→ registrá la venta</span>}
+                  </div>
+                  <div style={{fontSize:11,color:'#94A3B8'}}>{v.desc}</div>
+                </div>
+                {currentLead.status===k&&<span style={{color:'#F59E0B',fontSize:16}}>✓</span>}
+              </div>
+            ))}
+        </>)}
+
+        <button className="btn" style={{width:'100%',justifyContent:'center',marginTop:14}} onClick={()=>{ setShowStatusModal(false); setFlujoSeleccionado(null) }}>Cancelar</button>
       </div>
     </div>
   )
