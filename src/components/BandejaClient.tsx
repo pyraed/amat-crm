@@ -679,7 +679,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   </div>
                 )
                 return leads.map(lead=>{
-                  const s=sc(lead.status)
+                  const s=scFor(lead.status,lead.phone_number)
                   const lastMsg=messages.filter(m=>m.phone_number===lead.phone_number).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
                   const unread=messages.some(m=>m.phone_number===lead.phone_number&&m.direction==='in'&&new Date(m.created_at)>new Date(lead.updated_at))
                   return (
@@ -1097,11 +1097,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   })()}
                 </tr></thead>
                 <tbody>
-                  {baseLeads.filter(lead=>{
-                    if(baseFlujo==='all') return true
-                    const fl = flujoMap[lead.phone_number||''] || 'solicitud'
-                    return fl === baseFlujo
-                  }).map(lead=>{
+                  {baseLeads.map(lead=>{
                     const s=sc(lead.status)
                     return (
                       <tr key={lead.id}>

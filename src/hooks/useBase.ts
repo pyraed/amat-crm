@@ -55,6 +55,7 @@ export function useBase(tab: string, setters: BaseSetters) {
   const baseStatusRef   = useRef(baseStatus)
   const baseTelRef      = useRef(baseTel)
   const baseAssignedRef = useRef(baseAssigned)
+  const baseFlujoRef    = useRef(baseFlujo)
   const basePageRef     = useRef(basePage)
   const baseOrdenColRef = useRef(baseOrdenCol)
   const baseOrdenDirRef = useRef(baseOrdenDir)
@@ -67,6 +68,7 @@ export function useBase(tab: string, setters: BaseSetters) {
   useEffect(()=>{ baseStatusRef.current   = baseStatus   },[baseStatus])
   useEffect(()=>{ baseTelRef.current      = baseTel      },[baseTel])
   useEffect(()=>{ baseAssignedRef.current = baseAssigned },[baseAssigned])
+  useEffect(()=>{ baseFlujoRef.current    = baseFlujo    },[baseFlujo])
   useEffect(()=>{ basePageRef.current     = basePage     },[basePage])
   useEffect(()=>{ baseOrdenColRef.current = baseOrdenCol },[baseOrdenCol])
   useEffect(()=>{ baseOrdenDirRef.current = baseOrdenDir },[baseOrdenDir])
@@ -85,6 +87,7 @@ export function useBase(tab: string, setters: BaseSetters) {
       status:   overrides?.status   ?? baseStatusRef.current,
       tel:      (overrides?.tel     ?? baseTelRef.current) as 'all'|'con'|'sin',
       assigned: overrides?.assigned ?? baseAssignedRef.current,
+      flujo:    overrides?.flujo    ?? baseFlujoRef.current,
       page:     overrides?.page     ?? basePageRef.current,
       ordenCol: overrides?.ordenCol ?? baseOrdenColRef.current,
       ordenDir: (overrides?.ordenDir ?? baseOrdenDirRef.current) as 'asc'|'desc',
@@ -112,8 +115,8 @@ export function useBase(tab: string, setters: BaseSetters) {
     }
   }
 
-  useEffect(()=>{ if(tab==='base') loadBase({ search:baseSearch, rep:baseRep, banco:baseBanco, status:baseStatus, tel:baseTel, assigned:baseAssigned, page:basePage, ordenCol:baseOrdenCol, ordenDir:baseOrdenDir }) },[tab]) // eslint-disable-line
-  useEffect(()=>{ if(tab==='base') loadBase({ search:baseSearch, rep:baseRep, banco:baseBanco, status:baseStatus, tel:baseTel, assigned:baseAssigned, page:basePage, ordenCol:baseOrdenCol, ordenDir:baseOrdenDir }) },[baseSearch,baseRep,baseBanco,baseStatus,baseTel,baseAssigned,basePage,baseOrdenCol,baseOrdenDir]) // eslint-disable-line
+  useEffect(()=>{ if(tab==='base') loadBase({ search:baseSearch, rep:baseRep, banco:baseBanco, status:baseStatus, tel:baseTel, assigned:baseAssigned, flujo:baseFlujo, page:basePage, ordenCol:baseOrdenCol, ordenDir:baseOrdenDir }) },[tab]) // eslint-disable-line
+  useEffect(()=>{ if(tab==='base') loadBase({ search:baseSearch, rep:baseRep, banco:baseBanco, status:baseStatus, tel:baseTel, assigned:baseAssigned, flujo:baseFlujo, page:basePage, ordenCol:baseOrdenCol, ordenDir:baseOrdenDir }) },[baseSearch,baseRep,baseBanco,baseStatus,baseTel,baseAssigned,baseFlujo,basePage,baseOrdenCol,baseOrdenDir]) // eslint-disable-line
 
   const openEdit = (lead: LoanLead) => {
     setEditTarget(lead)

@@ -26,6 +26,7 @@ export type BaseFiltros = {
   status:   string
   tel:      'all' | 'con' | 'sin'
   assigned: string
+  flujo:    string
   page:     number
   ordenCol: string
   ordenDir: 'asc' | 'desc'
@@ -42,7 +43,19 @@ export type BaseQueryResult = {
  * Carga la base de contactos paginada con filtros.
  */
 export async function fetchBase(filtros: BaseFiltros): Promise<BaseQueryResult> {
-  const { search, rep, banco, status, tel, assigned, page, ordenCol, ordenDir } = filtros
+  const { search, rep, banco, status, tel, assigned, flujo, page, ordenCol, ordenDir } = filtros
+
+  // Si hay filtro por flujo, primero obtenemos los phones del flujo pedido desde amat_consultas
+  let phonesDelFlujo: string[] | null = null
+  if (flujo !== 'all') {
+    const { data: cData } = await supabase
+      .from('amat_consultas')
+      .select('phone')
+      .eq('flujo', flujo)
+    phonesDelFlujo = (cData || []).map((c: any) => c.phone).filter(Boolean)
+    // Si no hay ningún phone en ese flujo, devolver vacío directamente
+    if (phonesDelFlujo.length === 0) return { leads: [], total: 0 }
+  }
 
   let q = supabase
     .from('amat_loan_leads')
@@ -56,6 +69,7 @@ export async function fetchBase(filtros: BaseFiltros): Promise<BaseQueryResult> 
   if (tel === 'sin')    q = q.or('phone_number.is.null,phone_number.eq.')
   if (assigned === 'sin')       q = q.is('assigned_to', null)
   else if (assigned !== 'all')  q = q.eq('assigned_to', assigned)
+  if (phonesDelFlujo !== null)  q = q.in('phone_number', phonesDelFlujo)
 
   q = q.order(ordenCol, { ascending: ordenDir === 'asc' }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
