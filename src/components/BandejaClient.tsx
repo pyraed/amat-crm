@@ -1144,17 +1144,22 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                             <button className="btn" style={{padding:'4px 9px',fontSize:11}} onClick={()=>openEdit(lead)}>✏️</button>
                             <button className="btn war" style={{padding:'4px 9px',fontSize:11}} onClick={()=>openTemplate(lead)}>💬 Plantilla</button>
                             <button className="btn" style={{padding:'4px 9px',fontSize:11,borderColor:'#6EE7B7',color:'#065F46',background:'#ECFDF5'}}
-                              onClick={()=>{
+                              onClick={async()=>{
                                 if(lead.phone_number) cargarMensajes(lead.phone_number)
-                                // Solo agregar a botLeads si ya está asignado al usuario actual
-                                // Si no está asignado, el chat abre igual (currentLead lo busca en baseLeads)
-                                // pero no aparece en Mis chats hasta que se tome formalmente
-                                if(lead.assigned_to === me?.username) {
-                                  setBotLeads(prev => prev.find(l=>l.id===lead.id) ? prev : [...prev, lead])
-                                }
                                 setVistaMode('mis_chats')
                                 setTab('bandeja')
                                 setSelectedPhone(lead.phone_number)
+                                if(lead.assigned_to !== me?.username) {
+                                  const esAdmin = me?.role === 'Administrador'
+                                  const confirmar = !esAdmin || window.confirm('¿Querés tomar este caso y asignártelo?')
+                                  if(confirmar && me) {
+                                    await tomarConversacion({...lead, assigned_to: null})
+                                  } else {
+                                    setBotLeads(prev => prev.find(l=>l.id===lead.id) ? prev : [...prev, lead])
+                                  }
+                                } else {
+                                  setBotLeads(prev => prev.find(l=>l.id===lead.id) ? prev : [...prev, lead])
+                                }
                               }}>
                               💬 Chat
                             </button>
@@ -1327,16 +1332,24 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                               setTab('bandeja')
                               setSelectedPhone(c.phone)
                               setVistaMode('mis_chats')
-                              // Cargar historial completo del chat
                               if(c.phone) {
                                 const msgs = await fetchMensajesPhone(c.phone)
                                 if(msgs.length) setMessages(prev=>[...prev.filter(m=>m.phone_number!==c.phone),...msgs])
                               }
-                              // Si el lead no está en botLeads traerlo igual
-                              if(!allLeads.find(l=>l.phone_number===c.phone)){
-                                const {data:lead} = await supabase.from('amat_loan_leads')
-                                  .select('*').eq('phone_number',c.phone).single()
-                                if(lead) setBotLeads(prev=>prev.find(l=>l.phone_number===c.phone)?prev:[lead as any,...prev])
+                              const {data:lead} = await supabase.from('amat_loan_leads')
+                                .select('*').eq('phone_number',c.phone).single()
+                              if(lead) {
+                                if(lead.assigned_to !== me?.username) {
+                                  const esAdmin = me?.role === 'Administrador'
+                                  const confirmar = !esAdmin || window.confirm('¿Querés tomar este caso y asignártelo?')
+                                  if(confirmar && me) {
+                                    await tomarConversacion({...lead, assigned_to: null})
+                                  } else {
+                                    setBotLeads(prev=>prev.find(l=>l.phone_number===c.phone)?prev:[lead as any,...prev])
+                                  }
+                                } else {
+                                  setBotLeads(prev=>prev.find(l=>l.phone_number===c.phone)?prev:[lead as any,...prev])
+                                }
                               }
                             }}>
                               💬 Chat
