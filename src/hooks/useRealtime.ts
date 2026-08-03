@@ -150,6 +150,13 @@ export function useRealtime(me: SysUser | null, setters: Setters) {
               if(!prev.find(l=>l.id===updated.id)) return prev
               return prev.filter(l=>l.id!==updated.id)
             })
+            // Lead finalizado → sacar de cola si estaba ahí
+            let estabaEnCola = false
+            setColaLeadsState(prev=>{
+              estabaEnCola = !!prev.find(l=>l.id===updated.id)
+              return prev.filter(l=>l.id!==updated.id)
+            })
+            if(estabaEnCola) setColaTotal(t=>Math.max(0,t-1))
           } else {
             // Lead activo → actualizar en bandeja, agregar si es del usuario actual
             setBotLeads(prev=>{
@@ -160,6 +167,15 @@ export function useRealtime(me: SysUser | null, setters: Setters) {
               }
               return prev
             })
+            // Si el lead fue asignado → sacarlo de la cola de todos los operadores
+            if(updated.assigned_to) {
+              let estabaEnCola = false
+              setColaLeadsState(prev=>{
+                estabaEnCola = !!prev.find(l=>l.id===updated.id)
+                return prev.filter(l=>l.id!==updated.id)
+              })
+              if(estabaEnCola) setColaTotal(t=>Math.max(0,t-1))
+            }
           }
           // Siempre actualizar en la base
           setBaseLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
