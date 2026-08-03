@@ -270,6 +270,20 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // ── Actions ───────────────────────────────────────────────────────────────
   const LIMITE_PLANTILLA_HORAS = 24
 
+  // Upsert de lead en botLeads tras autoasignación.
+  // Si el lead ya existe en botLeads lo actualiza; si no, lo agrega.
+  // Mismo patrón que tomarConversacion. Usado por sendReply y sendTemplate.
+  const upsertLeadAsignado = (lead: LoanLead, username: string) => {
+    bandeja.setBotLeads(prev => {
+      const existe = prev.find(l => l.id === lead.id)
+      if(existe) return prev.map(l => l.id === lead.id
+        ? {...l, assigned_to: username, status: 'contacted'} : l)
+      return [...prev, {...lead, assigned_to: username, status: 'contacted'}]
+    })
+    bandeja.setColaLeadsState(prev => prev.filter(l => l.id !== lead.id))
+    bandeja.setColaTotal(t => Math.max(0, t - 1))
+  }
+
   const sendReply = async () => {
     if(!replyText.trim() || !selectedPhone || !me) return
     const text = replyText
@@ -278,11 +292,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(currentLead && !currentLead.assigned_to) {
       const { autoAsignarLead } = await import('@/services/lead.service')
       const res = await autoAsignarLead(currentLead.id, selectedPhone, me.username)
-      if(res.ok) {
-        bandeja.setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
-        bandeja.setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
-        bandeja.setColaTotal(t => Math.max(0, t - 1))
-      }
+      if(res.ok) upsertLeadAsignado(currentLead, me.username)
     }
     const tempMsg: Message = {
       id: `temp_${Date.now()}` as any,
@@ -315,11 +325,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(currentLead && !currentLead.assigned_to) {
       const { autoAsignarLead } = await import('@/services/lead.service')
       const res = await autoAsignarLead(currentLead.id, selectedPhone, me.username)
-      if(res.ok) {
-        bandeja.setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
-        bandeja.setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
-        bandeja.setColaTotal(t => Math.max(0, t - 1))
-      }
+      if(res.ok) upsertLeadAsignado(currentLead, me.username)
     }
     setSending(true)
     const lead = bandeja.bandejaLeads.find(l=>l.phone_number===selectedPhone) || base.baseLeads.find(l=>l.phone_number===selectedPhone)
