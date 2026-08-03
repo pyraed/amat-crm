@@ -658,7 +658,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                         }
                         setColaPage(p => p + 50)
                       }} style={{padding:'8px 20px',borderRadius:8,border:'1px solid #FCD34D',background:'#FFFBEB',color:'#B45309',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                        Cargar 50 más ({Math.max(0, colaTotal - colaLeadsState.length).toLocaleString('es-AR')} restantes)
+                        Ver más ({Math.max(0, colaTotal - colaLeadsState.length).toLocaleString('es-AR')} sin mostrar)
                       </button>
                     </div>
                   )}
