@@ -208,6 +208,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   const abrirChat = (lead: LoanLead) => {
     setCurrentChatMsgs([])
+    setReplyText('')
     setSelectedPhone(lead.phone_number)
     if(lead.phone_number) cargarMensajes(lead.phone_number)
     if(lead.id) {
