@@ -654,8 +654,17 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                           .order('created_at', { ascending: true })
                           .range(colaLeadsState.length, colaLeadsState.length + 49)
                         if(mas?.length) {
-                          const nuevos = (mas as LoanLead[]).filter(l=>!idsEnMemoria.has(l.id))
-                          if(nuevos.length) setColaLeadsState(prev => [...prev, ...nuevos])
+                          const nuevos = (mas as LoanLead[]).filter(l=>!idsEnMemoria.has(l.id) && l.phone_number)
+                          if(nuevos.length) {
+                            // Filtrar solo los que tienen mensajes entrantes
+                            const phones = nuevos.map(l=>l.phone_number).filter(Boolean) as string[]
+                            const { data: msgsIn } = await supabase
+                              .from('amat_messages').select('phone_number')
+                              .in('phone_number', phones).eq('direction','in').limit(500)
+                            const phonesConRespuesta = new Set((msgsIn||[]).map((m:any)=>m.phone_number))
+                            const filtrados = nuevos.filter(l=>phonesConRespuesta.has(l.phone_number))
+                            if(filtrados.length) setColaLeadsState(prev => [...prev, ...filtrados])
+                          }
                         }
                         setColaPage(p => p + 50)
                       }} style={{padding:'8px 20px',borderRadius:8,border:'1px solid #FCD34D',background:'#FFFBEB',color:'#B45309',fontSize:12,fontWeight:600,cursor:'pointer'}}>
