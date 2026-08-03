@@ -200,14 +200,48 @@ export async function syncConsultaEstado(
 
 /**
  * Sincroniza vendedor y estado de amat_consultas al tomar/asignar un lead.
+ * Si no existe fila para ese phone, la busca en amat_loan_leads y la crea.
  */
 export async function syncConsultaVendedor(phone: string, vendedor: string) {
-  return safeRun('consulta.service:syncVendedor', () =>
-    supabase.from('amat_consultas').update({
+  // Intentar actualizar primero
+  const { data: existing } = await supabase
+    .from('amat_consultas')
+    .select('id')
+    .eq('phone', phone)
+    .single()
+
+  if (existing) {
+    return safeRun('consulta.service:syncVendedor', () =>
+      supabase.from('amat_consultas').update({
+        vendedor,
+        estado:     'pendiente',
+        updated_at: new Date().toISOString(),
+      }).eq('phone', phone)
+    )
+  }
+
+  // No existe → crearla a partir del lead
+  const { data: lead } = await supabase
+    .from('amat_loan_leads')
+    .select('full_name,dni,reparticion')
+    .eq('phone_number', phone)
+    .single()
+
+  if (!lead) return { ok: false }
+
+  return safeRun('consulta.service:syncVendedor:insert', () =>
+    supabase.from('amat_consultas').insert({
+      phone,
+      nombre_apellido:  lead.full_name || null,
+      dni:              lead.dni || null,
+      reparticion_label:lead.reparticion || null,
+      flujo:            'solicitud',
       vendedor,
-      estado:     'pendiente',
-      updated_at: new Date().toISOString(),
-    }).eq('phone', phone)
+      estado:           'pendiente',
+      situacion:        null,
+      created_at:       new Date().toISOString(),
+      updated_at:       new Date().toISOString(),
+    })
   )
 }
 

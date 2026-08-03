@@ -55,7 +55,8 @@ export function useBandeja(
     const chunks = (arr: string[]) =>
       Array.from({length: Math.ceil(arr.length/BATCH)}, (_,i) => arr.slice(i*BATCH,(i+1)*BATCH))
 
-    // Cargar leads activos de los phones con mensajes
+    // Cargar leads activos de los phones con mensajes — solo los del operador actual
+    // Los leads de otros operadores no deben entrar en botLeads
     Promise.all(chunks(phones).map(chunk =>
       import('@/lib/supabase').then(({supabase}) =>
         supabase.from('amat_loan_leads')
@@ -63,6 +64,7 @@ export function useBandeja(
           .in('phone_number', chunk)
           .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved","sin_respuesta","closed")')
           .eq('archived', false)
+          .is('assigned_to', null)  // solo sin asignar en carga inicial
           .then(({data}) => data || [])
       )
     )).then(results => {
