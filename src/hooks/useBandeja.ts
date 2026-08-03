@@ -140,7 +140,7 @@ export function useBandeja(
     // o acaba de ser tomado (status contacted con assigned_to recién seteado)
     const tieneMsg    = phonesConMensajes.includes(l.phone_number)
     const esDelOp     = l.assigned_to === me?.username
-    const recienTomado = l.status === 'contacted' && l.assigned_to === me?.username
+    const recienTomado = ['contacted','contactado'].includes(l.status||'') && l.assigned_to === me?.username
     // Si está asignado a OTRO operador, nunca mostrar en esta bandeja
     if(l.assigned_to && l.assigned_to !== me?.username) return false
     if(!tieneMsg && !esDelOp && !recienTomado) return false
