@@ -112,7 +112,7 @@ export async function fetchMensajesBandeja() {
 export async function fetchBandejaLeads(username: string) {
   const EXCLUIDOS = ['finalizado', 'rejected', 'not_interested', 'resolved', 'unresolved', 'sin_respuesta', 'closed']
 
-  const [asignadosRes, colaRes, countRes] = await Promise.all([
+  const [asignadosRes, colaRes] = await Promise.all([
     supabase.from('amat_loan_leads').select('*')
       .eq('assigned_to', username)
       .eq('archived', false)
@@ -125,12 +125,6 @@ export async function fetchBandejaLeads(username: string) {
       .in('status', ['new', 'contacted'])
       .order('created_at', { ascending: true })
       .limit(200),
-
-    supabase.from('amat_loan_leads')
-      .select('id', { count: 'exact', head: true })
-      .is('assigned_to', null)
-      .eq('archived', false)
-      .in('status', ['new', 'contacted']),
   ])
 
   // Filtrar cola: solo leads que tienen al menos un mensaje entrante
@@ -156,7 +150,7 @@ export async function fetchBandejaLeads(username: string) {
   return {
     asignados:  (asignadosRes.data || []) as LoanLead[],
     cola,
-    colaTotal:  countRes.count || 0,
+    colaTotal:  cola.length,
   }
 }
 
