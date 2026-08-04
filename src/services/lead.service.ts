@@ -164,16 +164,44 @@ export async function fetchLeadById(id: number) {
 }
 
 /**
- * Cuenta leads cerrados hoy.
+ * Cuenta leads cerrados (closed + resolved) en el mes calendario actual.
+ * Usa COUNT para evitar traer filas innecesarias.
+ * Se vuelve a ejecutar cuando un lead pasa a closed/resolved via Realtime.
+ *
+ * LIMITACIÓN CONOCIDA: usa updated_at como proxy de fecha de cierre.
+ * Si un lead cerrado en un mes anterior es editado este mes (nota, datos,
+ * reasignación), va a aparecer en el conteo actual porque updated_at se
+ * actualiza en cada operación sobre el lead (editLead, saveLeadNote, etc.).
+ * Solución correcta a futuro: agregar columna closed_at TIMESTAMPTZ que
+ * se escriba una sola vez al pasar a estado final y usar esa fecha aquí.
+ * Migración pendiente — no implementar sin poblar el histórico existente.
  */
-export async function fetchCerradosHoy(): Promise<number> {
-  const hoy = new Date().toISOString().split('T')[0]
-  const { data } = await supabase
+export async function fetchCerradosMes(): Promise<number> {
+  const inicioMes = new Date()
+  inicioMes.setUTCDate(1)
+  inicioMes.setUTCHours(0, 0, 0, 0)
+  const { count } = await supabase
     .from('amat_loan_leads')
-    .select('id,status,updated_at')
-    .eq('status', 'closed')
-    .gte('updated_at', hoy + 'T00:00:00.000Z')
-  return data?.length || 0
+    .select('*', { count: 'exact', head: true })
+    .in('status', ['closed', 'resolved'])
+    .gte('updated_at', inicioMes.toISOString())
+  return count || 0
+}
+
+/**
+ * Cuenta leads creados en el mes calendario actual (global, todos los flujos).
+ * Usa COUNT para evitar traer filas innecesarias.
+ * Se vuelve a ejecutar cuando llega un INSERT via Realtime.
+ */
+export async function fetchInboundMes(): Promise<number> {
+  const inicioMes = new Date()
+  inicioMes.setUTCDate(1)
+  inicioMes.setUTCHours(0, 0, 0, 0)
+  const { count } = await supabase
+    .from('amat_loan_leads')
+    .select('*', { count: 'exact', head: true })
+    .gte('created_at', inicioMes.toISOString())
+  return count || 0
 }
 
 /**

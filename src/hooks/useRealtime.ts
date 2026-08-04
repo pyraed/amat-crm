@@ -20,7 +20,7 @@ import { supabase } from '@/lib/supabase'
 import { LoanLead, Message } from '@/lib/types'
 import { SysUser } from '@/domain/entities/users'
 import { ESTADOS_FINALES } from '@/domain/entities/leadStatus'
-import { reactivarLead } from '@/services/lead.service'
+import { reactivarLead, fetchCerradosMes, fetchInboundMes } from '@/services/lead.service'
 import { syncConsultaEstado, fetchFlujoMap } from '@/services/consulta.service'
 
 type Setters = {
@@ -34,12 +34,20 @@ type Setters = {
   setBaseLeads:       React.Dispatch<React.SetStateAction<LoanLead[]>>
 }
 
-export function useRealtime(me: SysUser | null, setters: Setters) {
+export function useRealtime(
+  me: SysUser | null,
+  setters: Setters,
+  callbacks: {
+    onCerradosMesChange: (n: number) => void
+    onInboundMesChange:  (n: number) => void
+  }
+) {
   const {
     setMessages, setCurrentChatMsgs, setBotLeads,
     setColaLeadsState, setColaTotal, setFlujoMap,
     setConsultas, setBaseLeads,
   } = setters
+  const { onCerradosMesChange, onInboundMesChange } = callbacks
 
   // meRef permite que los closures del realtime accedan al usuario actual
   // sin capturar el valor stale del estado React
@@ -150,13 +158,10 @@ export function useRealtime(me: SysUser | null, setters: Setters) {
               if(!prev.find(l=>l.id===updated.id)) return prev
               return prev.filter(l=>l.id!==updated.id)
             })
-            // Lead finalizado → sacar de cola si estaba ahí
-            let estabaEnCola = false
-            setColaLeadsState(prev=>{
-              estabaEnCola = !!prev.find(l=>l.id===updated.id)
-              return prev.filter(l=>l.id!==updated.id)
-            })
-            if(estabaEnCola) setColaTotal(t=>Math.max(0,t-1))
+            // Re-fetch cerrados del mes si el lead pasó a closed o resolved
+            if(updated.status === 'closed' || updated.status === 'resolved') {
+              fetchCerradosMes().then(onCerradosMesChange)
+            }
           } else {
             // Lead activo → actualizar en bandeja, agregar si es del usuario actual
             setBotLeads(prev=>{
@@ -167,19 +172,12 @@ export function useRealtime(me: SysUser | null, setters: Setters) {
               }
               return prev
             })
-            // Si el lead fue asignado → sacarlo de la cola de todos los operadores
-            if(updated.assigned_to) {
-              let estabaEnCola = false
-              setColaLeadsState(prev=>{
-                estabaEnCola = !!prev.find(l=>l.id===updated.id)
-                return prev.filter(l=>l.id!==updated.id)
-              })
-              if(estabaEnCola) setColaTotal(t=>Math.max(0,t-1))
-            }
           }
           // Siempre actualizar en la base
           setBaseLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
         } else if(p.eventType==='INSERT'){
+          // Re-fetch inbound del mes ante cualquier lead nuevo
+          fetchInboundMes().then(onInboundMesChange)
           // Lead nuevo sin asignar → a la cola SOLO si el cliente ya nos escribió
           // Esto evita que leads de campaña (solo mensajes salientes) aparezcan en cola
           if(['new','contacted'].includes(updated.status||'') && !(updated as any).archived && !updated.assigned_to && updated.phone_number) {
