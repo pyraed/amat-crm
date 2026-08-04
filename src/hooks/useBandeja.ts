@@ -15,7 +15,7 @@ import { LoanLead, Message } from '@/lib/types'
 import { SysUser } from '@/domain/entities/users'
 import { ESTADOS_FINALES } from '@/domain/entities/leadStatus'
 import {
-  fetchBandejaLeads, fetchCerradosMes, fetchInboundMes,
+  fetchBandejaLeads, fetchCerradosHoy,
   cambiarEstadoLead, tomarLead,
 } from '@/services/lead.service'
 import { fetchFlujoMap } from '@/services/consulta.service'
@@ -39,16 +39,14 @@ export function useBandeja(
   const [colaMenu, setColaMenu]             = useState<LoanLead|null>(null)
   const [colaMenuRef, setColaMenuRef]       = useState<{x:number,y:number}|null>(null)
   const [flujoMap, setFlujoMap]             = useState<Record<string,string>>({})
-  const [cerradosMesCount, setCerradosMesCount] = useState(0)
-  const [inboundMesCount, setInboundMesCount]   = useState(0)
+  const [cerradosHoyCount, setCerradosHoyCount] = useState(0)
   const [bandejaSearch, setBandejaSearch]   = useState('')
   const [soloNoLeidos, setSoloNoLeidos]     = useState(false)
   const [editandoFlujo, setEditandoFlujo]   = useState(false)
 
   // Carga inicial desde los initialMessages del SSR
   useEffect(()=>{
-    fetchCerradosMes().then(n => setCerradosMesCount(n))
-    fetchInboundMes().then(n => setInboundMesCount(n))
+    fetchCerradosHoy().then(n => setCerradosHoyCount(n))
 
     const phones = [...new Set(initialMessages.map(m=>m.phone_number))].filter(Boolean)
     if(phones.length === 0) return
@@ -180,9 +178,7 @@ export function useBandeja(
 
     if(esFinal) {
       setBotLeads(prev => prev.filter(l => l.id !== lead.id))
-      if(nuevoStatus === 'closed' || nuevoStatus === 'resolved') {
-        fetchCerradosMes().then(n => setCerradosMesCount(n))
-      }
+      if(nuevoStatus === 'closed' || nuevoStatus === 'resolved') setCerradosHoyCount(c => c + 1)
       // No limpiamos selectedPhone acá — el componente que llama lo hace
       // después de terminar su flujo (ej: guardarVenta cierra el modal primero)
     } else {
@@ -212,8 +208,15 @@ export function useBandeja(
       return
     }
 
-    const { ok } = await tomarLead(lead, me.username)
-    if(!ok) { alert('❌ No se pudo tomar la conversación. Intentá de nuevo.'); return }
+    const res = await tomarLead(lead, me.username)
+    if(!res.ok) {
+      if(res.tomadoPor) {
+        alert(`Este lead ya fue tomado por ${res.tomadoPor}.`)
+      } else {
+        alert('❌ No se pudo tomar la conversación. Intentá de nuevo.')
+      }
+      return
+    }
 
     setColaTotal(t => Math.max(0, t - 1))
     setColaLeadsState(prev => prev.filter(l => l.id !== lead.id))
@@ -236,8 +239,7 @@ export function useBandeja(
     colaMenu, setColaMenu,
     colaMenuRef, setColaMenuRef,
     flujoMap, setFlujoMap,
-    cerradosMesCount, setCerradosMesCount,
-    inboundMesCount, setInboundMesCount,
+    cerradosHoyCount, setCerradosHoyCount,
     bandejaSearch, setBandejaSearch,
     soloNoLeidos, setSoloNoLeidos,
     editandoFlujo, setEditandoFlujo,

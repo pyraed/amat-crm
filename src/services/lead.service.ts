@@ -164,44 +164,16 @@ export async function fetchLeadById(id: number) {
 }
 
 /**
- * Cuenta leads cerrados (closed + resolved) en el mes calendario actual.
- * Usa COUNT para evitar traer filas innecesarias.
- * Se vuelve a ejecutar cuando un lead pasa a closed/resolved via Realtime.
- *
- * LIMITACIÓN CONOCIDA: usa updated_at como proxy de fecha de cierre.
- * Si un lead cerrado en un mes anterior es editado este mes (nota, datos,
- * reasignación), va a aparecer en el conteo actual porque updated_at se
- * actualiza en cada operación sobre el lead (editLead, saveLeadNote, etc.).
- * Solución correcta a futuro: agregar columna closed_at TIMESTAMPTZ que
- * se escriba una sola vez al pasar a estado final y usar esa fecha aquí.
- * Migración pendiente — no implementar sin poblar el histórico existente.
+ * Cuenta leads cerrados hoy.
  */
-export async function fetchCerradosMes(): Promise<number> {
-  const inicioMes = new Date()
-  inicioMes.setUTCDate(1)
-  inicioMes.setUTCHours(0, 0, 0, 0)
-  const { count } = await supabase
+export async function fetchCerradosHoy(): Promise<number> {
+  const hoy = new Date().toISOString().split('T')[0]
+  const { data } = await supabase
     .from('amat_loan_leads')
-    .select('*', { count: 'exact', head: true })
-    .in('status', ['closed', 'resolved'])
-    .gte('updated_at', inicioMes.toISOString())
-  return count || 0
-}
-
-/**
- * Cuenta leads creados en el mes calendario actual (global, todos los flujos).
- * Usa COUNT para evitar traer filas innecesarias.
- * Se vuelve a ejecutar cuando llega un INSERT via Realtime.
- */
-export async function fetchInboundMes(): Promise<number> {
-  const inicioMes = new Date()
-  inicioMes.setUTCDate(1)
-  inicioMes.setUTCHours(0, 0, 0, 0)
-  const { count } = await supabase
-    .from('amat_loan_leads')
-    .select('*', { count: 'exact', head: true })
-    .gte('created_at', inicioMes.toISOString())
-  return count || 0
+    .select('id,status,updated_at')
+    .eq('status', 'closed')
+    .gte('updated_at', hoy + 'T00:00:00.000Z')
+  return data?.length || 0
 }
 
 /**
@@ -270,19 +242,68 @@ export async function cambiarEstadoLead(
   return { ok: true, esFinal }
 }
 
+// ── Asignación de leads ──────────────────────────────────────────────────────
+
 /**
- * Asigna un lead a un operador (tomar conversación).
- * Actualiza amat_loan_leads y sincroniza amat_consultas.
+ * Función privada base para toda asignación de lead.
+ * Centraliza la lógica de concurrencia: el UPDATE incluye
+ * AND assigned_to IS NULL, por lo que si otro operador tomó
+ * el lead primero, afecta 0 filas y devuelve { ok: false, tomadoPor }.
+ *
+ * PostgreSQL garantiza atomicidad: dos UPDATEs concurrentes con
+ * WHERE id = X AND assigned_to IS NULL nunca pueden ambos tener éxito.
+ * No se necesita transacción explícita.
+ *
+ * Sync con amat_consultas queda en responsabilidad del caller.
  */
-export async function tomarLead(lead: LoanLead, username: string): Promise<{ ok: boolean }> {
-  const res = await safeRun('lead.service:tomar', () =>
-    supabase.from('amat_loan_leads').update({
+async function _asignarLead(
+  leadId: number,
+  username: string
+): Promise<{ ok: boolean; tomadoPor?: string }> {
+  const { data, error } = await supabase
+    .from('amat_loan_leads')
+    .update({
       assigned_to: username,
       status:      'contacted',
       updated_at:  new Date().toISOString(),
-    }).eq('id', lead.id)
-  )
-  if (!res.ok) return { ok: false }
+    })
+    .eq('id', leadId)
+    .is('assigned_to', null)   // protección de concurrencia
+    .select('id')              // necesario para saber si afectó filas
+
+  if (error) {
+    console.error('[lead.service:_asignarLead] Error en UPDATE:', error)
+    return { ok: false }
+  }
+
+  // UPDATE exitoso — afectó exactamente 1 fila
+  if (data && data.length > 0) return { ok: true }
+
+  // UPDATE afectó 0 filas — el lead ya fue tomado por otro operador.
+  // Consultamos quién lo tiene para informar al operador actual.
+  const { data: leadActual } = await supabase
+    .from('amat_loan_leads')
+    .select('assigned_to')
+    .eq('id', leadId)
+    .single()
+
+  return {
+    ok:        false,
+    tomadoPor: leadActual?.assigned_to || 'otro operador',
+  }
+}
+
+/**
+ * Tomar conversación desde la cola (click explícito del operador).
+ * Usa protección de concurrencia — si el lead ya fue tomado,
+ * devuelve { ok: false, tomadoPor } con el nombre del operador.
+ */
+export async function tomarLead(
+  lead: LoanLead,
+  username: string
+): Promise<{ ok: boolean; tomadoPor?: string }> {
+  const res = await _asignarLead(lead.id, username)
+  if (!res.ok) return res
 
   if (lead.phone_number) {
     await syncConsultaVendedor(lead.phone_number, username)
@@ -291,17 +312,17 @@ export async function tomarLead(lead: LoanLead, username: string): Promise<{ ok:
 }
 
 /**
- * Auto-asigna un lead al operador que envía el primer mensaje.
+ * Auto-asignar lead al operador que envía el primer mensaje.
+ * Usa la misma protección de concurrencia que tomarLead.
+ * Si el lead ya fue tomado por otro operador, devuelve { ok: false, tomadoPor }.
  */
-export async function autoAsignarLead(leadId: number, phone: string | null, username: string): Promise<{ ok: boolean }> {
-  const res = await safeRun('lead.service:autoAsignar', () =>
-    supabase.from('amat_loan_leads').update({
-      assigned_to: username,
-      status:      'contacted',
-      updated_at:  new Date().toISOString(),
-    }).eq('id', leadId)
-  )
-  if (!res.ok) return { ok: false }
+export async function autoAsignarLead(
+  leadId: number,
+  phone: string | null,
+  username: string
+): Promise<{ ok: boolean; tomadoPor?: string }> {
+  const res = await _asignarLead(leadId, username)
+  if (!res.ok) return res
 
   if (phone) {
     await syncConsultaVendedor(phone, username)
