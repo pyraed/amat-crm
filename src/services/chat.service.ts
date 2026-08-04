@@ -102,29 +102,50 @@ export async function sendReply(params: {
 
 /**
  * Envía una plantilla WhatsApp vía /api/send-message.
- * Registra automáticamente en amat_campanas si el envío tiene éxito.
+ * Registra en amat_campanas SOLO si Meta confirmó el envío.
+ *
+ * Comportamiento anterior: silenciaba errores y registraba la campaña
+ * siempre, bloqueando el número 24hs aunque el mensaje no hubiera salido.
+ * Comportamiento actual: lee la respuesta de Meta, propaga el error al
+ * caller si falló, y solo registra en amat_campanas si el envío fue exitoso.
  */
 export async function sendTemplate(params: {
   phone:      string
   template:   string
   senderName: string
   dni?:       string | null
-}): Promise<{ ok: boolean }> {
+}): Promise<{ ok: boolean; error?: string }> {
   try {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 8000)
-    await fetch('/api/send-message', {
+    // 12 segundos — alineado con el timeout interno de route.ts
+    // El valor anterior (8s) podía abortar el cliente antes de que route.ts terminara,
+    // dejando el fetch del servidor en vuelo sin que el cliente lo supiera.
+    const timeout = setTimeout(() => controller.abort(), 12000)
+    const res = await fetch('/api/send-message', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ phone: params.phone, template: params.template, senderName: params.senderName }),
       signal:  controller.signal,
     })
     clearTimeout(timeout)
-  } catch (e) {
-    console.error('[chat.service:sendTemplate] error o timeout:', e)
-    // No devolvemos error — el registro de campaña igual se intenta
+
+    // .catch(() => ({})) cubre: respuesta no-JSON, fetch fallido, excepción.
+    // En todos esos casos json.ok es undefined (falsy) → se trata como error.
+    const json = await res.json().catch(() => ({}))
+    if (!json.ok) {
+      const error = json.error || 'Error al enviar la plantilla'
+      console.error('[chat.service:sendTemplate] Meta rechazó el envío:', error)
+      return { ok: false, error }
+    }
+  } catch (e: any) {
+    const isTimeout = e?.name === 'AbortError'
+    const error = isTimeout ? 'Timeout al contactar WhatsApp' : (e?.message || 'Error de red')
+    console.error('[chat.service:sendTemplate] error o timeout:', error)
+    return { ok: false, error }
   }
 
+  // Solo registrar si Meta confirmó el envío exitoso.
+  // Si registrarCampana falla, no bloquea — el envío ya ocurrió.
   await registrarCampana({
     phone:     params.phone,
     dni:       params.dni,

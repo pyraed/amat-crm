@@ -279,13 +279,9 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       const { autoAsignarLead } = await import('@/services/lead.service')
       const res = await autoAsignarLead(currentLead.id, selectedPhone, me.username)
       if(res.ok) {
-        upsertLeadAsignado(currentLead, me.username)
-      } else if(res.tomadoPor) {
-        // El lead fue tomado por otro operador mientras el mensaje se enviaba.
-        // El Realtime va a remover el lead de la cola automáticamente.
-        alert(`Este lead ya fue tomado por ${res.tomadoPor}.`)
-        setSending(false)
-        return
+        bandeja.setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
+        bandeja.setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
+        bandeja.setColaTotal(t => Math.max(0, t - 1))
       }
     }
     const tempMsg: Message = {
@@ -320,18 +316,18 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       const { autoAsignarLead } = await import('@/services/lead.service')
       const res = await autoAsignarLead(currentLead.id, selectedPhone, me.username)
       if(res.ok) {
-        upsertLeadAsignado(currentLead, me.username)
-      } else if(res.tomadoPor) {
-        // El lead fue tomado por otro operador mientras se enviaba la plantilla.
-        // El Realtime va a remover el lead de la cola automáticamente.
-        alert(`Este lead ya fue tomado por ${res.tomadoPor}.`)
-        return
+        bandeja.setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
+        bandeja.setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
+        bandeja.setColaTotal(t => Math.max(0, t - 1))
       }
     }
     setSending(true)
     const lead = bandeja.bandejaLeads.find(l=>l.phone_number===selectedPhone) || base.baseLeads.find(l=>l.phone_number===selectedPhone)
-    await chatSendTemplate({ phone: selectedPhone, template, senderName: me.username, dni: lead?.dni })
+    const tplRes = await chatSendTemplate({ phone: selectedPhone, template, senderName: me.username, dni: lead?.dni })
     setSending(false)
+    if(!tplRes.ok) {
+      alert(`❌ No se pudo enviar la plantilla.\n\n${tplRes.error || 'Intentá de nuevo.'}`)
+    }
   }
 
   const saveNote = async () => {
@@ -427,40 +423,16 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   }, [currentChatMsgs, messages, selectedPhone])
 
   const stats = useMemo(()=>({
-    // Leads creados este mes (global). Fuente: DB via re-fetch en Realtime INSERT.
-    inbound: inboundMesCount,
-
-    // Conversaciones asignadas al operador actual que no están en estado final.
-    // Usa botLeads (no bandejaLeads) para no variar con el filtro de búsqueda activo.
-    // Incluye todos los estados activos: contacted, contactado, new.
-    activos: botLeads.filter(l =>
-      l.assigned_to === me?.username &&
-      !ESTADOS_FINALES.includes(l.status || '')
-    ).length,
-
-    // Conversaciones del operador actual donde el último mensaje es del cliente.
-    // Evalúa el último mensaje de cada phone, no el historial completo.
-    // Usa botLeads para no variar con el filtro de búsqueda activo.
-    pendientes: (() => {
-      const misPhones = botLeads
-        .filter(l =>
-          l.assigned_to === me?.username &&
-          !ESTADOS_FINALES.includes(l.status || '')
-        )
-        .map(l => l.phone_number)
-        .filter(Boolean) as string[]
-
-      return misPhones.filter(phone => {
-        const ultimo = messages
-          .filter(m => m.phone_number === phone)
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
-        return ultimo?.direction === 'in'
-      }).length
+    inbound:  bandejaLeads.length,
+    activos:  bandejaLeads.filter(l=>['contacted','new'].includes(l.status||'')).length,
+    sinResp:  (() => {
+      const outPhones = new Set(messages.filter(m=>m.direction==='out'&&m.sender!=='bot').map(m=>m.phone_number))
+      return [...new Set(messages.filter(m=>m.direction==='in').map(m=>m.phone_number))]
+        .filter(p=>bandejaLeads.find(l=>l.phone_number===p))
+        .filter(p=>!outPhones.has(p)).length
     })(),
-
-    // closed + resolved este mes (global). Fuente: DB via re-fetch en Realtime UPDATE.
-    cerrados: cerradosMesCount,
-  }),[botLeads, me, messages, inboundMesCount, cerradosMesCount])
+    cerrados: cerradosHoyCount,
+  }),[bandejaLeads, messages, cerradosHoyCount])
 
   if(!mounted) return null
 
