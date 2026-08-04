@@ -15,7 +15,7 @@ import { LoanLead, Message } from '@/lib/types'
 import { SysUser } from '@/domain/entities/users'
 import { ESTADOS_FINALES } from '@/domain/entities/leadStatus'
 import {
-  fetchBandejaLeads, fetchCerradosHoy,
+  fetchBandejaLeads, fetchCerradosMes, fetchInboundMes,
   cambiarEstadoLead, tomarLead,
 } from '@/services/lead.service'
 import { fetchFlujoMap } from '@/services/consulta.service'
@@ -39,14 +39,16 @@ export function useBandeja(
   const [colaMenu, setColaMenu]             = useState<LoanLead|null>(null)
   const [colaMenuRef, setColaMenuRef]       = useState<{x:number,y:number}|null>(null)
   const [flujoMap, setFlujoMap]             = useState<Record<string,string>>({})
-  const [cerradosHoyCount, setCerradosHoyCount] = useState(0)
+  const [cerradosMesCount, setCerradosMesCount] = useState(0)
+  const [inboundMesCount, setInboundMesCount]   = useState(0)
   const [bandejaSearch, setBandejaSearch]   = useState('')
   const [soloNoLeidos, setSoloNoLeidos]     = useState(false)
   const [editandoFlujo, setEditandoFlujo]   = useState(false)
 
   // Carga inicial desde los initialMessages del SSR
   useEffect(()=>{
-    fetchCerradosHoy().then(n => setCerradosHoyCount(n))
+    fetchCerradosMes().then(n => setCerradosMesCount(n))
+    fetchInboundMes().then(n => setInboundMesCount(n))
 
     const phones = [...new Set(initialMessages.map(m=>m.phone_number))].filter(Boolean)
     if(phones.length === 0) return
@@ -178,7 +180,9 @@ export function useBandeja(
 
     if(esFinal) {
       setBotLeads(prev => prev.filter(l => l.id !== lead.id))
-      if(nuevoStatus === 'closed' || nuevoStatus === 'resolved') setCerradosHoyCount(c => c + 1)
+      if(nuevoStatus === 'closed' || nuevoStatus === 'resolved') {
+        fetchCerradosMes().then(n => setCerradosMesCount(n))
+      }
       // No limpiamos selectedPhone acá — el componente que llama lo hace
       // después de terminar su flujo (ej: guardarVenta cierra el modal primero)
     } else {
@@ -239,7 +243,8 @@ export function useBandeja(
     colaMenu, setColaMenu,
     colaMenuRef, setColaMenuRef,
     flujoMap, setFlujoMap,
-    cerradosHoyCount, setCerradosHoyCount,
+    cerradosMesCount, setCerradosMesCount,
+    inboundMesCount, setInboundMesCount,
     bandejaSearch, setBandejaSearch,
     soloNoLeidos, setSoloNoLeidos,
     editandoFlujo, setEditandoFlujo,
