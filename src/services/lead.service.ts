@@ -272,7 +272,8 @@ async function _asignarLead(
     .select('id')              // necesario para saber si afectó filas
 
   if (error) {
-    console.error('[lead.service:_asignarLead] Error en UPDATE:', error)
+    // LOG TEMPORAL — eliminar una vez validado el comportamiento en producción
+    console.error('[_asignarLead] Error real de DB:', { leadId, username, error: error.message })
     return { ok: false }
   }
 
@@ -287,10 +288,12 @@ async function _asignarLead(
     .eq('id', leadId)
     .single()
 
-  return {
-    ok:        false,
-    tomadoPor: leadActual?.assigned_to || 'otro operador',
-  }
+  const tomadoPor = leadActual?.assigned_to || 'otro operador'
+
+  // LOG TEMPORAL — eliminar una vez validado el comportamiento en producción
+  console.warn('[_asignarLead] Lead ya tomado:', { leadId, username, tomadoPor })
+
+  return { ok: false, tomadoPor }
 }
 
 /**
