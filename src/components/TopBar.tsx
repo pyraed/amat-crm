@@ -10,10 +10,10 @@ import { SysUser } from '@/domain/entities/users'
 type Tab = 'bandeja' | 'consultas' | 'base' | 'reportes'
 
 type Stats = {
-  inbound:  number
-  activos:  number
-  sinResp:  number
-  cerrados: number
+  inbound:    number
+  activos:    number
+  pendientes: number
+  cerrados:   number
 }
 
 type Props = {
@@ -60,10 +60,10 @@ export default function TopBar({ me, tab, setTab, setTabLoading, stats, handleLo
 
       <div style={{display:'flex',gap:16,marginLeft:16}}>
         {[
-          {v:stats.inbound,  l:'Inbound',     c:'#F59E0B'},
-          {v:stats.activos,  l:'Activos',     c:'#8B5CF6'},
-          {v:stats.sinResp,  l:'Sin resp.',   c:'#EF4444'},
-          {v:stats.cerrados, l:'Cerrados hoy',c:'#10B981'},
+          {v:stats.inbound,    l:'Inbound mes',    c:'#F59E0B'},
+          {v:stats.activos,    l:'Activos',         c:'#8B5CF6'},
+          {v:stats.pendientes, l:'Pendientes',       c:'#EF4444'},
+          {v:stats.cerrados,   l:'Cerrados mes',     c:'#10B981'},
         ].map(s=>(
           <div key={s.l} style={{textAlign:'center',lineHeight:1}}>
             <div style={{fontSize:17,fontWeight:700,color:s.c}}>{s.v}</div>

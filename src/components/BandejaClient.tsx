@@ -427,16 +427,40 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   }, [currentChatMsgs, messages, selectedPhone])
 
   const stats = useMemo(()=>({
-    inbound:  bandejaLeads.length,
-    activos:  bandejaLeads.filter(l=>['contacted','new'].includes(l.status||'')).length,
-    sinResp:  (() => {
-      const outPhones = new Set(messages.filter(m=>m.direction==='out'&&m.sender!=='bot').map(m=>m.phone_number))
-      return [...new Set(messages.filter(m=>m.direction==='in').map(m=>m.phone_number))]
-        .filter(p=>bandejaLeads.find(l=>l.phone_number===p))
-        .filter(p=>!outPhones.has(p)).length
+    // Leads creados este mes (global). Fuente: DB via re-fetch en Realtime INSERT.
+    inbound: inboundMesCount,
+
+    // Conversaciones asignadas al operador actual que no están en estado final.
+    // Usa botLeads (no bandejaLeads) para no variar con el filtro de búsqueda activo.
+    // Incluye todos los estados activos: contacted, contactado, new.
+    activos: botLeads.filter(l =>
+      l.assigned_to === me?.username &&
+      !ESTADOS_FINALES.includes(l.status || '')
+    ).length,
+
+    // Conversaciones del operador actual donde el último mensaje es del cliente.
+    // Evalúa el último mensaje de cada phone, no el historial completo.
+    // Usa botLeads para no variar con el filtro de búsqueda activo.
+    pendientes: (() => {
+      const misPhones = botLeads
+        .filter(l =>
+          l.assigned_to === me?.username &&
+          !ESTADOS_FINALES.includes(l.status || '')
+        )
+        .map(l => l.phone_number)
+        .filter(Boolean) as string[]
+
+      return misPhones.filter(phone => {
+        const ultimo = messages
+          .filter(m => m.phone_number === phone)
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+        return ultimo?.direction === 'in'
+      }).length
     })(),
-    cerrados: cerradosHoyCount,
-  }),[bandejaLeads, messages, cerradosHoyCount])
+
+    // closed + resolved este mes (global). Fuente: DB via re-fetch en Realtime UPDATE.
+    cerrados: cerradosMesCount,
+  }),[botLeads, me, messages, inboundMesCount, cerradosMesCount])
 
   if(!mounted) return null
 
