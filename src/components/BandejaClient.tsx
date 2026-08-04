@@ -270,20 +270,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   // ── Actions ───────────────────────────────────────────────────────────────
   const LIMITE_PLANTILLA_HORAS = 24
 
-  // Upsert de lead en botLeads tras autoasignación.
-  // Si el lead ya existe en botLeads lo actualiza; si no, lo agrega.
-  // Mismo patrón que tomarConversacion. Usado por sendReply y sendTemplate.
-  const upsertLeadAsignado = (lead: LoanLead, username: string) => {
-    bandeja.setBotLeads(prev => {
-      const existe = prev.find(l => l.id === lead.id)
-      if(existe) return prev.map(l => l.id === lead.id
-        ? {...l, assigned_to: username, status: 'contacted'} : l)
-      return [...prev, {...lead, assigned_to: username, status: 'contacted'}]
-    })
-    bandeja.setColaLeadsState(prev => prev.filter(l => l.id !== lead.id))
-    bandeja.setColaTotal(t => Math.max(0, t - 1))
-  }
-
   const sendReply = async () => {
     if(!replyText.trim() || !selectedPhone || !me) return
     const text = replyText
@@ -292,7 +278,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(currentLead && !currentLead.assigned_to) {
       const { autoAsignarLead } = await import('@/services/lead.service')
       const res = await autoAsignarLead(currentLead.id, selectedPhone, me.username)
-      if(res.ok) upsertLeadAsignado(currentLead, me.username)
+      if(res.ok) {
+        bandeja.setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
+        bandeja.setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
+        bandeja.setColaTotal(t => Math.max(0, t - 1))
+      }
     }
     const tempMsg: Message = {
       id: `temp_${Date.now()}` as any,
@@ -325,7 +315,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(currentLead && !currentLead.assigned_to) {
       const { autoAsignarLead } = await import('@/services/lead.service')
       const res = await autoAsignarLead(currentLead.id, selectedPhone, me.username)
-      if(res.ok) upsertLeadAsignado(currentLead, me.username)
+      if(res.ok) {
+        bandeja.setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: me.username, status: 'contacted'} : l))
+        bandeja.setColaLeadsState(prev => prev.filter(l => l.id !== currentLead.id))
+        bandeja.setColaTotal(t => Math.max(0, t - 1))
+      }
     }
     setSending(true)
     const lead = bandeja.bandejaLeads.find(l=>l.phone_number===selectedPhone) || base.baseLeads.find(l=>l.phone_number===selectedPhone)
@@ -427,15 +421,37 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   const stats = useMemo(()=>({
     inbound:  bandejaLeads.length,
-    activos:  bandejaLeads.filter(l=>['contacted','new'].includes(l.status||'')).length,
-    sinResp:  (() => {
-      const outPhones = new Set(messages.filter(m=>m.direction==='out'&&m.sender!=='bot').map(m=>m.phone_number))
-      return [...new Set(messages.filter(m=>m.direction==='in').map(m=>m.phone_number))]
-        .filter(p=>bandejaLeads.find(l=>l.phone_number===p))
-        .filter(p=>!outPhones.has(p)).length
+
+    // Conversaciones asignadas al operador actual que no están en estado final.
+    // Usa botLeads (no bandejaLeads) para no variar con el filtro de búsqueda activo.
+    // Incluye todos los estados activos: contacted, contactado, new.
+    activos: botLeads.filter(l =>
+      l.assigned_to === me?.username &&
+      !ESTADOS_FINALES.includes(l.status || '')
+    ).length,
+
+    // Conversaciones del operador actual donde el último mensaje es del cliente.
+    // Evalúa el último mensaje de cada phone, no el historial completo.
+    // Usa botLeads para no variar con el filtro de búsqueda activo.
+    pendientes: (() => {
+      const misPhones = botLeads
+        .filter(l =>
+          l.assigned_to === me?.username &&
+          !ESTADOS_FINALES.includes(l.status || '')
+        )
+        .map(l => l.phone_number)
+        .filter(Boolean) as string[]
+
+      return misPhones.filter(phone => {
+        const ultimo = messages
+          .filter(m => m.phone_number === phone)
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+        return ultimo?.direction === 'in'
+      }).length
     })(),
+
     cerrados: cerradosHoyCount,
-  }),[bandejaLeads, messages, cerradosHoyCount])
+  }),[botLeads, me, messages, cerradosHoyCount])
 
   if(!mounted) return null
 
