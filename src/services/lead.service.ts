@@ -392,13 +392,26 @@ export async function fetchVentasCerradas() {
  * Solo aplica a estados no_interested, sin_respuesta, unresolved.
  */
 export async function reactivarLead(leadId: number, phone?: string | null) {
+  // Guarda de estado: closed y rejected son irreversibles — nunca se reactivan.
+  // La regla vive aquí y no solo en el caller, por lo que la función es segura
+  // independientemente de quién la invoque o con qué validaciones previas.
+  // Sintaxis .not('status', 'in', ...) ya usada en fetchBandejaLeads.
+  //
+  // ASUNCIÓN: closed y rejected son los ÚNICOS estados irreversibles del sistema.
+  // Si en el futuro se agrega un nuevo estado terminal (ej: 'cancelled', 'duplicado'),
+  // hay que agregarlo aquí para que reactivarLead no lo procese.
+  // Ver también: ESTADOS_FINALES en domain/entities/leadStatus.ts.
+  const ESTADOS_NO_REACTIVABLES = ['closed', 'rejected']
+
   const res = await safeRun('lead.service:reactivar', () =>
     supabase.from('amat_loan_leads').update({
       status:      'new',
       archived:    false,
       assigned_to: null,
       updated_at:  new Date().toISOString(),
-    }).eq('id', leadId)
+    })
+    .eq('id', leadId)
+    .not('status', 'in', `(${ESTADOS_NO_REACTIVABLES.join(',')})`)
   )
   // Sincronizar amat_consultas — el lead volvió a cola
   if(res.ok && phone) {
