@@ -158,6 +158,13 @@ export function useRealtime(
               if(!prev.find(l=>l.id===updated.id)) return prev
               return prev.filter(l=>l.id!==updated.id)
             })
+            // Lead finalizado → sacar de cola si estaba ahí
+            let estabaEnColaFinalizado = false
+            setColaLeadsState(prev=>{
+              estabaEnColaFinalizado = !!prev.find(l=>l.id===updated.id)
+              return prev.filter(l=>l.id!==updated.id)
+            })
+            if(estabaEnColaFinalizado) setColaTotal(t=>Math.max(0,t-1))
             // Re-fetch cerrados del mes si el lead pasó a closed o resolved
             if(updated.status === 'closed' || updated.status === 'resolved') {
               fetchCerradosMes().then(onCerradosMesChange)
@@ -172,6 +179,15 @@ export function useRealtime(
               }
               return prev
             })
+            // Si el lead fue asignado → sacarlo de la cola de todos los operadores
+            if(updated.assigned_to) {
+              let estabaEnCola = false
+              setColaLeadsState(prev=>{
+                estabaEnCola = !!prev.find(l=>l.id===updated.id)
+                return prev.filter(l=>l.id!==updated.id)
+              })
+              if(estabaEnCola) setColaTotal(t=>Math.max(0,t-1))
+            }
           }
           // Siempre actualizar en la base
           setBaseLeads(prev=>prev.map(l=>l.id===updated.id?updated:l))
