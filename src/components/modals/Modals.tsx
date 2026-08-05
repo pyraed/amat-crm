@@ -23,7 +23,7 @@ import { TABLAS_CUOTA, calcularCuotaAMAT, esReparticionIntegra, calcularCuotaInt
 import { consultaStatusToLeadStatus } from '@/domain/workflows/statusMapping'
 import { supabase } from '@/lib/supabase'
 import { updateConsulta, insertConsulta } from '@/services/consulta.service'
-import { tomarLead } from '@/services/lead.service'
+import { reasignarLead, quitarAsignacionLead } from '@/services/lead.service'
 import { registrarCampana } from '@/services/chat.service'
 
 // ── Tipos compartidos ─────────────────────────────────────────────────────────
@@ -135,9 +135,9 @@ export function ModalAsignar({ currentLead, setBotLeads, setShowAssignModal }: M
         <h3>Asignar a un asesor</h3>
         {USERS.map(u=>(
           <div key={u.id} className="mopt" onClick={async()=>{
-            const res = await tomarLead({...currentLead, assigned_to: null}, u.username)
+            const res = await reasignarLead(currentLead.id, currentLead.phone_number, u.username)
             if(!res.ok) { alert('❌ No se pudo asignar. Intentá de nuevo.'); return }
-            setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: u.username, status:'contacted'} : l))
+            setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: u.username} : l))
             setShowAssignModal(false)
           }}>
             <div className="av" style={{width:34,height:34,fontSize:11,background:u.color,color:'white'}}>{u.initials}</div>
@@ -149,8 +149,8 @@ export function ModalAsignar({ currentLead, setBotLeads, setShowAssignModal }: M
           </div>
         ))}
         <div className="mopt" style={{border:'1px solid #E2E8F0',borderRadius:10,marginTop:6}} onClick={async()=>{
-          const { error } = await supabase.from('amat_loan_leads').update({assigned_to:null,updated_at:new Date().toISOString()}).eq('id',currentLead.id)
-          if(error) { alert('❌ No se pudo quitar la asignación. Intentá de nuevo.'); return }
+          const res = await quitarAsignacionLead(currentLead.id, currentLead.phone_number)
+          if(!res.ok) { alert('❌ No se pudo quitar la asignación. Intentá de nuevo.'); return }
           setBotLeads(prev => prev.map(l => l.id===currentLead.id ? {...l, assigned_to: null} : l))
           setShowAssignModal(false)
         }}>

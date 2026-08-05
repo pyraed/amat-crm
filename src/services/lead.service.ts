@@ -362,6 +362,65 @@ export async function autoAsignarLead(
 }
 
 /**
+ * Reasigna un lead a otro operador (acción administrativa).
+ * Operación conceptualmente distinta a tomarLead:
+ *   - No requiere assigned_to IS NULL — puede mover leads ya asignados.
+ *   - No modifica el status — la reasignación es solo un cambio de responsable.
+ *   - Sincroniza amat_consultas.vendedor para mantener consistencia.
+ *
+ * Si aparece un lead en estado 'new' con assigned_to seteado, es una
+ * inconsistencia a investigar — esta función no la corrige silenciosamente.
+ */
+export async function reasignarLead(
+  leadId: number,
+  phone: string | null,
+  nuevoVendedor: string
+): Promise<{ ok: boolean }> {
+  const res = await safeRun('lead.service:reasignar', () =>
+    supabase.from('amat_loan_leads').update({
+      assigned_to: nuevoVendedor,
+      updated_at:  new Date().toISOString(),
+    }).eq('id', leadId)
+  )
+  if (!res.ok) return { ok: false }
+
+  if (phone) {
+    await syncConsultaVendedor(phone, nuevoVendedor)
+  }
+  return { ok: true }
+}
+
+/**
+ * Quita la asignación de un lead (acción administrativa).
+ * Comportamiento histórico del CRM: solo limpia assigned_to y vendedor.
+ * No modifica status ni amat_consultas.estado — eso preserva el estado
+ * del flujo de ventas. Si en el futuro se decide devolver el lead a cola
+ * al quitar la asignación, implementarlo como regla de negocio explícita.
+ */
+export async function quitarAsignacionLead(
+  leadId: number,
+  phone: string | null
+): Promise<{ ok: boolean }> {
+  const res = await safeRun('lead.service:quitarAsignacion', () =>
+    supabase.from('amat_loan_leads').update({
+      assigned_to: null,
+      updated_at:  new Date().toISOString(),
+    }).eq('id', leadId)
+  )
+  if (!res.ok) return { ok: false }
+
+  // Solo limpiar el vendedor — no cambiar amat_consultas.estado.
+  // Históricamente quitar la asignación no modificaba el estado de la consulta.
+  if (phone) {
+    await supabase.from('amat_consultas').update({
+      vendedor:   null,
+      updated_at: new Date().toISOString(),
+    }).eq('phone', phone)
+  }
+  return { ok: true }
+}
+
+/**
  * Edita los datos de un lead (modal de edición).
  */
 export async function editLead(
