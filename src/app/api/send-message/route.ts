@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
-const META_TEMPLATE_NAMES: Record<string, string> = {
+const D360_TEMPLATE_NAMES: Record<string, string> = {
   'primer_contacto_esp':                  'primer_contacto_esp',
   'recontacto':                           'recontacto',
   'ayuda_economica':                      'primer_contacto_esp',
@@ -19,6 +19,10 @@ const TEMPLATES_SAVE: Record<string, string> = {
   'ayuda_economica':               'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
   'recontacto_sin_respuesta_amat': 'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
 }
+
+// Base URL fija de la Messaging API de 360dialog — no hace falta phone_number_id
+// en la URL, 360dialog lo resuelve automáticamente a partir del D360-API-KEY.
+const D360_BASE_URL = 'https://waba-v2.360dialog.io'
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,21 +43,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'phone y (text o template) son requeridos' }, { status: 400 })
     }
 
-    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID
-    const accessToken   = process.env.WHATSAPP_ACCESS_TOKEN   || process.env.META_TOKEN
+    // Antes: WHATSAPP_PHONE_NUMBER_ID / PHONE_NUMBER_ID + WHATSAPP_ACCESS_TOKEN / META_TOKEN
+    // Ahora: una sola variable, la API key de 360dialog identifica el canal.
+    const d360ApiKey = process.env.D360_API_KEY
 
-    // FIX 3: alertar si faltan env vars en vez de skipear silenciosamente
-    if (!phoneNumberId || !accessToken) {
-      console.error('send-message: faltan env vars WHATSAPP_PHONE_NUMBER_ID o WHATSAPP_ACCESS_TOKEN')
+    if (!d360ApiKey) {
+      console.error('send-message: falta env var D360_API_KEY')
       return NextResponse.json({ error: 'Configuración de WhatsApp incompleta' }, { status: 500 })
     }
 
-    const metaName = META_TEMPLATE_NAMES[resolvedTemplate] || resolvedTemplate
+    const templateNameResolved = D360_TEMPLATE_NAMES[resolvedTemplate] || resolvedTemplate
 
     const components =
       templateParams &&
       Object.keys(templateParams).length > 0 &&
-      !TEMPLATES_SIN_PARAMS.includes(metaName)
+      !TEMPLATES_SIN_PARAMS.includes(templateNameResolved)
         ? [{
             type: 'body',
             parameters: Object.values(templateParams).map((val: any) => ({
@@ -69,7 +73,7 @@ export async function POST(req: NextRequest) {
           to: phone,
           type: 'template',
           template: {
-            name: metaName,
+            name: templateNameResolved,
             language: { code: 'es_AR' },
             ...(components.length > 0 && { components }),
           },
@@ -81,7 +85,7 @@ export async function POST(req: NextRequest) {
           text: { body: text },
         }
 
-    // FIX 1: timeout de 12 segundos para el fetch a Meta
+    // FIX 1 (se mantiene): timeout de 12 segundos para el fetch
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 12000)
 
@@ -90,11 +94,11 @@ export async function POST(req: NextRequest) {
 
     try {
       const waRes = await fetch(
-        `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
+        `${D360_BASE_URL}/messages`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${accessToken}`,
+            'D360-API-KEY': d360ApiKey,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(waBody),
@@ -104,14 +108,16 @@ export async function POST(req: NextRequest) {
       clearTimeout(timeout)
 
       if (!waRes.ok) {
-        const err = await waRes.json()
-        metaError = err?.error?.message || `HTTP ${waRes.status}`
-        console.error('WhatsApp API error:', JSON.stringify(err))
-        // FIX 2: guardar el intento en amat_messages igual, marcando el error
+        const err = await waRes.json().catch(() => ({}))
+        // 360dialog devuelve errores con la misma forma que la Cloud API de Meta
+        // (err.error.message), pero por las dudas cubrimos variantes.
+        metaError = err?.error?.message || err?.message || `HTTP ${waRes.status}`
+        console.error('360dialog API error:', JSON.stringify(err))
+        // FIX 2 (se mantiene): guardar el intento en amat_messages igual, marcando el error
         await supabaseAdmin.from('amat_messages').insert({
           phone_number: phone,
           direction:    'out',
-          body:         `[ERROR META: ${metaError}] ${resolvedTemplate ? (TEMPLATES_SAVE[resolvedTemplate] || resolvedTemplate) : text}`,
+          body:         `[ERROR 360DIALOG: ${metaError}] ${resolvedTemplate ? (TEMPLATES_SAVE[resolvedTemplate] || resolvedTemplate) : text}`,
           sender:       senderName || 'asesor',
           created_at:   new Date().toISOString(),
         })
@@ -124,7 +130,7 @@ export async function POST(req: NextRequest) {
       const isTimeout = fetchErr?.name === 'AbortError'
       metaError = isTimeout ? 'Timeout al contactar WhatsApp' : fetchErr.message
       console.error('send-message fetch error:', metaError)
-      // FIX 2: registrar el intento fallido igual
+      // FIX 2 (se mantiene): registrar el intento fallido igual
       await supabaseAdmin.from('amat_messages').insert({
         phone_number: phone,
         direction:    'out',
