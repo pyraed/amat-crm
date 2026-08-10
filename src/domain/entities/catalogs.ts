@@ -85,4 +85,12 @@ export const TEMPLATES: Template[] = [
     body:     `Hola {{nombre}} 👋 Desde *AMAT* te informamos que contamos con Ayudas Económicas para empleados públicos de la Provincia de Buenos Aires.\n\n✅ Sin garante\n✅ Descuento por recibo\n✅ Aprobación rápida\n\nEscribinos al *[número]* para más info.`,
     variables: ['nombre'],
   },
+  {
+    id:       'documentacion_pendiente',
+    name:     'Documentación pendiente',
+    category: 'UTILITY',
+    metaName: 'documentacion_pendiente',
+    body:     'Hola!\n\nTu solicitud de Ayuda Económica está pendiente de documentación. Por favor, respondé este mensaje adjuntando la documentación faltante o comunicate con nosotros para resolver tus dudas. Gracias!',
+    variables: [],
+  },
 ]

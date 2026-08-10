@@ -8,16 +8,18 @@ const D360_TEMPLATE_NAMES: Record<string, string> = {
   'ayuda_economica_primer_contacto_amat': 'primer_contacto_esp',
   'recontacto_sin_respuesta_amat':        'recontacto',
   'informacion_general_amat':             'recontacto',
+  'documentacion_pendiente':              'documentacion_pendiente',
 }
 
 // Plantillas definidas en Meta SIN variables — no mandar components
-const TEMPLATES_SIN_PARAMS = ['primer_contacto_esp', 'recontacto']
+const TEMPLATES_SIN_PARAMS = ['primer_contacto_esp', 'recontacto', 'documentacion_pendiente']
 
 const TEMPLATES_SAVE: Record<string, string> = {
   'primer_contacto_esp':           'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
   'recontacto':                    'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
   'ayuda_economica':               'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
   'recontacto_sin_respuesta_amat': 'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
+  'documentacion_pendiente':       'Hola!\n\nTu solicitud de Ayuda Económica está pendiente de documentación. Por favor, respondé este mensaje adjuntando la documentación faltante o comunicate con nosotros para resolver tus dudas. Gracias!',
 }
 
 // Base URL fija de la Messaging API de 360dialog — no hace falta phone_number_id
