@@ -1,30 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
-const D360_TEMPLATE_NAMES: Record<string, string> = {
-  'primer_contacto_esp':                  'primer_contacto_esp',
-  'recontacto':                           'recontacto',
-  'ayuda_economica':                      'primer_contacto_esp',
-  'ayuda_economica_primer_contacto_amat': 'primer_contacto_esp',
-  'recontacto_sin_respuesta_amat':        'recontacto',
-  'informacion_general_amat':             'recontacto',
-  'documentacion_pendiente':              'documentacion_pendiente',
-}
-
-// Plantillas definidas en Meta SIN variables — no mandar components
-const TEMPLATES_SIN_PARAMS = ['primer_contacto_esp', 'recontacto', 'documentacion_pendiente']
-
+// Ya no existen "templates aprobadas por Meta" con Evolution API/Baileys —
+// todo se manda como texto libre. Mantenemos el mapeo de nombre → texto
+// para que el CRM siga pudiendo invocar la campaña por su nombre corto,
+// pero el resultado siempre es un mensaje de texto plano.
 const TEMPLATES_SAVE: Record<string, string> = {
   'primer_contacto_esp':           'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
   'recontacto':                    'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
   'ayuda_economica':               'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
+  'ayuda_economica_primer_contacto_amat': 'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
   'recontacto_sin_respuesta_amat': 'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
+  'informacion_general_amat':      'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
   'documentacion_pendiente':       'Hola!\n\nTu solicitud de Ayuda Económica está pendiente de documentación. Por favor, respondé este mensaje adjuntando la documentación faltante o comunicate con nosotros para resolver tus dudas. Gracias!',
 }
 
-// Base URL fija de la Messaging API de 360dialog — no hace falta phone_number_id
-// en la URL, 360dialog lo resuelve automáticamente a partir del D360-API-KEY.
-const D360_BASE_URL = 'https://waba-v2.360dialog.io'
+// Config de Evolution API — reemplaza a D360_BASE_URL / D360_API_KEY.
+// EVOLUTION_API_URL y EVOLUTION_INSTANCE van como env vars en Railway.
+const EVOLUTION_API_URL  = process.env.EVOLUTION_API_URL  // ej: https://evolution-api-zd6c.onrender.com
+const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE  // ej: bot_service_02
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,7 +29,6 @@ export async function POST(req: NextRequest) {
       text,
       senderName,
       templateName,
-      templateParams,
       template,
     } = body
 
@@ -45,113 +38,88 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'phone y (text o template) son requeridos' }, { status: 400 })
     }
 
-    // Antes: WHATSAPP_PHONE_NUMBER_ID / PHONE_NUMBER_ID + WHATSAPP_ACCESS_TOKEN / META_TOKEN
-    // Ahora: una sola variable, la API key de 360dialog identifica el canal.
-    const d360ApiKey = process.env.D360_API_KEY
+    const evolutionApiKey = process.env.EVOLUTION_API_KEY
 
-    if (!d360ApiKey) {
-      console.error('send-message: falta env var D360_API_KEY')
+    if (!evolutionApiKey || !EVOLUTION_API_URL || !EVOLUTION_INSTANCE) {
+      console.error('send-message: faltan env vars EVOLUTION_API_KEY / EVOLUTION_API_URL / EVOLUTION_INSTANCE')
       return NextResponse.json({ error: 'Configuración de WhatsApp incompleta' }, { status: 500 })
     }
 
-    const templateNameResolved = D360_TEMPLATE_NAMES[resolvedTemplate] || resolvedTemplate
+    // Si viene un template, resolvemos su texto guardado. Si no está mapeado,
+    // usamos el nombre tal cual llegó (por si el CRM ya manda el texto final
+    // en templateName por error, mejor no perder el mensaje).
+    const textoAEnviar = resolvedTemplate
+      ? (TEMPLATES_SAVE[resolvedTemplate] || resolvedTemplate)
+      : text
 
-    const components =
-      templateParams &&
-      Object.keys(templateParams).length > 0 &&
-      !TEMPLATES_SIN_PARAMS.includes(templateNameResolved)
-        ? [{
-            type: 'body',
-            parameters: Object.values(templateParams).map((val: any) => ({
-              type: 'text',
-              text: String(val),
-            })),
-          }]
-        : []
+    // Evolution API espera el número limpio, solo dígitos con código de país
+    // (sin '+', sin espacios, sin sufijo '@s.whatsapp.net').
+    const phoneClean = String(phone).replace(/\D/g, '')
 
-    const waBody = resolvedTemplate
-      ? {
-          messaging_product: 'whatsapp',
-          to: phone,
-          type: 'template',
-          template: {
-            name: templateNameResolved,
-            language: { code: 'es_AR' },
-            ...(components.length > 0 && { components }),
-          },
-        }
-      : {
-          messaging_product: 'whatsapp',
-          to: phone,
-          type: 'text',
-          text: { body: text },
-        }
+    const evoBody = {
+      number: phoneClean,
+      text: textoAEnviar,
+    }
 
-    // FIX 1 (se mantiene): timeout de 12 segundos para el fetch
+    // Timeout de 12 segundos para el fetch (se mantiene igual que antes)
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 12000)
 
-    let metaOk = false
-    let metaError: string | null = null
+    let evoOk = false
+    let evoError: string | null = null
 
     try {
-      const waRes = await fetch(
-        `${D360_BASE_URL}/messages`,
+      const evoRes = await fetch(
+        `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
         {
           method: 'POST',
           headers: {
-            'D360-API-KEY': d360ApiKey,
+            'apikey': evolutionApiKey,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(waBody),
+          body: JSON.stringify(evoBody),
           signal: controller.signal,
         }
       )
       clearTimeout(timeout)
 
-      if (!waRes.ok) {
-        const err = await waRes.json().catch(() => ({}))
-        // 360dialog devuelve errores con la misma forma que la Cloud API de Meta
-        // (err.error.message), pero por las dudas cubrimos variantes.
-        metaError = err?.error?.message || err?.message || `HTTP ${waRes.status}`
-        console.error('360dialog API error:', JSON.stringify(err))
-        // FIX 2 (se mantiene): guardar el intento en amat_messages igual, marcando el error
+      if (!evoRes.ok) {
+        const err = await evoRes.json().catch(() => ({}))
+        evoError = err?.message || err?.error || `HTTP ${evoRes.status}`
+        console.error('Evolution API error:', JSON.stringify(err))
+        // Guardar el intento en amat_messages igual, marcando el error
         await supabaseAdmin.from('amat_messages').insert({
           phone_number: phone,
           direction:    'out',
-          body:         `[ERROR 360DIALOG: ${metaError}] ${resolvedTemplate ? (TEMPLATES_SAVE[resolvedTemplate] || resolvedTemplate) : text}`,
+          body:         `[ERROR EVOLUTION: ${evoError}] ${textoAEnviar}`,
           sender:       senderName || 'asesor',
           created_at:   new Date().toISOString(),
         })
-        return NextResponse.json({ ok: false, error: metaError }, { status: 200 }) // 200 para que el cliente no crashee
+        return NextResponse.json({ ok: false, error: evoError }, { status: 200 }) // 200 para que el cliente no crashee
       }
 
-      metaOk = true
+      evoOk = true
     } catch (fetchErr: any) {
       clearTimeout(timeout)
       const isTimeout = fetchErr?.name === 'AbortError'
-      metaError = isTimeout ? 'Timeout al contactar WhatsApp' : fetchErr.message
-      console.error('send-message fetch error:', metaError)
-      // FIX 2 (se mantiene): registrar el intento fallido igual
+      evoError = isTimeout ? 'Timeout al contactar WhatsApp' : fetchErr.message
+      console.error('send-message fetch error:', evoError)
+      // Registrar el intento fallido igual
       await supabaseAdmin.from('amat_messages').insert({
         phone_number: phone,
         direction:    'out',
-        body:         `[${isTimeout ? 'TIMEOUT' : 'ERROR RED'}] ${resolvedTemplate ? (TEMPLATES_SAVE[resolvedTemplate] || resolvedTemplate) : text}`,
+        body:         `[${isTimeout ? 'TIMEOUT' : 'ERROR RED'}] ${textoAEnviar}`,
         sender:       senderName || 'asesor',
         created_at:   new Date().toISOString(),
       })
-      return NextResponse.json({ ok: false, error: metaError }, { status: 200 })
+      return NextResponse.json({ ok: false, error: evoError }, { status: 200 })
     }
 
     // Éxito — guardar mensaje normalmente
-    const bodyToSave = resolvedTemplate
-      ? (TEMPLATES_SAVE[resolvedTemplate] || resolvedTemplate)
-      : text
-
     await supabaseAdmin.from('amat_messages').insert({
       phone_number: phone,
       direction:    'out',
-      body:         bodyToSave,
+      body:         textoAEnviar,
       sender:       senderName || 'asesor',
       created_at:   new Date().toISOString(),
     })
