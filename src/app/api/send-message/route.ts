@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
+const META_TEMPLATE_NAMES: Record<string, string> = {
+  'primer_contacto_esp':                  'primer_contacto_esp',
+  'recontacto':                           'recontacto',
+  'ayuda_economica':                      'primer_contacto_esp',
+  'ayuda_economica_primer_contacto_amat': 'primer_contacto_esp',
+  'recontacto_sin_respuesta_amat':        'recontacto',
+  'informacion_general_amat':             'recontacto',
+  'documentacion_pendiente':              'documentacion_pendiente',
+}
+
+// Plantillas sin variables — no mandar components
+const TEMPLATES_SIN_PARAMS = ['primer_contacto_esp', 'recontacto', 'documentacion_pendiente']
+
 const TEMPLATES_SAVE: Record<string, string> = {
   'primer_contacto_esp':                  'Hola! Te contactamos desde AMAT (Asociación Mutual Amarilla de Trabajadores).\nComo empleado/a de la provincia de Buenos Aires, podés acceder a una Ayuda Económica con descuento directo en tu recibo de sueldo, sin garante.\n¿Te interesa que te contemos más? Respondé SI para continuar',
   'recontacto':                           'Hola! Te escribimos nuevamente desde AMAT.\nQueríamos consultarte si seguís interesado/a en la Ayuda Económica que te ofrecemos. Sin garante y con descuento por recibo.\n¿Podemos ayudarte?',
@@ -11,9 +24,6 @@ const TEMPLATES_SAVE: Record<string, string> = {
   'documentacion_pendiente':              'Hola!\n\nTu solicitud de Ayuda Económica está pendiente de documentación. Por favor, respondé este mensaje adjuntando la documentación faltante o comunicate con nosotros para resolver tus dudas. Gracias!',
 }
 
-const EVOLUTION_API_URL  = process.env.EVOLUTION_API_URL
-const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -23,6 +33,7 @@ export async function POST(req: NextRequest) {
       text,
       senderName,
       templateName,
+      templateParams,
       template,
     } = body
 
@@ -31,10 +42,6 @@ export async function POST(req: NextRequest) {
     if (!phone || (!text && !resolvedTemplate)) {
       return NextResponse.json({ error: 'phone y (text o template) son requeridos' }, { status: 400 })
     }
-
-    const textoAEnviar = resolvedTemplate
-      ? (TEMPLATES_SAVE[resolvedTemplate] || resolvedTemplate)
-      : text
 
     // ── Rama Telegram ─────────────────────────────────────────────────────────
     // Si el phone empieza con "tg_", el mensaje va por el bot de Telegram.
@@ -48,6 +55,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Configuración de Telegram incompleta' }, { status: 500 })
       }
 
+      const textoTg = resolvedTemplate
+        ? (TEMPLATES_SAVE[resolvedTemplate] || resolvedTemplate)
+        : text
+
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 12000)
 
@@ -55,7 +66,7 @@ export async function POST(req: NextRequest) {
         const tgRes = await fetch(`${telegramBotUrl}/send`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ phone, text: textoAEnviar }),
+          body:    JSON.stringify({ phone, text: textoTg }),
           signal:  controller.signal,
         })
         clearTimeout(timeout)
@@ -78,79 +89,108 @@ export async function POST(req: NextRequest) {
     }
     // ── Fin rama Telegram ─────────────────────────────────────────────────────
 
-    // ── Rama WhatsApp / Evolution API ─────────────────────────────────────────
-    const evolutionApiKey = process.env.EVOLUTION_API_KEY
+    // ── Rama WhatsApp / Meta Cloud API ────────────────────────────────────────
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID
+    const accessToken   = process.env.WHATSAPP_ACCESS_TOKEN   || process.env.META_TOKEN
 
-    if (!evolutionApiKey || !EVOLUTION_API_URL || !EVOLUTION_INSTANCE) {
-      console.error('send-message: faltan env vars EVOLUTION_API_KEY / EVOLUTION_API_URL / EVOLUTION_INSTANCE')
+    if (!phoneNumberId || !accessToken) {
+      console.error('send-message: faltan env vars WHATSAPP_PHONE_NUMBER_ID o WHATSAPP_ACCESS_TOKEN')
       return NextResponse.json({ error: 'Configuración de WhatsApp incompleta' }, { status: 500 })
     }
 
-    // Evolution API espera el número limpio, solo dígitos con código de país
-    // (sin '+', sin espacios, sin sufijo '@s.whatsapp.net').
-    const phoneClean = String(phone).replace(/\D/g, '')
+    const metaName = META_TEMPLATE_NAMES[resolvedTemplate] || resolvedTemplate
 
-    const evoBody = {
-      number: phoneClean,
-      text:   textoAEnviar,
-    }
+    const components =
+      templateParams &&
+      Object.keys(templateParams).length > 0 &&
+      !TEMPLATES_SIN_PARAMS.includes(metaName)
+        ? [{
+            type: 'body',
+            parameters: Object.values(templateParams).map((val: any) => ({
+              type: 'text',
+              text: String(val),
+            })),
+          }]
+        : []
+
+    const waBody = resolvedTemplate
+      ? {
+          messaging_product: 'whatsapp',
+          to: phone,
+          type: 'template',
+          template: {
+            name: metaName,
+            language: { code: 'es_AR' },
+            ...(components.length > 0 && { components }),
+          },
+        }
+      : {
+          messaging_product: 'whatsapp',
+          to: phone,
+          type: 'text',
+          text: { body: text },
+        }
 
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 12000)
 
-    let evoOk = false
-    let evoError: string | null = null
+    let metaOk = false
+    let metaError: string | null = null
 
     try {
-      const evoRes = await fetch(
-        `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
+      const waRes = await fetch(
+        `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
         {
-          method:  'POST',
+          method: 'POST',
           headers: {
-            'apikey':         evolutionApiKey,
-            'Content-Type':   'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type':  'application/json',
           },
-          body:   JSON.stringify(evoBody),
+          body: JSON.stringify(waBody),
           signal: controller.signal,
         }
       )
       clearTimeout(timeout)
 
-      if (!evoRes.ok) {
-        const err = await evoRes.json().catch(() => ({}))
-        evoError = err?.message || err?.error || `HTTP ${evoRes.status}`
-        console.error('Evolution API error:', JSON.stringify(err))
+      if (!waRes.ok) {
+        const err = await waRes.json().catch(() => ({}))
+        metaError = err?.error?.message || `HTTP ${waRes.status}`
+        console.error('WhatsApp API error:', JSON.stringify(err))
         await supabaseAdmin.from('amat_messages').insert({
           phone_number: phone,
           direction:    'out',
-          body:         `[ERROR EVOLUTION: ${evoError}] ${textoAEnviar}`,
+          body:         `[ERROR META: ${metaError}] ${resolvedTemplate ? (TEMPLATES_SAVE[resolvedTemplate] || resolvedTemplate) : text}`,
           sender:       senderName || 'asesor',
           created_at:   new Date().toISOString(),
         })
-        return NextResponse.json({ ok: false, error: evoError }, { status: 200 })
+        return NextResponse.json({ ok: false, error: metaError }, { status: 200 })
       }
 
-      evoOk = true
+      metaOk = true
     } catch (fetchErr: any) {
       clearTimeout(timeout)
       const isTimeout = fetchErr?.name === 'AbortError'
-      evoError = isTimeout ? 'Timeout al contactar WhatsApp' : fetchErr.message
-      console.error('send-message fetch error:', evoError)
+      metaError = isTimeout ? 'Timeout al contactar WhatsApp' : fetchErr.message
+      console.error('send-message fetch error:', metaError)
       await supabaseAdmin.from('amat_messages').insert({
         phone_number: phone,
         direction:    'out',
-        body:         `[${isTimeout ? 'TIMEOUT' : 'ERROR RED'}] ${textoAEnviar}`,
+        body:         `[${isTimeout ? 'TIMEOUT' : 'ERROR RED'}] ${resolvedTemplate ? (TEMPLATES_SAVE[resolvedTemplate] || resolvedTemplate) : text}`,
         sender:       senderName || 'asesor',
         created_at:   new Date().toISOString(),
       })
-      return NextResponse.json({ ok: false, error: evoError }, { status: 200 })
+      return NextResponse.json({ ok: false, error: metaError }, { status: 200 })
     }
 
-    // Éxito WhatsApp — guardar mensaje normalmente
+    // Éxito — guardar mensaje normalmente
+    const bodyToSave = resolvedTemplate
+      ? (TEMPLATES_SAVE[resolvedTemplate] || resolvedTemplate)
+      : text
+
     await supabaseAdmin.from('amat_messages').insert({
       phone_number: phone,
       direction:    'out',
-      body:         textoAEnviar,
+      body:         bodyToSave,
       sender:       senderName || 'asesor',
       created_at:   new Date().toISOString(),
     })
