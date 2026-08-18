@@ -7,6 +7,7 @@ import CalculadorOferta from '@/components/CalculadorOferta'
 import LoginScreen from '@/components/LoginScreen'
 import TopBar from '@/components/TopBar'
 import TabReportes from '@/components/tabs/TabReportes'
+import TabFormularios from '@/components/tabs/TabFormularios'
 import {
   ModalCambiarEstado, ModalAsignar, ModalNota, ModalRechazar,
   ModalEditar, ModalPlantillas, ModalFinalizar, ModalVenta, ModalGestionarConsulta,
@@ -1424,6 +1425,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
       )}
 
       {/* ══ PIPELINE ══ */}
+      {/* ══ FORMULARIOS ══ */}
+      {tab==='formularios'&&(
+        <TabFormularios />
+      )}
+
       {/* ══ REPORTES ══ */}
       {tab==='reportes'&&(
         <TabReportes
