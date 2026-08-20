@@ -38,7 +38,9 @@ export async function exportarVentas(): Promise<{ ok: boolean; error?: string }>
       'Cuotas':          l.cant_cuotas     || '',
       'Valor cuota ($)': fmtNum(l.valor_cuota),
       'Asignado a':      l.assigned_to     || '',
-      'Fecha cierre':    new Date(l.updated_at).toLocaleDateString('es-AR'),
+      'Fecha venta':     l.fecha_venta
+                           ? new Date(l.fecha_venta).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' })
+                           : new Date(l.updated_at).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' }),
       'Observaciones':   l.notes           || '',
     }))
 
@@ -46,7 +48,7 @@ export async function exportarVentas(): Promise<{ ok: boolean; error?: string }>
     ws['!cols'] = [
       { wch: 12 }, { wch: 28 }, { wch: 16 }, { wch: 28 }, { wch: 30 },
       { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 8  }, { wch: 16 },
-      { wch: 12 }, { wch: 14 }, { wch: 30 },
+      { wch: 12 }, { wch: 16 }, { wch: 30 },
     ]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Ventas AMAT')

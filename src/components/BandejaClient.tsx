@@ -415,6 +415,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         monto_solicitado: parseInt(ventaForm.monto) || 0,
         cant_cuotas:      parseInt(ventaForm.cuotas) || 0,
         valor_cuota:      parseFloat(ventaForm.valor_cuota) || 0,
+        fecha_venta:      new Date().toISOString(), // timestamp exacto del click en "Guardar venta"
       },
     })
     // Cerramos el modal y limpiamos el chat después de que cambiarEstado terminó
@@ -914,14 +915,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   const ultimoEntrante = currentMsgs
                     .filter(m=>m.direction==='in')
                     .sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
-                  // 22hs — margen de 2hs antes del límite real de Meta (24hs)
-                  // para evitar enviar mensajes que Meta rechaza por ventana vencida
-                  const VENTANA_HS = 22
                   const ventanaAbierta = ultimoEntrante
-                    ? (ahora - new Date(ultimoEntrante.created_at).getTime()) < VENTANA_HS*60*60*1000
+                    ? (ahora - new Date(ultimoEntrante.created_at).getTime()) < 24*60*60*1000
                     : false
                   const horasRestantes = ventanaAbierta && ultimoEntrante
-                    ? Math.round((VENTANA_HS*60*60*1000 - (ahora - new Date(ultimoEntrante.created_at).getTime())) / (60*60*1000))
+                    ? Math.round((24*60*60*1000 - (ahora - new Date(ultimoEntrante.created_at).getTime())) / (60*60*1000))
                     : null
 
                   return (
@@ -933,11 +931,11 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                           <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
                           <div>
                             <div style={{fontSize:12,fontWeight:700,color:'#C2410C',marginBottom:2}}>
-                              {ultimoEntrante ? 'Ventana de 22hs cerrada' : 'Sin mensajes entrantes'}
+                              {ultimoEntrante ? 'Ventana de 24hs cerrada' : 'Sin mensajes entrantes'}
                             </div>
                             <div style={{fontSize:11,color:'#9A3412',lineHeight:1.5}}>
                               {ultimoEntrante
-                                ? 'El cliente no escribió en las últimas 22hs. Los mensajes de texto libre no llegan. Usá una plantilla para retomar el contacto.'
+                                ? 'El cliente no escribió en las últimas 24hs. Los mensajes de texto libre no llegan. Usá una plantilla para retomar el contacto.'
                                 : 'Este cliente nunca escribió. Para iniciar la conversación usá una plantilla de Meta.'}
                             </div>
                           </div>
@@ -947,30 +945,27 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                       {/* Aviso ventana por cerrarse pronto */}
                       {ventanaAbierta&&horasRestantes!==null&&horasRestantes<=6&&(
                         <div style={{background:'#FFFBEB',border:'1px solid #FDE68A',borderRadius:8,padding:'6px 12px',marginBottom:8,fontSize:11,color:'#92400E',display:'flex',alignItems:'center',gap:6}}>
-                          ⏱️ Ventana de 22hs: quedan <strong style={{marginLeft:3,marginRight:3}}>{horasRestantes}hs</strong> para responder libremente.
+                          ⏱️ Ventana de 24hs: quedan <strong style={{marginLeft:3,marginRight:3}}>{horasRestantes}hs</strong> para responder libremente.
                         </div>
                       )}
 
-                      {/* Plantillas — deshabilitadas hasta que Meta apruebe las plantillas del nuevo WABA */}
-                      {/* Para reactivar: quitar disabled={true} y el title de cada botón */}
+                      {/* Plantillas — siempre visibles, resaltadas cuando ventana cerrada */}
                       <div style={{display:'flex',gap:6,marginBottom:8}}>
-                        <button disabled={true}
-                          title="Plantilla pendiente de aprobación en Meta. Disponible próximamente."
-                          style={{flex:1,padding:'7px 8px',borderRadius:7,fontSize:11,fontWeight:700,cursor:'not-allowed',fontFamily:'inherit',
-                            border:'1px solid #E2E8F0',
-                            background:'#F1F5F9',
-                            color:'#94A3B8',
-                            opacity:0.6,
+                        <button onClick={()=>sendTemplate('ayuda_economica')} disabled={sending}
+                          style={{flex:1,padding:'7px 8px',borderRadius:7,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',
+                            border:ventanaAbierta?'1px solid #DDD6FE':'2px solid #7C3AED',
+                            background:ventanaAbierta?'#F5F3FF':'#EDE9FE',
+                            color:'#6D28D9',
+                            boxShadow:ventanaAbierta?'none':'0 0 0 3px rgba(124,58,237,0.15)',
                           }}>
                           👋 Primer contacto
                         </button>
-                        <button disabled={true}
-                          title="Plantilla pendiente de aprobación en Meta. Disponible próximamente."
-                          style={{flex:1,padding:'7px 8px',borderRadius:7,fontSize:11,fontWeight:700,cursor:'not-allowed',fontFamily:'inherit',
-                            border:'1px solid #E2E8F0',
-                            background:'#F1F5F9',
-                            color:'#94A3B8',
-                            opacity:0.6,
+                        <button onClick={()=>sendTemplate('recontacto')} disabled={sending}
+                          style={{flex:1,padding:'7px 8px',borderRadius:7,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',
+                            border:ventanaAbierta?'1px solid #FDE68A':'2px solid #B45309',
+                            background:ventanaAbierta?'#FFFBEB':'#FEF3C7',
+                            color:'#B45309',
+                            boxShadow:ventanaAbierta?'none':'0 0 0 3px rgba(180,83,9,0.15)',
                           }}>
                           🔄 Recontacto
                         </button>

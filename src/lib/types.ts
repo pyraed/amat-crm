@@ -3,6 +3,9 @@ export type Session = {
   state: string
   data: Record<string, any>
   assigned_to: string | null
+  // Fecha exacta en que el operador registró la venta (status → closed).
+  // Se setea una sola vez y no cambia con ediciones posteriores del lead.
+  fecha_venta: string | null
   created_at: string
   updated_at: string
 }
