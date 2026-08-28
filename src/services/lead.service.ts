@@ -192,6 +192,33 @@ export async function fetchLeadsIniciales(phones: string[]): Promise<LoanLead[]>
 }
 
 /**
+ * Carga un lead por phone_number (usado en callbacks de Realtime).
+ * Devuelve null si no existe.
+ */
+export async function fetchLeadByPhone(phone: string): Promise<LoanLead | null> {
+  const { data } = await supabase
+    .from('amat_loan_leads')
+    .select('*')
+    .eq('phone_number', phone)
+    .single()
+  return (data as LoanLead) || null
+}
+
+/**
+ * Verifica si un número tiene al menos un mensaje entrante.
+ * Usado en Realtime para evitar que leads de campaña aparezcan en cola.
+ */
+export async function tieneMensajesEntrantes(phone: string): Promise<boolean> {
+  const { count } = await supabase
+    .from('amat_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('phone_number', phone)
+    .eq('direction', 'in')
+    .limit(1)
+  return (count || 0) > 0
+}
+
+/**
  * Carga datos de un lead por id (para refrescar al abrir chat).
  */
 export async function fetchLeadById(id: number) {

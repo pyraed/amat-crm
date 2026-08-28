@@ -20,7 +20,7 @@ import { supabase } from '@/lib/supabase'
 import { LoanLead, Message } from '@/lib/types'
 import { SysUser } from '@/domain/entities/users'
 import { ESTADOS_FINALES } from '@/domain/entities/leadStatus'
-import { reactivarLead, fetchCerradosMes, fetchInboundMes } from '@/services/lead.service'
+import { reactivarLead, fetchCerradosMes, fetchInboundMes, fetchLeadByPhone, tieneMensajesEntrantes } from '@/services/lead.service'
 import { syncConsultaEstado, fetchFlujoMap } from '@/services/consulta.service'
 
 type Setters = {
@@ -88,11 +88,9 @@ export function useRealtime(
         // Manejar el lead asociado al mensaje entrante
         setBotLeads(prev=>{
           if(!prev.find(l=>l.phone_number===msg.phone_number)){
-            supabase.from('amat_loan_leads')
-              .select('*').eq('phone_number', msg.phone_number).single()
-              .then(({data})=>{
-                if(!data) return
-                const lead   = data as LoanLead
+            fetchLeadByPhone(msg.phone_number)
+              .then(lead=>{
+                if(!lead) return
                 const status = (lead.status || '') as string
 
                 // Reactivación caso 1: lead en estado final (not_interested, sin_respuesta, unresolved)
@@ -197,17 +195,12 @@ export function useRealtime(
           // Lead nuevo sin asignar → a la cola SOLO si el cliente ya nos escribió
           // Esto evita que leads de campaña (solo mensajes salientes) aparezcan en cola
           if(['new','contacted'].includes(updated.status||'') && !(updated as any).archived && !updated.assigned_to && updated.phone_number) {
-            supabase.from('amat_messages')
-              .select('id', { count: 'exact', head: true })
-              .eq('phone_number', updated.phone_number)
-              .eq('direction', 'in')
-              .limit(1)
-              .then(({ count }) => {
-                if((count || 0) > 0) {
-                  setColaLeadsState(prev => prev.find(l=>l.id===updated.id) ? prev : [updated as LoanLead, ...prev])
-                  setColaTotal(t => t + 1)
-                }
-              })
+            tieneMensajesEntrantes(updated.phone_number).then(tiene => {
+              if (tiene) {
+                setColaLeadsState(prev => prev.find(l=>l.id===updated.id) ? prev : [updated as LoanLead, ...prev])
+                setColaTotal(t => t + 1)
+              }
+            })
           }
         }
       }).subscribe()
