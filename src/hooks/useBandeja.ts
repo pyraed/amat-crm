@@ -16,7 +16,7 @@ import { SysUser } from '@/domain/entities/users'
 import { ESTADOS_FINALES } from '@/domain/entities/leadStatus'
 import {
   fetchBandejaLeads, fetchCerradosMes, fetchInboundMes,
-  cambiarEstadoLead, tomarLead,
+  cambiarEstadoLead, tomarLead, fetchLeadsIniciales,
 } from '@/services/lead.service'
 import { fetchFlujoMap } from '@/services/consulta.service'
 
@@ -57,30 +57,12 @@ export function useBandeja(
     const chunks = (arr: string[]) =>
       Array.from({length: Math.ceil(arr.length/BATCH)}, (_,i) => arr.slice(i*BATCH,(i+1)*BATCH))
 
-    // Cargar leads activos de los phones con mensajes — solo los del operador actual
+    // Cargar leads activos de los phones con mensajes — solo sin asignar en carga inicial
     // Los leads de otros operadores no deben entrar en botLeads
-    Promise.all(chunks(phones).map(chunk =>
-      import('@/lib/supabase').then(({supabase}) =>
-        supabase.from('amat_loan_leads')
-          .select('*')
-          .in('phone_number', chunk)
-          .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved","sin_respuesta","closed")')
-          .eq('archived', false)
-          .is('assigned_to', null)  // solo sin asignar en carga inicial
-          .then(({data}) => data || [])
-      )
-    )).then(results => {
-      const all = results.flat() as LoanLead[]
-      const seen = new Set<string>()
-      const unique = all.filter(l => {
-        const key = l.phone_number || String(l.id)
-        if(seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
+    fetchLeadsIniciales(phones).then(unique => {
       setBotLeads(prev => {
         const merged = [...unique]
-        prev.forEach(l => { if(!merged.find(x=>x.id===l.id)) merged.push(l) })
+        prev.forEach(l => { if (!merged.find(x => x.id === l.id)) merged.push(l) })
         return merged
       })
     })

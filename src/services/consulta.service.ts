@@ -268,44 +268,58 @@ export async function sincronizarEstados(): Promise<SyncResult> {
   }
 
   try {
-    // Query separada — sin JOIN para evitar el error de foreign key
     const { data: leads, error: leadsError } = await supabase
       .from('amat_loan_leads')
       .select('id, phone_number, status, assigned_to')
       .eq('archived', false)
       .not('phone_number', 'is', null)
 
-    if(leadsError) return { corregidos: 0, detalle: [], error: leadsError.message }
-    if(!leads?.length) return { corregidos: 0, detalle: [] }
+    if (leadsError) return { corregidos: 0, detalle: [], error: leadsError.message }
+    if (!leads?.length) return { corregidos: 0, detalle: [] }
 
-    const phones = leads.map((l:any) => l.phone_number).filter(Boolean)
+    const phones = leads.map((l: any) => l.phone_number).filter(Boolean)
 
     const { data: consultas, error: consultasError } = await supabase
       .from('amat_consultas')
       .select('phone, estado')
       .in('phone', phones)
 
-    if(consultasError) return { corregidos: 0, detalle: [], error: consultasError.message }
+    if (consultasError) return { corregidos: 0, detalle: [], error: consultasError.message }
 
     const consultaMap: Record<string, string> = {}
-    ;(consultas || []).forEach((c:any) => { if(c.phone) consultaMap[c.phone] = c.estado })
+    ;(consultas || []).forEach((c: any) => { if (c.phone) consultaMap[c.phone] = c.estado })
 
     const detalle: SyncResult['detalle'] = []
 
-    for(const lead of leads as any[]) {
+    // Agrupar phones por estado destino para hacer un UPDATE por grupo
+    // en lugar de N UPDATEs individuales (era O(n) queries → ahora O(estados únicos))
+    const grupos: Record<string, { phones: string[]; limpiarVendedor: boolean }> = {}
+
+    for (const lead of leads as any[]) {
       const estadoEsperado = MAPEO[lead.status || '']
       const estadoActual   = consultaMap[lead.phone_number]
-      if(!estadoEsperado || !estadoActual || estadoActual === estadoEsperado) continue
+      if (!estadoEsperado || !estadoActual || estadoActual === estadoEsperado) continue
 
-      const upd: any = { estado: estadoEsperado, updated_at: new Date().toISOString() }
-      if(estadoEsperado === 'cola') upd.vendedor = null
-
-      await supabase.from('amat_consultas').update(upd).eq('phone', lead.phone_number)
       detalle.push({ phone: lead.phone_number, de: estadoActual, a: estadoEsperado })
+
+      if (!grupos[estadoEsperado]) {
+        grupos[estadoEsperado] = { phones: [], limpiarVendedor: estadoEsperado === 'cola' }
+      }
+      grupos[estadoEsperado].phones.push(lead.phone_number)
     }
 
+    // Un UPDATE por estado destino (máx. 10 queries — una por valor de MAPEO)
+    const now = new Date().toISOString()
+    await Promise.all(
+      Object.entries(grupos).map(([estado, { phones, limpiarVendedor }]) => {
+        const upd: any = { estado, updated_at: now }
+        if (limpiarVendedor) upd.vendedor = null
+        return supabase.from('amat_consultas').update(upd).in('phone', phones)
+      })
+    )
+
     return { corregidos: detalle.length, detalle }
-  } catch(e: any) {
+  } catch (e: any) {
     return { corregidos: 0, detalle: [], error: e.message }
   }
 }

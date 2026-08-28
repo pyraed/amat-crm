@@ -155,6 +155,43 @@ export async function fetchBandejaLeads(username: string) {
 }
 
 /**
+ * Carga leads activos sin asignar para los phones con mensajes recientes (carga inicial SSR).
+ * Reemplaza la query inline que vivía en useBandeja con un import dinámico.
+ * Procesa en batches de 200 para no superar los límites de PostgREST.
+ */
+export async function fetchLeadsIniciales(phones: string[]): Promise<LoanLead[]> {
+  if (phones.length === 0) return []
+
+  const BATCH = 200
+  const ESTADOS_EXCLUIDOS = '("finalizado","rejected","not_interested","resolved","unresolved","sin_respuesta","closed")'
+  const chunks = Array.from(
+    { length: Math.ceil(phones.length / BATCH) },
+    (_, i) => phones.slice(i * BATCH, (i + 1) * BATCH)
+  )
+
+  const results = await Promise.all(
+    chunks.map(chunk =>
+      supabase
+        .from('amat_loan_leads')
+        .select('*')
+        .in('phone_number', chunk)
+        .not('status', 'in', ESTADOS_EXCLUIDOS)
+        .eq('archived', false)
+        .is('assigned_to', null)
+        .then(({ data }) => (data || []) as LoanLead[])
+    )
+  )
+
+  const seen = new Set<string>()
+  return results.flat().filter(l => {
+    const key = l.phone_number || String(l.id)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/**
  * Carga datos de un lead por id (para refrescar al abrir chat).
  */
 export async function fetchLeadById(id: number) {
