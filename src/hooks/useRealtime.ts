@@ -15,7 +15,7 @@
 //  sensible del sistema). No modificar sin prueba exhaustiva.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { LoanLead, Message } from '@/lib/types'
 import { SysUser } from '@/domain/entities/users'
@@ -40,6 +40,7 @@ export function useRealtime(
   callbacks: {
     onCerradosMesChange: (n: number) => void
     onInboundMesChange:  (n: number) => void
+    onReconnect:         (phone: string) => void  // refetch de mensajes al reconectar
   }
 ) {
   const {
@@ -47,7 +48,11 @@ export function useRealtime(
     setColaLeadsState, setColaTotal, setFlujoMap,
     setConsultas, setBaseLeads,
   } = setters
-  const { onCerradosMesChange, onInboundMesChange } = callbacks
+  const { onCerradosMesChange, onInboundMesChange, onReconnect } = callbacks
+
+  // selectedPhoneRef permite que los callbacks de reconexión accedan al phone activo
+  // sin capturar valores stale del estado React de BandejaClient
+  const selectedPhoneRef = useRef<string|null>(null)
 
   // meRef permite que los closures del realtime accedan al usuario actual
   // sin capturar el valor stale del estado React
@@ -57,6 +62,13 @@ export function useRealtime(
   // ── Canal: mensajes nuevos ────────────────────────────────────────────────
   useEffect(()=>{
     const ch = supabase.channel('rt-msgs')
+      .on('system', {}, (payload: any) => {
+        // Detectar reconexión — cuando el canal vuelve a SUBSCRIBED después de una desconexión
+        // recuperamos los mensajes del chat activo para cubrir el gap
+        if (payload?.status === 'SUBSCRIBED' && selectedPhoneRef.current) {
+          onReconnect(selectedPhoneRef.current)
+        }
+      })
       .on('postgres_changes', { event:'INSERT', schema:'public', table:'amat_messages' }, p=>{
         const msg = p.new as Message
 
@@ -224,5 +236,10 @@ export function useRealtime(
     return ()=>{ supabase.removeChannel(ch) }
   },[]) // eslint-disable-line
 
-  return { meRef }
+  // Exponer setter para que BandejaClient actualice el phone activo
+  const setSelectedPhoneRef = (phone: string | null) => {
+    selectedPhoneRef.current = phone
+  }
+
+  return { meRef, setSelectedPhoneRef }
 }

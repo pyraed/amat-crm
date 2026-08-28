@@ -80,6 +80,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const [currentChatMsgs, setCurrentChatMsgs] = useState<Message[]>([])
 
   // ── Bandeja ───────────────────────────────────────────────────────────────
+  // Wrapper de setSelectedPhone que mantiene sincronizado selectedPhoneRef en useRealtime
+  const setSelectedPhoneAndRef = (phone: string | null) => {
+    setSelectedPhone(phone)
+    setSelectedPhoneRef(phone)
+  }
+
   const cargarMensajesInline = (phone: string) => {
     fetchMensajesPhone(phone).then(msgs => {
       setCurrentChatMsgs(msgs)
@@ -89,7 +95,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   const bandeja = useBandeja(
     me, tab, messages, initialMessages,
-    setSelectedPhone, setVistaMode,
+    setSelectedPhoneAndRef, setVistaMode,
     cargarMensajesInline,
   )
 
@@ -107,7 +113,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   // ── Realtime ──────────────────────────────────────────────────────────────
   // Debe ir después de consultas$ para poder pasar setConsultas
-  const { meRef } = useRealtime(me, {
+  const { meRef, setSelectedPhoneRef } = useRealtime(me, {
     setMessages,
     setCurrentChatMsgs,
     setBotLeads:        bandeja.setBotLeads,
@@ -119,6 +125,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   }, {
     onCerradosMesChange: bandeja.setCerradosMesCount,
     onInboundMesChange:  bandeja.setInboundMesCount,
+    onReconnect: (phone) => {
+      // Al reconectarse Realtime, refetchear mensajes del chat activo
+      // para recuperar los mensajes perdidos durante la desconexión
+      fetchMensajesPhone(phone).then(msgs => {
+        setCurrentChatMsgs(msgs)
+        setMessages(prev => [...prev.filter(m => m.phone_number !== phone), ...msgs])
+      })
+    },
   })
 
   // Wire loadReportes into the tab effect
@@ -214,7 +228,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const abrirChat = (lead: LoanLead) => {
     setCurrentChatMsgs([])
     setReplyText('')
-    setSelectedPhone(lead.phone_number)
+    setSelectedPhoneAndRef(lead.phone_number)
     if(lead.phone_number) cargarMensajes(lead.phone_number)
     if(lead.id) {
       import('@/services/lead.service').then(({ fetchLeadById }) => {
@@ -428,7 +442,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     // Cerramos el modal y limpiamos el chat después de que cambiarEstado terminó
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
-    if(phone) setSelectedPhone(null)
+    if(phone) setSelectedPhoneAndRef(null)
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -603,7 +617,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
             <div style={{padding:'10px 12px',borderBottom:'1px solid #F1F5F9',display:'flex',flexDirection:'column',gap:8}}>
               <div style={{display:'flex',gap:4,background:'#F1F5F9',padding:3,borderRadius:8}}>
                 <button style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',fontFamily:'inherit',transition:'all .15s',background:vistaMode==='cola'?'white':'transparent',color:vistaMode==='cola'?'#0F172A':'#64748B',boxShadow:vistaMode==='cola'?'0 1px 3px rgba(0,0,0,.1)':'none'}}
-                  onClick={()=>{setVistaMode('cola');setSelectedPhone(null)}}>
+                  onClick={()=>{setVistaMode('cola');setSelectedPhoneAndRef(null)}}>
                   📥 Cola {(()=>{
                     const n = colaLeadsState.length
                     const total = n > 0 ? n : 0
@@ -678,7 +692,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                           // NO agrega el lead a botLeads ni toca la DB
                           // Si Nicolas escribe, sendReply lo auto-asignará en ese momento
                           setCurrentChatMsgs([])
-                          setSelectedPhone(colaMenu.phone_number)
+                          setSelectedPhoneAndRef(colaMenu.phone_number)
                           if(colaMenu.phone_number) cargarMensajes(colaMenu.phone_number)
                           setColaMenu(null); setColaMenuRef(null)
                         }} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'8px 10px',border:'none',background:'none',cursor:'pointer',borderRadius:6,fontSize:12,color:'#0F172A',fontWeight:500,fontFamily:'inherit',textAlign:'left'}}
@@ -1203,7 +1217,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                                 if(lead.phone_number) cargarMensajes(lead.phone_number)
                                 setVistaMode('mis_chats')
                                 setTab('bandeja')
-                                setSelectedPhone(lead.phone_number)
+                                setSelectedPhoneAndRef(lead.phone_number)
                                 if(lead.assigned_to !== me?.username) {
                                   const esAdmin = me?.role === 'Administrador'
                                   const confirmar = !esAdmin || window.confirm('¿Querés tomar este caso y asignártelo?')
@@ -1385,7 +1399,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                             <button className="btn" style={{padding:'4px 9px',fontSize:11,borderColor:'#6EE7B7',color:'#065F46',background:'#ECFDF5'}} onClick={async e=>{
                               e.stopPropagation()
                               setTab('bandeja')
-                              setSelectedPhone(c.phone)
+                              setSelectedPhoneAndRef(c.phone)
                               setVistaMode('mis_chats')
                               if(c.phone) {
                                 const msgs = await fetchMensajesPhone(c.phone)
@@ -1553,7 +1567,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
           setConsultaEdit={setConsultaEdit}
           setShowConsultaModal={setShowConsultaModal}
           setBotLeads={setBotLeads}
-          setSelectedPhone={setSelectedPhone}
+          setSelectedPhone={setSelectedPhoneAndRef}
           selectedPhone={selectedPhone}
           loadConsultas={loadConsultas}
         />
