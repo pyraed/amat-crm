@@ -29,10 +29,15 @@ export function useReportes(
     hastaCustom?: string
   ) => {
     const p = (periodo ?? reportePeriodo) as any
-    const { leads, flujoMap, cerradosHoy } = await fetchReporteData(p, desdeCustom, hastaCustom)
-    setReporteLeads(leads)
-    setCerradosHoyCount(cerradosHoy)
-    setPipelineFlujoMap(flujoMap)
+    try {
+      const { leads, flujoMap, cerradosHoy } = await fetchReporteData(p, desdeCustom, hastaCustom)
+      setReporteLeads(leads)
+      setCerradosHoyCount(cerradosHoy)
+      setPipelineFlujoMap(flujoMap)
+    } catch(e: any) {
+      console.error('[useReportes] Error al cargar reportes:', e)
+      alert('❌ Error al cargar los reportes. Intentá de nuevo.')
+    }
   }
 
   return {

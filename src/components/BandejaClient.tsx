@@ -317,7 +317,12 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setMessages(prev => [...prev, tempMsg])
     try {
       const { sendReply: chatSendReply } = await import('@/services/chat.service')
-      await chatSendReply({ phone: selectedPhone, text, senderName: me.username })
+      const replyRes = await chatSendReply({ phone: selectedPhone, text, senderName: me.username })
+      if(!replyRes?.ok) {
+        alert('❌ No se pudo enviar el mensaje. Intentá de nuevo.')
+        setSending(false)
+        return
+      }
     } catch(e) {
       setReplyText(text)
     } finally {
@@ -366,7 +371,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(!lead || !rejectReason) return
     const note = `Rechazado: ${rejectReason}`
     const notaFinal = lead.notes ? lead.notes + '\n' + note : note
-    await bandeja.cambiarEstado(lead, 'rejected', { notes: notaFinal })
+    const resReject = await bandeja.cambiarEstado(lead, 'rejected', { notes: notaFinal })
+    if(!resReject?.ok) return
     setShowRejectModal(false); setRejectReason('')
   }
 
@@ -395,7 +401,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   const finalizarConversacion = async (nota?: string) => {
     if(!currentLead) return
     const statusFinal = finalizarEstado || (ESTADOS_FINALES.includes(currentLead.status||'') ? currentLead.status! : 'not_interested')
-    await bandeja.cambiarEstado(currentLead, statusFinal, { situacion: nota })
+    const resFinalizar = await bandeja.cambiarEstado(currentLead, statusFinal, { situacion: nota })
+    if(!resFinalizar?.ok) return
     setShowFinalizarModal(false)
     setFinalizarEstado('')
     setFinalizarNota('')
@@ -405,7 +412,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(!currentLead || !me) return
     // Capturamos el phone antes de que cambiarEstado limpie el estado
     const phone = currentLead.phone_number
-    const res = await bandeja.cambiarEstado(currentLead, 'closed', {
+    await bandeja.cambiarEstado(currentLead, 'closed', {
       notes: ventaForm.notas || undefined,
       situacion: `Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${parseInt(ventaForm.monto).toLocaleString('es-AR')} en ${ventaForm.cuotas} cuotas · Valor cuota: $${parseFloat(ventaForm.valor_cuota).toLocaleString('es-AR')}`,
       extraFields: {
@@ -418,10 +425,6 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         fecha_venta:      new Date().toISOString(), // timestamp exacto del click en "Guardar venta"
       },
     })
-    // Si falló, no cerrar el modal — el operador puede reintentar con los datos intactos
-    // cambiarEstado ya mostró el alert de error
-    if(!res?.ok) return
-    // Solo cerrar y limpiar si la venta se guardó correctamente
     // Cerramos el modal y limpiamos el chat después de que cambiarEstado terminó
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
