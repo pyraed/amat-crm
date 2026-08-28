@@ -30,6 +30,10 @@ export type LoanLead = {
   monto_solicitado: number | null
   cant_cuotas: number | null
   valor_cuota: number | null
+  fecha_venta: string | null
+  // Fecha exacta de cierre — se escribe una sola vez al pasar a estado final.
+  // Usar siempre esta columna para reportes de período, nunca updated_at.
+  closed_at: string | null
   created_at: string
   updated_at: string
 }

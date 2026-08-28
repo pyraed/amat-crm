@@ -232,13 +232,9 @@ export async function fetchLeadById(id: number) {
  * Usa COUNT para evitar traer filas innecesarias.
  * Se vuelve a ejecutar cuando un lead pasa a closed/resolved via Realtime.
  *
- * LIMITACIÓN CONOCIDA: usa updated_at como proxy de fecha de cierre.
- * Si un lead cerrado en un mes anterior es editado este mes (nota, datos,
- * reasignación), va a aparecer en el conteo actual porque updated_at se
- * actualiza en cada operación sobre el lead (editLead, saveLeadNote, etc.).
- * Solución correcta a futuro: agregar columna closed_at TIMESTAMPTZ que
- * se escriba una sola vez al pasar a estado final y usar esa fecha aquí.
- * Migración pendiente — no implementar sin poblar el histórico existente.
+ * Usa closed_at — columna que se escribe una sola vez al pasar a estado final.
+ * Esto evita que ediciones posteriores (nota, reasignación) muevan el lead
+ * a un mes distinto al que realmente se cerró.
  */
 export async function fetchCerradosMes(): Promise<number> {
   const inicioMes = new Date()
@@ -248,7 +244,7 @@ export async function fetchCerradosMes(): Promise<number> {
     .from('amat_loan_leads')
     .select('*', { count: 'exact', head: true })
     .in('status', ['closed', 'resolved'])
-    .gte('updated_at', inicioMes.toISOString())
+    .gte('closed_at', inicioMes.toISOString())
   return count || 0
 }
 
@@ -309,10 +305,17 @@ export async function cambiarEstadoLead(
   opts?: { notes?: string; situacion?: string; extraFields?: Record<string, any> }
 ): Promise<{ ok: boolean; esFinal: boolean }> {
   const esFinal = ESTADOS_FINALES.includes(nuevoStatus)
+  const now = new Date().toISOString()
   const upd: any = {
     status:     nuevoStatus,
-    updated_at: new Date().toISOString(),
+    updated_at: now,
     ...(esFinal && { archived: true }),
+    // closed_at se escribe una sola vez — solo si aún no tiene valor.
+    // Usar .or() en el WHERE no es posible con safeRun, así que lo incluimos
+    // condicionalmente: si el lead ya tiene closed_at, extraFields lo puede
+    // sobreescribir (ej: guardarVenta pasa fecha_venta), de lo contrario usamos now.
+    // La columna nunca se toca en ediciones posteriores (saveLeadNote, editLead, etc.)
+    ...(esFinal && !lead.closed_at && { closed_at: now }),
     ...(opts?.notes !== undefined && { notes: opts.notes }),
     ...(opts?.extraFields || {}),
   }
