@@ -405,7 +405,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     if(!currentLead || !me) return
     // Capturamos el phone antes de que cambiarEstado limpie el estado
     const phone = currentLead.phone_number
-    await bandeja.cambiarEstado(currentLead, 'closed', {
+    const res = await bandeja.cambiarEstado(currentLead, 'closed', {
       notes: ventaForm.notas || undefined,
       situacion: `Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${parseInt(ventaForm.monto).toLocaleString('es-AR')} en ${ventaForm.cuotas} cuotas · Valor cuota: $${parseFloat(ventaForm.valor_cuota).toLocaleString('es-AR')}`,
       extraFields: {
@@ -418,6 +418,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         fecha_venta:      new Date().toISOString(), // timestamp exacto del click en "Guardar venta"
       },
     })
+    // Si falló, no cerrar el modal — el operador puede reintentar con los datos intactos
+    // cambiarEstado ya mostró el alert de error
+    if(!res?.ok) return
+    // Solo cerrar y limpiar si la venta se guardó correctamente
     // Cerramos el modal y limpiamos el chat después de que cambiarEstado terminó
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
