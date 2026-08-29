@@ -23,21 +23,26 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// Validación explícita de service key — falla ruidoso, no silencioso
+// Validación explícita de service key — solo se evalúa en server-side.
+// En el browser, process.env.SUPABASE_SERVICE_KEY siempre es undefined
+// porque Next.js no expone variables sin prefijo NEXT_PUBLIC_ al cliente.
+// supabaseAdmin nunca debe importarse en componentes React — solo en API routes.
 function getServiceKey(): string {
   const key = process.env.SUPABASE_SERVICE_KEY
   if (!key) {
-    // En desarrollo, warning. En producción, error fatal.
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(
+    if (typeof window === 'undefined') {
+      // Server-side sin la variable → warning en dev, error en prod
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          '[supabase] SUPABASE_SERVICE_KEY no definida. ' +
+          'El cliente admin no puede operar sin ella.'
+        )
+      }
+      console.warn(
         '[supabase] SUPABASE_SERVICE_KEY no definida. ' +
-        'El cliente admin no puede operar sin ella.'
+        'supabaseAdmin operará con anon key — SOLO aceptable en desarrollo local.'
       )
     }
-    console.warn(
-      '[supabase] SUPABASE_SERVICE_KEY no definida. ' +
-      'supabaseAdmin operará con anon key — SOLO aceptable en desarrollo local.'
-    )
     return supabaseAnonKey
   }
   return key
