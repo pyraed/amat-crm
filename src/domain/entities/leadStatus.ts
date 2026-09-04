@@ -63,9 +63,24 @@ export const COBRANZA_STATUS: Record<string, StatusMeta> = {
 }
 
 // ── Estados finales ───────────────────────────────────────────────────────────
-// Un lead en estado final queda archivado y no vuelve a bandeja/cola,
-// salvo las excepciones de reactivación definidas en domain/workflows/reactivation.ts
+// Un lead en estado final requiere finalización explícita (botón "Finalizar chat").
+// CAMBIO: ya no implica archived automático — el archivado ocurre solo cuando
+// el operador hace click en "Finalizar chat" (ver archivarLead en lead.service.ts).
+// Todos los estados finales son ahora reactivables cuando el cliente vuelve a escribir.
 export const ESTADOS_FINALES: string[] = [
+  'closed',
+  'rejected',
+  'not_interested',
+  'resolved',
+  'unresolved',
+  'sin_respuesta',
+]
+
+// ── Estados que muestran badge "Reactivado" en Mis Chats ─────────────────────
+// Cuando un lead con uno de estos estados vuelve a escribir, se muestra
+// un badge distintivo en la tarjeta del chat para que el operador sepa
+// que esta persona ya tenía historial previo finalizado.
+export const ESTADOS_CON_BADGE_REACTIVADO: string[] = [
   'closed',
   'rejected',
   'not_interested',

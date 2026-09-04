@@ -16,7 +16,7 @@ import { SysUser } from '@/domain/entities/users'
 import { ESTADOS_FINALES } from '@/domain/entities/leadStatus'
 import {
   fetchBandejaLeads, fetchCerradosMes, fetchInboundMes,
-  cambiarEstadoLead, tomarLead, fetchLeadsIniciales,
+  cambiarEstadoLead, archivarLead, tomarLead,
 } from '@/services/lead.service'
 import { fetchFlujoMap } from '@/services/consulta.service'
 
@@ -57,12 +57,30 @@ export function useBandeja(
     const chunks = (arr: string[]) =>
       Array.from({length: Math.ceil(arr.length/BATCH)}, (_,i) => arr.slice(i*BATCH,(i+1)*BATCH))
 
-    // Cargar leads activos de los phones con mensajes — solo sin asignar en carga inicial
+    // Cargar leads activos de los phones con mensajes — solo los del operador actual
     // Los leads de otros operadores no deben entrar en botLeads
-    fetchLeadsIniciales(phones).then(unique => {
+    Promise.all(chunks(phones).map(chunk =>
+      import('@/lib/supabase').then(({supabase}) =>
+        supabase.from('amat_loan_leads')
+          .select('*')
+          .in('phone_number', chunk)
+          .not('status', 'in', '("finalizado","rejected","not_interested","resolved","unresolved","sin_respuesta","closed")')
+          .eq('archived', false)
+          .is('assigned_to', null)  // solo sin asignar en carga inicial
+          .then(({data}) => data || [])
+      )
+    )).then(results => {
+      const all = results.flat() as LoanLead[]
+      const seen = new Set<string>()
+      const unique = all.filter(l => {
+        const key = l.phone_number || String(l.id)
+        if(seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
       setBotLeads(prev => {
         const merged = [...unique]
-        prev.forEach(l => { if (!merged.find(x => x.id === l.id)) merged.push(l) })
+        prev.forEach(l => { if(!merged.find(x=>x.id===l.id)) merged.push(l) })
         return merged
       })
     })
@@ -148,9 +166,9 @@ export function useBandeja(
     lead: LoanLead,
     nuevoStatus: string,
     opts?: { notes?: string; situacion?: string; extraFields?: Record<string,any> }
-  ): Promise<{ ok: boolean }> => {
+  ) => {
     const { ok, esFinal } = await cambiarEstadoLead(lead, nuevoStatus, opts)
-    if(!ok) { alert('❌ No se pudo cambiar el estado. Intentá de nuevo.'); return { ok: false } }
+    if(!ok) { alert('❌ No se pudo cambiar el estado. Intentá de nuevo.'); return }
 
     const upd: any = {
       status:     nuevoStatus,
@@ -160,18 +178,14 @@ export function useBandeja(
       ...(opts?.extraFields || {}),
     }
 
-    if(esFinal) {
-      setBotLeads(prev => prev.filter(l => l.id !== lead.id))
-      if(nuevoStatus === 'closed' || nuevoStatus === 'resolved') {
-        fetchCerradosMes().then(n => setCerradosMesCount(n))
-      }
-      // No limpiamos selectedPhone acá — el componente que llama lo hace
-      // después de terminar su flujo (ej: guardarVenta cierra el modal primero)
-    } else {
-      setBotLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
-      setColaLeadsState(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
+    // CAMBIO: el lead ya NO se remueve de botLeads al cambiar a estado final.
+    // Permanece en Mis Chats hasta que el operador haga click en "Finalizar chat".
+    // finalizarChat es la función que remueve el lead de la bandeja.
+    setBotLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
+    setColaLeadsState(prev => prev.map(l => l.id === lead.id ? { ...l, ...upd } : l))
+    if(nuevoStatus === 'closed' || nuevoStatus === 'resolved') {
+      fetchCerradosMes().then(n => setCerradosMesCount(n))
     }
-    return { ok: true }
   }
 
   const updateStatus = async (id: number, status: string, notes?: string) => {
@@ -182,6 +196,19 @@ export function useBandeja(
       return
     }
     await cambiarEstado(lead, status, { notes })
+  }
+
+  /**
+   * Finaliza explícitamente una conversación.
+   * Es la ÚNICA función que archiva un lead y lo remueve de Mis Chats.
+   * El operador debe haber seleccionado un estado antes de llamar a esta función.
+   * Las validaciones (estado seleccionado, alerta de estado previo) las hace BandejaClient.
+   */
+  const finalizarChat = async (lead: LoanLead) => {
+    const res = await archivarLead(lead)
+    if (!res.ok) { alert('❌ No se pudo finalizar el chat. Intentá de nuevo.'); return { ok: false } }
+    setBotLeads(prev => prev.filter(l => l.id !== lead.id))
+    return { ok: true }
   }
 
   const tomarConversacion = async (lead: LoanLead) => {
@@ -232,6 +259,7 @@ export function useBandeja(
     soloNoLeidos, setSoloNoLeidos,
     editandoFlujo, setEditandoFlujo,
     cambiarEstado,
+    finalizarChat,
     updateStatus,
     tomarConversacion,
   }

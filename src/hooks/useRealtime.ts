@@ -18,7 +18,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { LoanLead, Message } from '@/lib/types'
-import { SysUser } from '@/domain/entities/users'
+import { SysUser, USERS } from '@/domain/entities/users'
 import { ESTADOS_FINALES } from '@/domain/entities/leadStatus'
 import { reactivarLead, fetchCerradosMes, fetchInboundMes, fetchLeadByPhone, tieneMensajesEntrantes } from '@/services/lead.service'
 import { syncConsultaEstado, fetchFlujoMap } from '@/services/consulta.service'
@@ -105,28 +105,42 @@ export function useRealtime(
                 if(!lead) return
                 const status = (lead.status || '') as string
 
-                // Reactivación caso 1: lead en estado final (not_interested, sin_respuesta, unresolved)
-                // closed/rejected → NUNCA se reactivan
-                if(ESTADOS_FINALES.includes(status)) {
-                  if(status === 'closed' || status === 'rejected') return
-                  reactivarLead(lead.id, lead.phone_number).then(res => {
-                    if(!res.ok) return
-                    const r = {...lead, status:'new' as any, archived:false, assigned_to:null}
-                    setColaLeadsState(p2=>p2.find(l=>l.id===lead.id)?p2:[r as LoanLead,...p2])
-                    setColaTotal(t=>t+1)
-                  })
-                  fetchFlujoMap([msg.phone_number]).then(map => setFlujoMap(prev=>({...prev,...map})))
-                  return
-                }
+                // Reactivación — lead archivado (cualquier estado, incluyendo closed y rejected)
+                // CAMBIO: todos los estados son ahora reactivables cuando el cliente vuelve a escribir.
+                //
+                // Comportamiento:
+                // - Conserva el status anterior (no resetea a 'new')
+                // - Si tenía operador asignado y existe → vuelve a Mis Chats del operador con badge "Reactivado"
+                // - Si no tenía operador o el operador no existe → va a la cola
+                if((lead as any).archived) {
+                  // Verificar si el operador asignado existe en el sistema
+                  const operadorAsignado = lead.assigned_to
+                  const operadorExiste = operadorAsignado
+                    ? USERS.some(u => u.username === operadorAsignado)
+                    : false
 
-                // Reactivación caso 2: lead archivado por campaña (status: new, archived: true)
-                // La persona respondió la campaña → desarchivar y poner en cola
-                if((lead as any).archived && status === 'new') {
-                  reactivarLead(lead.id, lead.phone_number).then(res => {
+                  reactivarLead(lead.id, lead.phone_number, operadorExiste).then(res => {
                     if(!res.ok) return
-                    const r = {...lead, status:'new' as any, archived:false, assigned_to:null}
-                    setColaLeadsState(p2=>p2.find(l=>l.id===lead.id)?p2:[r as LoanLead,...p2])
-                    setColaTotal(t=>t+1)
+                    const leadReactivado = {
+                      ...lead,
+                      archived:    false,
+                      reactivado:  true, // flag visual para mostrar badge en Mis Chats
+                      ...(operadorExiste ? {} : { assigned_to: null }),
+                    } as LoanLead & { reactivado: boolean }
+
+                    if(operadorExiste && operadorAsignado === meRef.current?.username) {
+                      // Vuelve a Mis Chats del mismo operador
+                      setBotLeads(prev => {
+                        if(prev.find(l=>l.id===lead.id)) return prev.map(l=>l.id===lead.id?leadReactivado:l)
+                        return [...prev, leadReactivado]
+                      })
+                    } else if(!operadorExiste || !operadorAsignado) {
+                      // Va a la cola
+                      setColaLeadsState(p2=>p2.find(l=>l.id===lead.id)?p2:[leadReactivado,...p2])
+                      setColaTotal(t=>t+1)
+                    }
+                    // Si el operador existe pero es distinto al operador actual,
+                    // el Realtime del canal rt-leads va a actualizar su bandeja
                   })
                   fetchFlujoMap([msg.phone_number]).then(map => setFlujoMap(prev=>({...prev,...map})))
                   return
@@ -157,7 +171,9 @@ export function useRealtime(
 
   // ── Canal: cambios en leads ───────────────────────────────────────────────
   useEffect(()=>{
-    const EXCLUIDOS = ['finalizado','rejected','not_interested','resolved','unresolved','sin_respuesta','closed']
+    // CAMBIO: ya no excluimos por estado — solo excluimos cuando archived:true
+    // Los estados finales permanecen en Mis Chats hasta finalización explícita
+    const EXCLUIDOS = ['finalizado']
     const ch = supabase.channel('rt-leads')
       .on('postgres_changes', { event:'*', schema:'public', table:'amat_loan_leads' }, p=>{
         const updated = p.new as LoanLead

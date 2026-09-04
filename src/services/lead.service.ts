@@ -309,13 +309,9 @@ export async function cambiarEstadoLead(
   const upd: any = {
     status:     nuevoStatus,
     updated_at: now,
-    ...(esFinal && { archived: true }),
-    // closed_at se escribe una sola vez — solo si aún no tiene valor.
-    // Usar .or() en el WHERE no es posible con safeRun, así que lo incluimos
-    // condicionalmente: si el lead ya tiene closed_at, extraFields lo puede
-    // sobreescribir (ej: guardarVenta pasa fecha_venta), de lo contrario usamos now.
-    // La columna nunca se toca en ediciones posteriores (saveLeadNote, editLead, etc.)
-    ...(esFinal && !lead.closed_at && { closed_at: now }),
+    // CAMBIO: archived ya NO se setea acá — solo cuando el operador
+    // hace click en "Finalizar chat" (ver archivarLead).
+    // El lead permanece visible en Mis Chats hasta la finalización explícita.
     ...(opts?.notes !== undefined && { notes: opts.notes }),
     ...(opts?.extraFields || {}),
   }
@@ -335,6 +331,32 @@ export async function cambiarEstadoLead(
   }
 
   return { ok: true, esFinal }
+}
+
+/**
+ * Archiva explícitamente un lead cuando el operador hace click en "Finalizar chat".
+ * Esta es la ÚNICA función que setea archived: true en el sistema.
+ * Separado de cambiarEstadoLead para que el estado y el archivado sean
+ * operaciones independientes — el operador puede cambiar el estado cuando
+ * quiera, pero el chat solo se cierra cuando finaliza explícitamente.
+ * También escribe closed_at si el lead tiene status final y aún no lo tiene.
+ */
+export async function archivarLead(
+  lead: LoanLead,
+): Promise<{ ok: boolean }> {
+  const esFinal = ESTADOS_FINALES.includes(lead.status || '')
+  const now = new Date().toISOString()
+  const upd: any = {
+    archived:   true,
+    updated_at: now,
+    // closed_at se escribe una sola vez al finalizar el chat por primera vez
+    ...(esFinal && !lead.closed_at && { closed_at: now }),
+  }
+
+  const res = await safeRun('lead.service:archivar', () =>
+    supabase.from('amat_loan_leads').update(upd).eq('id', lead.id)
+  )
+  return res
 }
 
 // ── Asignación de leads ──────────────────────────────────────────────────────
@@ -543,34 +565,42 @@ export async function fetchVentasCerradas() {
 
 /**
  * Reactiva un lead archivado (cuando la persona vuelve a escribir).
- * Solo aplica a estados no_interested, sin_respuesta, unresolved.
+ * CAMBIO: ahora aplica a TODOS los estados, incluyendo closed y rejected.
+ *
+ * Comportamiento nuevo:
+ * - Conserva el status anterior (no resetea a 'new')
+ * - Conserva el assigned_to si el operador existe
+ * - Si operadorExiste = false, limpia assigned_to (va a la cola)
+ * - Solo desarchiva (archived: false)
+ *
+ * Esto permite que el lead vuelva al operador que lo gestionó,
+ * con toda su historia y estado previo visible.
  */
-export async function reactivarLead(leadId: number, phone?: string | null) {
-  // Guarda de estado: closed y rejected son irreversibles — nunca se reactivan.
-  // La regla vive aquí y no solo en el caller, por lo que la función es segura
-  // independientemente de quién la invoque o con qué validaciones previas.
-  // Sintaxis .not('status', 'in', ...) ya usada en fetchBandejaLeads.
-  //
-  // ASUNCIÓN: closed y rejected son los ÚNICOS estados irreversibles del sistema.
-  // Si en el futuro se agrega un nuevo estado terminal (ej: 'cancelled', 'duplicado'),
-  // hay que agregarlo aquí para que reactivarLead no lo procese.
-  // Ver también: ESTADOS_FINALES en domain/entities/leadStatus.ts.
-  const ESTADOS_NO_REACTIVABLES = ['closed', 'rejected']
+export async function reactivarLead(
+  leadId: number,
+  phone?: string | null,
+  operadorExiste: boolean = true
+) {
+  const upd: any = {
+    archived:   false,
+    updated_at: new Date().toISOString(),
+    // Si el operador no existe más en el sistema, limpiar asignación
+    // para que el lead vaya a la cola
+    ...(!operadorExiste && { assigned_to: null }),
+  }
 
   const res = await safeRun('lead.service:reactivar', () =>
-    supabase.from('amat_loan_leads').update({
-      status:      'new',
-      archived:    false,
-      assigned_to: null,
-      updated_at:  new Date().toISOString(),
-    })
-    .eq('id', leadId)
-    .not('status', 'in', `(${ESTADOS_NO_REACTIVABLES.join(',')})`)
+    supabase.from('amat_loan_leads').update(upd).eq('id', leadId)
   )
-  // Sincronizar amat_consultas — el lead volvió a cola
-  if(res.ok && phone) {
-    await syncConsultaEstadoLocal(phone, 'cola')
+
+  // Sincronizar amat_consultas — vendedor y estado según si vuelve al operador o a la cola
+  if (res.ok && phone) {
+    if (!operadorExiste) {
+      await syncConsultaEstadoLocal(phone, 'cola')
+    }
+    // Si vuelve al operador, no tocamos amat_consultas.estado — mantiene el previo
   }
+
   return res
 }
 
