@@ -17,7 +17,7 @@ import { supabase } from '@/lib/supabase'
 import { LoanLead, Message } from '@/lib/types'
 import { USERS } from '@/domain/entities/users'
 import {
-  LEAD_STATUS, COBRANZA_STATUS, ESTADOS_FINALES,
+  LEAD_STATUS, COBRANZA_STATUS, ESTADOS_FINALES, ESTADOS_CON_BADGE_REACTIVADO,
   getStatusMeta, getEstadosFinalesPorFlujo, getFlujoLabel,
 } from '@/domain/entities/leadStatus'
 import { REPARTICIONES, BANCOS, TEMPLATES } from '@/domain/entities/catalogs'
@@ -155,7 +155,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     bandejaSearch, setBandejaSearch,
     soloNoLeidos, setSoloNoLeidos,
     editandoFlujo, setEditandoFlujo,
-    cambiarEstado, updateStatus, tomarConversacion,
+    cambiarEstado, finalizarChat, updateStatus, tomarConversacion,
   } = bandeja
 
   // Base destructuring
@@ -415,12 +415,29 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
 
   const finalizarConversacion = async (nota?: string) => {
     if(!currentLead) return
-    const statusFinal = finalizarEstado || (ESTADOS_FINALES.includes(currentLead.status||'') ? currentLead.status! : 'not_interested')
-    const resFinalizar = await bandeja.cambiarEstado(currentLead, statusFinal, { situacion: nota })
+
+    // Validación: debe tener un estado seleccionado
+    const statusFinal = finalizarEstado || (ESTADOS_FINALES.includes(currentLead.status||'') ? currentLead.status! : '')
+    if(!statusFinal) {
+      alert('⚠️ Tenés que seleccionar un estado antes de finalizar el chat.')
+      return
+    }
+
+    // Si el estado cambió, primero actualizarlo en la DB
+    if(statusFinal !== currentLead.status) {
+      const resCambio = await bandeja.cambiarEstado(currentLead, statusFinal, { situacion: nota })
+      if(!resCambio?.ok) return
+    }
+
+    // Archivar y cerrar el chat
+    const leadActualizado = {...currentLead, status: statusFinal} as any
+    const resFinalizar = await bandeja.finalizarChat(leadActualizado)
     if(!resFinalizar?.ok) return
+
     setShowFinalizarModal(false)
     setFinalizarEstado('')
     setFinalizarNota('')
+    setSelectedPhoneAndRef(null)
   }
 
   const guardarVenta = async () => {
@@ -440,10 +457,10 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         fecha_venta:      new Date().toISOString(), // timestamp exacto del click en "Guardar venta"
       },
     })
-    // Cerramos el modal y limpiamos el chat después de que cambiarEstado terminó
+    // CAMBIO: ya no cerramos el chat al guardar la venta.
+    // El operador debe hacer click en "Finalizar chat" para cerrarlo.
     setShowVentaModal(false)
     setVentaForm({entidad:'',linea:'',reparticion:'',monto:'',cuotas:'',valor_cuota:'',notas:''})
-    if(phone) setSelectedPhoneAndRef(null)
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -763,7 +780,8 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   const lastMsg=messages.filter(m=>m.phone_number===lead.phone_number).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
                   const unread=messages.some(m=>m.phone_number===lead.phone_number&&m.direction==='in'&&new Date(m.created_at)>new Date(lead.updated_at))
                   return (
-                    <div key={lead.phone_number??lead.id} className={`ci ${selectedPhone===lead.phone_number?'on':''}`} onClick={()=>abrirChat(lead)}>
+                    <div key={lead.phone_number??lead.id} className={`ci ${selectedPhone===lead.phone_number?'on':''}`} onClick={()=>abrirChat(lead)}
+                      style={(lead as any).reactivado?{borderLeft:'3px solid #F59E0B'}:{}}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:s.bg,color:s.text}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
@@ -771,13 +789,18 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                           {unread&&<span style={{width:7,height:7,borderRadius:'50%',background:'#F59E0B',flexShrink:0}}/>}
                         </div>
                         <div style={{fontSize:11,color:'#94A3B8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lastMsg?(lastMsg.direction==='out'?'✓ ':'')+lastMsg.body:lead.reparticion||'Sin mensajes'}</div>
-                        <div style={{marginTop:4,display:'flex',alignItems:'center',gap:5}}>
+                        <div style={{marginTop:4,display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
                           <span className="pill" style={{background:s.bg,color:s.text}}>{s.label}</span>
                           {(()=>{ const fl=flujoMap[lead.phone_number||'']||'solicitud'; return(
                             <span style={{fontSize:9,padding:'2px 6px',borderRadius:99,background:fl==='cobranzas'?'#7C3AED':'#2563EB',color:'white',fontWeight:700,flexShrink:0}}>
                               {fl==='cobranzas'?'COB':'VTA'}
                             </span>
                           )})()}
+                          {(lead as any).reactivado&&(
+                            <span style={{fontSize:9,padding:'2px 7px',borderRadius:99,background:'#FEF3C7',color:'#B45309',fontWeight:700,border:'1px solid #FCD34D',flexShrink:0}}>
+                              ↩ Reactivado
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
