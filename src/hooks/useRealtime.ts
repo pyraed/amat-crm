@@ -135,9 +135,13 @@ export function useRealtime(
                         return [...prev, leadReactivado]
                       })
                     } else if(!operadorExiste || !operadorAsignado) {
-                      // Va a la cola
-                      setColaLeadsState(p2=>p2.find(l=>l.id===lead.id)?p2:[leadReactivado,...p2])
-                      setColaTotal(t=>t+1)
+                      // Va a la cola — solo sumar al contador si no estaba ya
+                      let estabaEnCola = false
+                      setColaLeadsState(prev => {
+                        estabaEnCola = !!prev.find(l=>l.id===lead.id)
+                        return estabaEnCola ? prev : [leadReactivado, ...prev]
+                      })
+                      if(!estabaEnCola) setColaTotal(t=>t+1)
                     }
                     // Si el operador existe pero es distinto al operador actual,
                     // el Realtime del canal rt-leads va a actualizar su bandeja
@@ -157,9 +161,13 @@ export function useRealtime(
                   })
                   return
                 }
-                // Sin dueño y no archivado → va a cola
-                setColaLeadsState(p2=>p2.find(l=>l.phone_number===lead.phone_number)?p2:[lead,...p2])
-                setColaTotal(t=>t+1)
+                // Sin dueño y no archivado → va a cola — solo sumar si no estaba ya
+                let estabaEnCola = false
+                setColaLeadsState(prev => {
+                  estabaEnCola = !!prev.find(l=>l.phone_number===lead.phone_number)
+                  return estabaEnCola ? prev : [lead, ...prev]
+                })
+                if(!estabaEnCola) setColaTotal(t=>t+1)
                 fetchFlujoMap([msg.phone_number]).then(map => setFlujoMap(prev=>({...prev,...map})))
               })
           }
@@ -225,8 +233,13 @@ export function useRealtime(
           if(['new','contacted'].includes(updated.status||'') && !(updated as any).archived && !updated.assigned_to && updated.phone_number) {
             tieneMensajesEntrantes(updated.phone_number).then(tiene => {
               if (tiene) {
-                setColaLeadsState(prev => prev.find(l=>l.id===updated.id) ? prev : [updated as LoanLead, ...prev])
-                setColaTotal(t => t + 1)
+                // Solo sumar al contador si el lead no estaba ya en la cola
+                let estabaEnCola = false
+                setColaLeadsState(prev => {
+                  estabaEnCola = !!prev.find(l=>l.id===updated.id)
+                  return estabaEnCola ? prev : [updated as LoanLead, ...prev]
+                })
+                if(!estabaEnCola) setColaTotal(t => t + 1)
               }
             })
           }
