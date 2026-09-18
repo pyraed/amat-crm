@@ -228,13 +228,14 @@ export async function fetchLeadById(id: number) {
 }
 
 /**
- * Cuenta leads cerrados (closed + resolved) en el mes calendario actual.
+ * Cuenta ventas del mes calendario actual (leads con fecha_venta en el mes).
  * Usa COUNT para evitar traer filas innecesarias.
  * Se vuelve a ejecutar cuando un lead pasa a closed/resolved via Realtime.
  *
- * Usa closed_at — columna que se escribe una sola vez al pasar a estado final.
- * Esto evita que ediciones posteriores (nota, reasignación) muevan el lead
- * a un mes distinto al que realmente se cerró.
+ * FIX: Cuenta por fecha_venta (la fuente de verdad de ventas reales)
+ * en lugar de status + closed_at. Esto evita que ventas "huérfanas"
+ * (con fecha_venta pero en estado rejected/not_interested por error)
+ * queden sin contar.
  */
 export async function fetchCerradosMes(): Promise<number> {
   const inicioMes = new Date()
@@ -243,8 +244,8 @@ export async function fetchCerradosMes(): Promise<number> {
   const { count } = await supabase
     .from('amat_loan_leads')
     .select('*', { count: 'exact', head: true })
-    .in('status', ['closed', 'resolved'])
-    .gte('closed_at', inicioMes.toISOString())
+    .not('fecha_venta', 'is', null)
+    .gte('fecha_venta', inicioMes.toISOString())
   return count || 0
 }
 
@@ -279,6 +280,7 @@ export async function fetchReporteLeads(desde: string | null, hasta: string | nu
       .select('id,status,reparticion,assigned_to,updated_at,created_at,phone_number,entidad,linea,monto_solicitado,cant_cuotas,valor_cuota')
       .order('updated_at', { ascending: false })
       .range(from, from + 999)
+
     if (desde) q = q.gte('updated_at', desde)
     if (hasta) q = q.lte('updated_at', hasta)
 
@@ -289,15 +291,17 @@ export async function fetchReporteLeads(desde: string | null, hasta: string | nu
     from += 1000
     batches++
   }
-  return allData as LoanLead[]
+  return allData
 }
 
-// ── Mutaciones ────────────────────────────────────────────────────────────────
+// ── Mutations ─────────────────────────────────────────────────────────────────
 
 /**
- * Función central de cambio de estado.
- * Actualiza amat_loan_leads y sincroniza amat_consultas.
- * Devuelve { ok, esFinal } para que el hook actualice la UI.
+ * Cambia el estado de un lead y sincroniza amat_consultas.
+ *
+ * FIX: Si el lead tiene fecha_venta y se mueve a un estado que no es
+ * closed/resolved, se limpian todos los campos de venta para evitar
+ * inconsistencias (ej: "rechazado con fecha de venta").
  */
 export async function cambiarEstadoLead(
   lead: LoanLead,
@@ -306,6 +310,11 @@ export async function cambiarEstadoLead(
 ): Promise<{ ok: boolean; esFinal: boolean }> {
   const esFinal = ESTADOS_FINALES.includes(nuevoStatus)
   const now = new Date().toISOString()
+
+  // Si el lead tiene fecha_venta y lo están moviendo a un estado que no es closed/resolved,
+  // limpiar los campos de venta para evitar inconsistencias
+  const limpiarVenta = lead.fecha_venta && nuevoStatus !== 'closed' && nuevoStatus !== 'resolved'
+
   const upd: any = {
     status:     nuevoStatus,
     updated_at: now,
@@ -314,6 +323,14 @@ export async function cambiarEstadoLead(
     // El lead permanece visible en Mis Chats hasta la finalización explícita.
     ...(opts?.notes !== undefined && { notes: opts.notes }),
     ...(opts?.extraFields || {}),
+    ...(limpiarVenta && {
+      fecha_venta:      null,
+      entidad:          null,
+      linea:            null,
+      monto_solicitado: null,
+      cant_cuotas:      null,
+      valor_cuota:      null,
+    }),
   }
 
   const resLead = await safeRun('lead.service:cambiarEstado', () =>
@@ -368,10 +385,7 @@ export async function archivarLead(
  * el lead primero, afecta 0 filas y devuelve { ok: false, tomadoPor }.
  *
  * PostgreSQL garantiza atomicidad: dos UPDATEs concurrentes con
- * WHERE id = X AND assigned_to IS NULL nunca pueden ambos tener éxito.
- * No se necesita transacción explícita.
- *
- * Sync con amat_consultas queda en responsabilidad del caller.
+ * la misma condición WHERE assigned_to IS NULL — solo uno ganará.
  */
 async function _asignarLead(
   leadId: number,
