@@ -611,8 +611,18 @@ export async function reactivarLead(
   if (res.ok && phone) {
     if (!operadorExiste) {
       await syncConsultaEstadoLocal(phone, 'cola')
+    } else {
+      // FIX: sincronizar consulta a 'pendiente' para que no quede como 'cola'
+      // No limpiamos vendedor porque el operador sigue asignado
+      try {
+        await supabase.from('amat_consultas').update({
+          estado:     'pendiente',
+          updated_at: new Date().toISOString(),
+        }).eq('phone', phone)
+      } catch(e) {
+        console.error('[lead.service:reactivar] Error sincronizando consulta:', e)
+      }
     }
-    // Si vuelve al operador, no tocamos amat_consultas.estado — mantiene el previo
   }
 
   return res
