@@ -7,7 +7,7 @@
 
 import { SysUser } from '@/domain/entities/users'
 
-type Tab = 'bandeja' | 'consultas' | 'base' | 'documentacion' | 'reportes'
+type Tab = 'bandeja' | 'consultas' | 'base' | 'formularios' | 'documentacion' | 'reportes'
 
 type Stats = {
   inbound:    number
@@ -30,6 +30,7 @@ const TABS = [
   ['bandeja',   '💬', 'Bandeja'],
   ['consultas', '📥', 'Consultas'],
   ['base',      '👥', 'Base'],
+  ['formularios','📋', 'Formularios'],
   ['documentacion', '📄', 'Documentación'],
   ['reportes',  '📊', 'Reportes'],
 ] as const
@@ -37,7 +38,7 @@ const TABS = [
 export default function TopBar({ me, tab, setTab, setTabLoading, stats, handleLogout, onSync }: Props) {
   const handleTabClick = (t: Tab) => {
     if(tab === t) return
-    const tieneSpinnerPropio = ['consultas','base','documentacion','reportes'].includes(t)
+    const tieneSpinnerPropio = ['consultas','base','formularios','documentacion','reportes'].includes(t)
     if(tieneSpinnerPropio) {
       setTab(t)
     } else {

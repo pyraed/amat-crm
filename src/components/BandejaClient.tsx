@@ -47,7 +47,7 @@ type VentaForm = {
 const PAGE_SIZE = 50
 
 type Props = { initialLeads: LoanLead[]; initialMessages: Message[] }
-type Tab = 'bandeja' | 'consultas' | 'base' | 'reportes'
+type Tab = 'bandeja' | 'consultas' | 'base' | 'formularios' | 'reportes'
 
 
 
