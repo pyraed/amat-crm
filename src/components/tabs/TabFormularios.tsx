@@ -6,7 +6,7 @@
 //  Filtros: búsqueda libre, repartición, paginación.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 
 type WebLead = {
@@ -72,6 +72,65 @@ export default function TabFormularios() {
     load(p, search)
   }
 
+  const [exporting, setExporting] = useState(false)
+
+  const exportarFormularios = useCallback(async () => {
+    setExporting(true)
+    try {
+      let allData: WebLead[] = []
+      let from = 0
+      const BATCH = 1000
+
+      while (true) {
+        let q = supabase
+          .from('amat_web_leads')
+          .select('id,created_at,full_name,dni,email,phone,reparticion_label')
+          .order('created_at', { ascending: false })
+          .range(from, from + BATCH - 1)
+
+        if (search.trim()) {
+          q = q.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`)
+        }
+
+        const { data } = await q
+        if (!data || data.length === 0) break
+        allData = [...allData, ...(data as WebLead[])]
+        if (data.length < BATCH) break
+        from += BATCH
+        if (allData.length >= 50000) break
+      }
+
+      if (allData.length === 0) {
+        alert('No hay registros para exportar.')
+        setExporting(false)
+        return
+      }
+
+      const XLSX = await import('xlsx')
+      const rows = allData.map(l => ({
+        'Fecha':        l.created_at ? new Date(l.created_at).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' }) + ' ' + new Date(l.created_at).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }) : '',
+        'Nombre':       l.full_name || '',
+        'DNI':          l.dni || '',
+        'Email':        l.email || '',
+        'Teléfono':     l.phone || '',
+        'Repartición':  l.reparticion_label || '',
+      }))
+
+      const ws = XLSX.utils.json_to_sheet(rows)
+      ws['!cols'] = [
+        { wch: 18 }, { wch: 30 }, { wch: 14 }, { wch: 30 }, { wch: 16 }, { wch: 32 },
+      ]
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Formularios Web')
+      XLSX.writeFile(wb, 'AMAT_formularios_' + new Date().toISOString().slice(0, 10) + '.xlsx')
+    } catch (e: any) {
+      console.error('[TabFormularios:exportar]', e)
+      alert('Error al exportar: ' + (e.message || 'Error desconocido'))
+    } finally {
+      setExporting(false)
+    }
+  }, [search])
+
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
   const fmt = (iso: string) => {
@@ -95,6 +154,20 @@ export default function TabFormularios() {
             style={{ width:'100%', padding:'7px 12px', borderRadius:8, border:'1px solid #E2E8F0', fontSize:13, outline:'none', fontFamily:'inherit' }}
           />
         </div>
+        <button
+          onClick={exportarFormularios}
+          disabled={exporting || total === 0}
+          style={{
+            padding:'7px 14px', borderRadius:8, border:'1px solid #E2E8F0',
+            background: exporting ? '#F1F5F9' : 'white',
+            cursor: (exporting || total === 0) ? 'default' : 'pointer',
+            color: (exporting || total === 0) ? '#CBD5E1' : '#475569',
+            fontSize:13, fontWeight:500, fontFamily:'inherit',
+            display:'flex', alignItems:'center', gap:6,
+          }}
+        >
+          {exporting ? 'Exportando…' : 'Descargar Excel'}
+        </button>
         {loading && <span style={{ fontSize:12, color:'#94A3B8' }}>Cargando…</span>}
       </div>
 
