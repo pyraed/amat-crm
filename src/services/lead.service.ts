@@ -12,6 +12,7 @@
 
 import { supabase } from '@/lib/supabase'
 import { safeQuery, safeRun } from '@/lib/supabase-helpers'
+import { sanitizeSearch } from '@/lib/sanitize'
 import { LoanLead } from '@/lib/types'
 import { ESTADOS_FINALES } from '@/domain/entities/leadStatus'
 import { STATUS_A_CONSULTA } from '@/domain/workflows/statusMapping'
@@ -61,7 +62,7 @@ export async function fetchBase(filtros: BaseFiltros): Promise<BaseQueryResult> 
     .from('amat_loan_leads')
     .select('id,phone_number,full_name,dni,reparticion,bank,status,assigned_to,created_at,updated_at,archived,email', { count: 'exact' })
 
-  if (search)           q = q.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
+  if (search) { const s = sanitizeSearch(search); q = q.or(`full_name.ilike.%${s}%,dni.ilike.%${s}%,phone_number.ilike.%${s}%`) }
   if (rep !== 'all')    q = q.ilike('reparticion', rep)
   if (banco !== 'all')  q = q.eq('bank', banco)
   if (status !== 'all') q = q.eq('status', status)
@@ -537,10 +538,6 @@ export async function editLead(
     reparticion: formData.reparticion?.toUpperCase() || formData.reparticion,
     bank:        formData.bank?.toUpperCase()        || formData.bank,
     updated_at:  new Date().toISOString(),
-  }
-
-  if (formData.status) {
-    upd.archived = ESTADOS_FINALES.includes(formData.status)
   }
 
   const res = await safeRun('lead.service:edit', () =>

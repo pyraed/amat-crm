@@ -280,7 +280,10 @@ export function ModalEditar({ editTarget, editForm, setEditForm, editSaving, sav
               <option value="new">Pendiente</option>
               <option value="contacted">En bandeja</option>
               <option value="contactado">Contactado</option>
+              <option value="sin_respuesta">Sin respuesta</option>
               <option value="closed">Vendido</option>
+              <option value="resolved">Resuelto</option>
+              <option value="unresolved">No resuelto</option>
               <option value="rejected">Rechazado</option>
               <option value="not_interested">No interesado</option>
             </select>
@@ -373,13 +376,13 @@ export function ModalPlantillas({
                     signal: controller.signal,
                   })
                   clearTimeout(timeout)
-                } catch(e) {
-                  console.error('[ModalPlantillas] timeout o error:', e)
-                } finally {
                   await registrarCampana({ phone: editTarget.phone_number!, dni: editTarget.dni, plantilla: selectedTemplate.id, operador: operadorName })
                   await updateStatus(editTarget.id, 'contacted')
                   setShowTemplateModal(false)
                   alert(`✅ Plantilla enviada a ${editTarget.full_name}`)
+                } catch(e) {
+                  console.error('[ModalPlantillas] timeout o error:', e)
+                  alert('❌ Error al enviar la plantilla. Intentá de nuevo.')
                 }
               }}>
                 ✈️ Enviar plantilla
@@ -475,7 +478,7 @@ type ModalVentaProps = {
   currentLead:       LoanLead
   ventaForm:         VentaForm
   setVentaForm:      React.Dispatch<React.SetStateAction<VentaForm>>
-  guardarVenta:      () => void
+  guardarVenta:      (overrides?: { valor_cuota?: string }) => void
   setShowVentaModal: (v: boolean) => void
 }
 
@@ -648,7 +651,7 @@ export function ModalVenta({ currentLead, ventaForm, setVentaForm, guardarVenta,
           <button style={{flex:2,padding:'10px',background:'linear-gradient(135deg,#059669,#10B981)',color:'white',border:'none',borderRadius:9,fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',
             opacity:((!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas)||(esIntegra?false:(!ventaForm.entidad||!ventaForm.linea)))?0.4:1}}
             disabled={!ventaForm.reparticion||!ventaForm.monto||!ventaForm.cuotas||(esIntegra?false:(!ventaForm.entidad||!ventaForm.linea))}
-            onClick={()=>{ setVentaForm(f=>({...f,valor_cuota:String(calcCuota)})); setTimeout(guardarVenta,50) }}>
+            onClick={()=>{ setVentaForm(f=>({...f,valor_cuota:String(calcCuota)})); guardarVenta({ valor_cuota: String(calcCuota) }) }}>
             💾 Guardar venta
           </button>
           <button className="btn" style={{flex:1}} onClick={()=>setShowVentaModal(false)}>Cancelar</button>

@@ -166,9 +166,9 @@ export function useBandeja(
     lead: LoanLead,
     nuevoStatus: string,
     opts?: { notes?: string; situacion?: string; extraFields?: Record<string,any> }
-  ) => {
+  ): Promise<{ ok: boolean }> => {
     const { ok, esFinal } = await cambiarEstadoLead(lead, nuevoStatus, opts)
-    if(!ok) { alert('❌ No se pudo cambiar el estado. Intentá de nuevo.'); return }
+    if(!ok) { alert('❌ No se pudo cambiar el estado. Intentá de nuevo.'); return { ok: false } }
 
     const upd: any = {
       status:     nuevoStatus,
@@ -186,6 +186,7 @@ export function useBandeja(
     if(nuevoStatus === 'closed' || nuevoStatus === 'resolved') {
       fetchCerradosMes().then(n => setCerradosMesCount(n))
     }
+    return { ok: true }
   }
 
   const updateStatus = async (id: number, status: string, notes?: string) => {

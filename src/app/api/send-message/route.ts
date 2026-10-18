@@ -26,6 +26,12 @@ const TEMPLATES_SAVE: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   try {
+    const authHeader = req.headers.get('x-api-key')
+    const expectedKey = process.env.INTERNAL_API_KEY
+    if (expectedKey && authHeader !== expectedKey) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await req.json()
 
     const {

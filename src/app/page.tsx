@@ -4,7 +4,7 @@ import BandejaClient from '@/components/BandejaClient'
 
 export const dynamic = 'force-dynamic'
 
-const ESTADOS_EXCLUIDOS = ['finalizado', 'rejected', 'not_interested', 'resolved', 'unresolved']
+const ESTADOS_EXCLUIDOS = ['finalizado', 'rejected', 'not_interested', 'resolved', 'unresolved', 'closed', 'sin_respuesta']
 
 export default async function Home() {
   // Traer solo mensajes de los últimos 30 días en el server, en lotes

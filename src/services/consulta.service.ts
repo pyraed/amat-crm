@@ -12,6 +12,7 @@
 
 import { supabase } from '@/lib/supabase'
 import { safeRun } from '@/lib/supabase-helpers'
+import { sanitizeSearch } from '@/lib/sanitize'
 
 export type ConsultaFiltros = {
   search:  string
@@ -63,7 +64,7 @@ export async function fetchConsultas(
     .order('created_at', { ascending: orden === 'asc' })
     .limit(500)
 
-  if (search) q = q.or(`nombre_apellido.ilike.%${search}%,dni.ilike.%${search}%,phone.ilike.%${search}%`)
+  if (search) { const s = sanitizeSearch(search); q = q.or(`nombre_apellido.ilike.%${s}%,dni.ilike.%${s}%,phone.ilike.%${s}%`) }
   if (flujo !== 'all') q = q.eq('flujo', flujo)
 
   if (estado === 'cola') {
@@ -88,7 +89,7 @@ export async function fetchConsultas(
     .select('id,phone_number,full_name,dni,reparticion,assigned_to,status,created_at')
     .order('created_at', { ascending: false })
     .limit(300)
-  if (search) lq = lq.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,phone_number.ilike.%${search}%`)
+  if (search) { const s = sanitizeSearch(search); lq = lq.or(`full_name.ilike.%${s}%,dni.ilike.%${s}%,phone_number.ilike.%${s}%`) }
   if (rep !== 'all') lq = lq.ilike('reparticion', `%${rep}%`)
 
   const [consultasRes, leadsRes] = await Promise.all([q, lq])

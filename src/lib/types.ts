@@ -20,7 +20,7 @@ export type LoanLead = {
   email: string | null
   amount: number | null
   installments: number | null
-  status: 'new' | 'contacted' | 'not_interested' | 'rejected' | 'closed' | 'resolved' | 'unresolved' | 'finalizado'
+  status: 'new' | 'contacted' | 'contactado' | 'sin_respuesta' | 'not_interested' | 'rejected' | 'closed' | 'resolved' | 'unresolved' | 'finalizado'
   assigned_to: string | null
   notes: string | null
   archived: boolean

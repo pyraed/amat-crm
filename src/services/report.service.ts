@@ -31,31 +31,28 @@ export function calcularRango(
   const ahora = new Date()
 
   switch (periodo) {
-    case 'mes_actual':
-      return {
-        desde: new Date(ahora.getFullYear(), ahora.getMonth(), 1).toISOString(),
-        hasta: new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59).toISOString(),
-      }
-    case 'mes_pasado':
-      return {
-        desde: new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1).toISOString(),
-        hasta: new Date(ahora.getFullYear(), ahora.getMonth(), 0, 23, 59, 59).toISOString(),
-      }
-    case '3_meses':
-      return {
-        desde: new Date(ahora.getFullYear(), ahora.getMonth() - 2, 1).toISOString(),
-        hasta: ahora.toISOString(),
-      }
-    case '6_meses':
-      return {
-        desde: new Date(ahora.getFullYear(), ahora.getMonth() - 5, 1).toISOString(),
-        hasta: ahora.toISOString(),
-      }
-    case 'anio_actual':
-      return {
-        desde: new Date(ahora.getFullYear(), 0, 1).toISOString(),
-        hasta: ahora.toISOString(),
-      }
+    case 'mes_actual': {
+      const d = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), 1))
+      const h = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() + 1, 0, 23, 59, 59))
+      return { desde: d.toISOString(), hasta: h.toISOString() }
+    }
+    case 'mes_pasado': {
+      const d = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() - 1, 1))
+      const h = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), 0, 23, 59, 59))
+      return { desde: d.toISOString(), hasta: h.toISOString() }
+    }
+    case '3_meses': {
+      const d = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() - 2, 1))
+      return { desde: d.toISOString(), hasta: ahora.toISOString() }
+    }
+    case '6_meses': {
+      const d = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() - 5, 1))
+      return { desde: d.toISOString(), hasta: ahora.toISOString() }
+    }
+    case 'anio_actual': {
+      const d = new Date(Date.UTC(ahora.getUTCFullYear(), 0, 1))
+      return { desde: d.toISOString(), hasta: ahora.toISOString() }
+    }
     case 'custom':
       return {
         desde: desdeCustom ? new Date(desdeCustom).toISOString() : null,

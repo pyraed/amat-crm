@@ -81,8 +81,8 @@ export default function TopBar({ me, tab, setTab, setTabLoading, stats, handleLo
         <div style={{lineHeight:1.3}}>
           <div style={{fontSize:12,fontWeight:600,color:'#1E293B'}}>{me.username}</div>
           <span style={{fontSize:10,padding:'2px 7px',borderRadius:99,fontWeight:600,
-            background:me.role==='Administrador'?'#EFF6FF':me.role==='Vendedor'?'#F0FDF4':'#F5F3FF',
-            color:me.role==='Administrador'?'#1D4ED8':me.role==='Vendedor'?'#15803D':'#6D28D9'}}>
+            background:me.role==='Administrador'?'#EFF6FF':me.role==='Operador'?'#F0FDF4':'#F5F3FF',
+            color:me.role==='Administrador'?'#1D4ED8':me.role==='Operador'?'#15803D':'#6D28D9'}}>
             {me.role}
           </span>
         </div>

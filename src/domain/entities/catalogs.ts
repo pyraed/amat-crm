@@ -81,7 +81,7 @@ export const TEMPLATES: Template[] = [
     id:       'info_general',
     name:     'Información general',
     category: 'UTILITY',
-    metaName: 'recontacto',
+    metaName: 'informacion_general_amat',
     body:     `Hola {{nombre}} 👋 Desde *AMAT* te informamos que contamos con Ayudas Económicas para empleados públicos de la Provincia de Buenos Aires.\n\n✅ Sin garante\n✅ Descuento por recibo\n✅ Aprobación rápida\n\nEscribinos al *[número]* para más info.`,
     variables: ['nombre'],
   },

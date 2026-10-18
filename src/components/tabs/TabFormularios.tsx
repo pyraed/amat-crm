@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { sanitizeSearch } from '@/lib/sanitize'
 
 type WebLead = {
   id:               string
@@ -42,7 +43,8 @@ export default function TabFormularios() {
       .range(p * PAGE_SIZE, (p + 1) * PAGE_SIZE - 1)
 
     if (s.trim()) {
-      q = q.or(`full_name.ilike.%${s}%,dni.ilike.%${s}%,email.ilike.%${s}%,phone.ilike.%${s}%`)
+      const ss = sanitizeSearch(s)
+      q = q.or(`full_name.ilike.%${ss}%,dni.ilike.%${ss}%,email.ilike.%${ss}%,phone.ilike.%${ss}%`)
     }
 
     const { data, count, error } = await q
@@ -89,7 +91,8 @@ export default function TabFormularios() {
           .range(from, from + BATCH - 1)
 
         if (search.trim()) {
-          q = q.or(`full_name.ilike.%${search}%,dni.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`)
+          const ss = sanitizeSearch(search)
+          q = q.or(`full_name.ilike.%${ss}%,dni.ilike.%${ss}%,email.ilike.%${ss}%,phone.ilike.%${ss}%`)
         }
 
         const { data } = await q

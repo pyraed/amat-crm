@@ -9,6 +9,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { sanitizeSearch } from '@/lib/sanitize'
 
 type DocLead = {
   full_name:                  string | null
@@ -51,7 +52,7 @@ export default function TabDocumentacion() {
     const { data } = await supabase
       .from('amat_loan_leads')
       .select('full_name, dni, phone_number, dni_frente_url, dni_dorso_url, recibo_url, movimientos_url, documentacion_completa, documentacion_completada_at')
-      .or(`dni.eq.${val},phone_number.eq.${val}`)
+      .or(`dni.eq.${sanitizeSearch(val)},phone_number.eq.${sanitizeSearch(val)}`)
       .limit(1)
       .single()
 

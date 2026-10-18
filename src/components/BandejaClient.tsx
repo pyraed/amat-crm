@@ -271,13 +271,14 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
   useEffect(()=>{
     const phoneChanged = prevPhone.current !== selectedPhone
     prevPhone.current = selectedPhone
+    const phoneMsgCount = selectedPhone ? messages.filter(m => m.phone_number === selectedPhone).length : 0
     if(phoneChanged) {
       scrollToBottom('instant' as ScrollBehavior)
-      prevMsgCount.current = messages.length
+      prevMsgCount.current = phoneMsgCount
       return
     }
-    const newMsgs = messages.length - prevMsgCount.current
-    prevMsgCount.current = messages.length
+    const newMsgs = phoneMsgCount - prevMsgCount.current
+    prevMsgCount.current = phoneMsgCount
     if(newMsgs > 0 && !isAtBottom.current) {
       setUnreadCount(c => c + newMsgs)
     } else if(isAtBottom.current) {
@@ -440,21 +441,21 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
     setSelectedPhoneAndRef(null)
   }
 
-  const guardarVenta = async () => {
+  const guardarVenta = async (overrides?: { valor_cuota?: string }) => {
     if(!currentLead || !me) return
-    // Capturamos el phone antes de que cambiarEstado limpie el estado
+    const valorCuota = overrides?.valor_cuota ?? ventaForm.valor_cuota
     const phone = currentLead.phone_number
     await bandeja.cambiarEstado(currentLead, 'closed', {
       notes: ventaForm.notas || undefined,
-      situacion: `Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${parseInt(ventaForm.monto).toLocaleString('es-AR')} en ${ventaForm.cuotas} cuotas · Valor cuota: $${parseFloat(ventaForm.valor_cuota).toLocaleString('es-AR')}`,
+      situacion: `Venta cerrada - ${ventaForm.entidad} ${ventaForm.linea} $${parseInt(ventaForm.monto).toLocaleString('es-AR')} en ${ventaForm.cuotas} cuotas · Valor cuota: $${parseFloat(valorCuota).toLocaleString('es-AR')}`,
       extraFields: {
         entidad:          ventaForm.entidad,
         linea:            ventaForm.linea,
         reparticion:      ventaForm.reparticion || currentLead.reparticion,
         monto_solicitado: parseInt(ventaForm.monto) || 0,
         cant_cuotas:      parseInt(ventaForm.cuotas) || 0,
-        valor_cuota:      parseFloat(ventaForm.valor_cuota) || 0,
-        fecha_venta:      new Date().toISOString(), // timestamp exacto del click en "Guardar venta"
+        valor_cuota:      parseFloat(valorCuota) || 0,
+        fecha_venta:      new Date().toISOString(),
       },
     })
     // CAMBIO: ya no cerramos el chat al guardar la venta.
@@ -506,12 +507,13 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
         .map(l => l.phone_number)
         .filter(Boolean) as string[]
 
-      return misPhones.filter(phone => {
-        const ultimo = messages
-          .filter(m => m.phone_number === phone)
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
-        return ultimo?.direction === 'in'
-      }).length
+      const lastMsg = new Map<string, { direction: string; time: number }>()
+      for (const m of messages) {
+        const t = new Date(m.created_at).getTime()
+        const prev = lastMsg.get(m.phone_number)
+        if (!prev || t > prev.time) lastMsg.set(m.phone_number, { direction: m.direction, time: t })
+      }
+      return misPhones.filter(phone => lastMsg.get(phone)?.direction === 'in').length
     })(),
 
     // closed + resolved este mes (global). Fuente: DB via re-fetch en Realtime UPDATE.
@@ -675,7 +677,7 @@ export default function BandejaClient({ initialLeads, initialMessages }: Props) 
                   {leadsVisibles.map(lead=>{
                   return (
                     <div key={lead.phone_number??lead.id} style={{display:'flex',gap:10,padding:'12px 14px',borderBottom:'1px solid #F1F5F9',cursor:'pointer',alignItems:'flex-start',background:'#FFFBEB',borderLeft:'3px solid #F59E0B'}}
-                      onClick={(e)=>{ if(me?.username==='Nicolas') { const r=(e.currentTarget as HTMLElement).getBoundingClientRect(); setColaMenuRef({x:r.right+4,y:r.top}); setColaMenu(lead) } else tomarConversacion(lead) }}>
+                      onClick={(e)=>{ if(me?.role==='Administrador') { const r=(e.currentTarget as HTMLElement).getBoundingClientRect(); setColaMenuRef({x:r.right+4,y:r.top}); setColaMenu(lead) } else tomarConversacion(lead) }}>
                       <div className="av" style={{width:38,height:38,fontSize:12,background:'#FFFBEB',color:'#B45309'}}>{(lead.full_name||lead.phone_number||'?').slice(0,2).toUpperCase()}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>

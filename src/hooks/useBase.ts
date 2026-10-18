@@ -115,8 +115,7 @@ export function useBase(tab: string, setters: BaseSetters) {
     }
   }
 
-  useEffect(()=>{ if(tab==='base') loadBase({ search:baseSearch, rep:baseRep, banco:baseBanco, status:baseStatus, tel:baseTel, assigned:baseAssigned, flujo:baseFlujo, page:basePage, ordenCol:baseOrdenCol, ordenDir:baseOrdenDir }) },[tab]) // eslint-disable-line
-  useEffect(()=>{ if(tab==='base') loadBase({ search:baseSearch, rep:baseRep, banco:baseBanco, status:baseStatus, tel:baseTel, assigned:baseAssigned, flujo:baseFlujo, page:basePage, ordenCol:baseOrdenCol, ordenDir:baseOrdenDir }) },[baseSearch,baseRep,baseBanco,baseStatus,baseTel,baseAssigned,baseFlujo,basePage,baseOrdenCol,baseOrdenDir]) // eslint-disable-line
+  useEffect(()=>{ if(tab==='base') loadBase({ search:baseSearch, rep:baseRep, banco:baseBanco, status:baseStatus, tel:baseTel, assigned:baseAssigned, flujo:baseFlujo, page:basePage, ordenCol:baseOrdenCol, ordenDir:baseOrdenDir }) },[tab,baseSearch,baseRep,baseBanco,baseStatus,baseTel,baseAssigned,baseFlujo,basePage,baseOrdenCol,baseOrdenDir]) // eslint-disable-line
 
   const openEdit = (lead: LoanLead) => {
     setEditTarget(lead)

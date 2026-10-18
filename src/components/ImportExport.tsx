@@ -3,7 +3,8 @@
 import { useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { LoanLead } from '@/lib/types'
-import * as XLSX from 'xlsx'
+import { sanitizeSearch } from '@/lib/sanitize'
+import { REPARTICIONES, BANCOS } from '@/domain/entities/catalogs'
 
 // Columnas del Excel exportado/importado
 const COLS = [
@@ -50,7 +51,7 @@ export default function ImportExport({ onClose, onImportDone, currentFilters }: 
     try {
       let q = supabase.from('amat_loan_leads').select('*')
 
-      if(exportFilters.search) q=q.or(`full_name.ilike.%${exportFilters.search}%,dni.ilike.%${exportFilters.search}%,phone_number.ilike.%${exportFilters.search}%`)
+      if(exportFilters.search) { const s = sanitizeSearch(exportFilters.search); q=q.or(`full_name.ilike.%${s}%,dni.ilike.%${s}%,phone_number.ilike.%${s}%`) }
       if(exportFilters.rep!=='all')      q=q.eq('reparticion',exportFilters.rep)
       if(exportFilters.banco!=='all')    q=q.eq('bank',exportFilters.banco)
       if(exportFilters.status!=='all')   q=q.eq('status',exportFilters.status)
@@ -74,6 +75,7 @@ export default function ImportExport({ onClose, onImportDone, currentFilters }: 
         return row
       })
 
+      const XLSX = await import('xlsx')
       const ws = XLSX.utils.json_to_sheet(rows)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Contactos')
@@ -97,6 +99,7 @@ export default function ImportExport({ onClose, onImportDone, currentFilters }: 
     setImportResult(null)
 
     try {
+      const XLSX = await import('xlsx')
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer)
       const ws = wb.Sheets[wb.SheetNames[0]]
@@ -162,7 +165,8 @@ export default function ImportExport({ onClose, onImportDone, currentFilters }: 
   }
 
   // ── DESCARGAR PLANTILLA ───────────────────
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    const XLSX = await import('xlsx')
     const ejemplo = [{
       DNI:'28441902', NOMBRE:'RODRIGUEZ CARLOS', TELEFONO_1:'5491112345678',
       EMAIL:'carlos@gmail.com', REPARTICION:'MINISTERIO DE SEGURIDAD',
@@ -175,8 +179,8 @@ export default function ImportExport({ onClose, onImportDone, currentFilters }: 
     XLSX.writeFile(wb, 'AMAT_plantilla_importacion.xlsx')
   }
 
-  const REPARTICIONES = ['all','MINISTERIO DE EDUCACION','MINISTERIO DE SEGURIDAD','MINISTERIO DE SALUD','SERVICIO PENITENCIARIO BONAERENSE','IPS','CAJA DE POLICIA','OTRA REPARTICION']
-  const BANCOS = ['all','BANCO PROVINCIA','BANCO NACION','BANCO GALICIA','BANCO SANTANDER','BANCO ICBC','BANCO MACRO','BANCO PATAGONIA','OTRO']
+  const REPS_LIST = ['all', ...REPARTICIONES]
+  const BANCOS_LIST = ['all', ...BANCOS]
   const ESTADOS = ['all','new','contacted','closed','rejected','not_interested']
   const ESTADO_LABELS: Record<string,string> = {all:'Todos',new:'Pendiente',contacted:'En bandeja',closed:'Vendido',rejected:'Rechazado',not_interested:'No interesado'}
 
@@ -214,13 +218,13 @@ export default function ImportExport({ onClose, onImportDone, currentFilters }: 
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#64748B',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:6}}>Repartición</label>
                 <select style={{width:'100%',border:'1px solid #E2E8F0',borderRadius:8,padding:'8px 10px',fontSize:13,fontFamily:'inherit',outline:'none',background:'white'}} value={exportFilters.rep} onChange={e=>setExportFilters(f=>({...f,rep:e.target.value}))}>
-                  {REPARTICIONES.map(r=><option key={r} value={r}>{r==='all'?'Todas':r}</option>)}
+                  {REPS_LIST.map(r=><option key={r} value={r}>{r==='all'?'Todas':r}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#64748B',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:6}}>Banco</label>
                 <select style={{width:'100%',border:'1px solid #E2E8F0',borderRadius:8,padding:'8px 10px',fontSize:13,fontFamily:'inherit',outline:'none',background:'white'}} value={exportFilters.banco} onChange={e=>setExportFilters(f=>({...f,banco:e.target.value}))}>
-                  {BANCOS.map(b=><option key={b} value={b}>{b==='all'?'Todos':b}</option>)}
+                  {BANCOS_LIST.map(b=><option key={b} value={b}>{b==='all'?'Todos':b}</option>)}
                 </select>
               </div>
               <div>

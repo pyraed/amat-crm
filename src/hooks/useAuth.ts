@@ -24,13 +24,11 @@ export function useAuth() {
   const [rememberMe, setRememberMe] = useState(false)
   const userRef = useRef<HTMLInputElement>(null)
 
-  // Cargar credenciales guardadas al montar
+  // Cargar usuario guardado al montar (NO la contraseña)
   useEffect(()=>{
     const savedUser = localStorage.getItem('amat_remember_user')
-    const savedPass = localStorage.getItem('amat_remember_pass')
-    if(savedUser && savedPass) {
+    if(savedUser) {
       setLoginUser(savedUser)
-      setLoginPass(savedPass)
       setRememberMe(true)
     }
   },[])
@@ -42,8 +40,10 @@ export function useAuth() {
   useEffect(()=>{
     if(countdown <= 0) return
     const t = setTimeout(()=>{
-      setCountdown(c => c - 1)
-      if(countdown === 1){ setLocked(false); setAttempts(0) }
+      setCountdown(c => {
+        if(c <= 1){ setLocked(false); setAttempts(0) }
+        return c - 1
+      })
     }, 1000)
     return ()=>clearTimeout(t)
   },[countdown])
@@ -57,10 +57,8 @@ export function useAuth() {
       setMe(u); setLoginErr(''); setAttempts(0)
       if(rememberMe){
         localStorage.setItem('amat_remember_user', loginUser.trim().toUpperCase())
-        localStorage.setItem('amat_remember_pass', loginPass)
       } else {
         localStorage.removeItem('amat_remember_user')
-        localStorage.removeItem('amat_remember_pass')
       }
     } else {
       const a = attempts + 1; setAttempts(a)
@@ -75,7 +73,6 @@ export function useAuth() {
     setRememberMe(checked)
     if(!checked){
       localStorage.removeItem('amat_remember_user')
-      localStorage.removeItem('amat_remember_pass')
     }
   }
 
